@@ -1,0 +1,17 @@
+[package]
+name = "rustorrent"
+version = "0.1.0"
+authors = ["Alexander Korolev <kilork@yandex.ru>"]
+edition = "2018"
+
+[dependencies]
+nom = "4.2"
+structopt = "0.2"
+console = "0.7"
+indicatif = "0.11"
+dialoguer = "0.3"
+failure = "0.1"
+exitfailure = "0.5"
+clap-verbosity-flag = "0.2.0"
+log = "0.4"
+env_logger = "0.6"
