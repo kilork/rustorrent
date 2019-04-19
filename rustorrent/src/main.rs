@@ -12,9 +12,10 @@ fn main() -> Result<(), ExitFailure> {
 
     info!("starting torrent client");
 
+    info!("downloading {:?}", cli.torrent.to_str());
+
     parse_torrent(&cli.torrent)
         .with_context(|_| format!("could not parse torrent {:?}", &cli.torrent))?;
-    println!("{:?}", cli.torrent.to_str());
 
     Ok(())
 }

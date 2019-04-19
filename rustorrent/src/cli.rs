@@ -1,6 +1,6 @@
+use clap_verbosity_flag::Verbosity;
 use std::path::PathBuf;
 use structopt::StructOpt;
-use clap_verbosity_flag::Verbosity;
 
 /// Extremely fast and simple torrent client
 #[derive(StructOpt)]
