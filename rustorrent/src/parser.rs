@@ -50,7 +50,7 @@ named!(
         char!('d'),
         map!(
             many0!(tuple!(bencode_string_s, parser_bencode)),
-            |x: Vec<(String, Bencode)>| Bencode::Dictionary(x.into_iter().collect())
+            |x: Vec<(String, Bencode)>| Bencode::Dictionary(x)
         ),
         char!('e')
     )
