@@ -10,15 +10,17 @@ use std::path::Path;
 use errors::RustorrentError;
 use types::Torrent;
 
-pub fn parse_torrent(filename: impl AsRef<Path>) -> Result<(), RustorrentError> {
+pub fn parse_torrent<'a>(
+    filename: impl AsRef<Path>,
+    buf: &'a mut std::vec::Vec<u8>,
+) -> Result<Torrent, RustorrentError> {
     let mut f = File::open(filename)?;
 
-    let mut buf = vec![];
-    f.read_to_end(&mut buf)?;
+    f.read_to_end(buf)?;
 
-    let torrent: Torrent = parser::parse_bencode(&buf).try_into()?;
+    let torrent: Torrent = parser::parse_bencode(buf).try_into()?;
 
     dbg!(&torrent);
 
-    Ok(())
+    Ok(torrent)
 }
