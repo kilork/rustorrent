@@ -1,6 +1,29 @@
-use crate::types::Bencode;
+use crate::types::{BencodeBlob, BencodeValue};
 
 use nom::*;
+
+macro_rules! recognize_map (
+    ($i:expr, $submac:ident!( $($args:tt)* ), $g:expr) => (
+        {
+            pub fn _unify<I, T, R, F: FnOnce(I, T) -> R>(f: F, i: I, t: T) -> R {
+                f(i, t)
+            }
+
+            use nom::lib::std::result::Result::*;
+
+            use nom::Offset;
+            use nom::Slice;
+            let i_ = $i.clone();
+            match $submac!(i_, $($args)*) {
+                Ok((i, res)) => {
+                    let index = (&$i).offset(&i);
+                    Ok((i, _unify($g, ($i).slice(..index), res) ))
+                },
+                Err(e) => Err(e)
+            }
+        }
+    );
+);
 
 named!(
     integer_literal,
@@ -15,66 +38,78 @@ named!(
 );
 
 named!(
-    bencode_string<Bencode>,
-    do_parse!(len: integer >> char!(':') >> s: take!(len) >> (Bencode::String(s.into())))
+    bencode_string<BencodeValue>,
+    do_parse!(len: integer >> char!(':') >> s: take!(len) >> (BencodeValue::String(s.into())))
 );
 
 named!(
-    bencode_string_s<String>,
+    bencode_string_s<&str>,
     do_parse!(
         len: integer >> char!(':') >> s: map_res!(take!(len), std::str::from_utf8) >> (s.into())
     )
 );
 
 named!(
-    bencode_integer<Bencode>,
+    bencode_integer<BencodeValue>,
     delimited!(
         char!('i'),
-        map!(integer, |x: i64| Bencode::Integer(x)),
+        map!(integer, |x: i64| BencodeValue::Integer(x)),
         char!('e')
     )
 );
 
 named!(
-    bencode_list<Bencode>,
+    bencode_list<BencodeValue>,
     delimited!(
         char!('l'),
-        map!(many0!(parser_bencode), |x: Vec<Bencode>| Bencode::List(x)),
+        map!(many0!(parser_bencode), |x: Vec<BencodeBlob>| {
+            BencodeValue::List(x)
+        }),
         char!('e')
     )
 );
 
 named!(
-    bencode_dictionary<Bencode>,
+    bencode_dictionary<BencodeValue>,
     delimited!(
         char!('d'),
         map!(
             many0!(tuple!(bencode_string_s, parser_bencode)),
-            |x: Vec<(String, Bencode)>| Bencode::Dictionary(x)
+            |x: Vec<(&str, BencodeBlob)>| BencodeValue::Dictionary(x)
         ),
         char!('e')
     )
 );
 
 named!(
-    parser_bencode<Bencode>,
-    alt!(bencode_string | bencode_integer | bencode_list | bencode_dictionary)
+    parser_bencode<BencodeBlob>,
+    recognize_map!(
+        alt!(bencode_string | bencode_integer | bencode_list | bencode_dictionary),
+        |i, r| BencodeBlob {
+            source: i,
+            value: r
+        }
+    )
 );
 
-pub fn parse_bencode(bytes: &[u8]) -> Bencode {
+pub fn parse_bencode(bytes: &[u8]) -> BencodeBlob {
     parser_bencode(bytes).unwrap().1
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Bencode;
+    use crate::types::BencodeBlob;
+
+    fn blob<'a>(source: &'a [u8], value: BencodeValue<'a>) -> BencodeBlob<'a> {
+        BencodeBlob { source, value }
+    }
 
     #[test]
     fn check_bencode_string() {
         assert_eq!(
             bencode_string(b"5:UTF-8"),
-            Ok((&vec![][..], Bencode::String(b"UTF-8".to_vec())))
+            Ok((&vec![][..], BencodeValue::String(b"UTF-8")))
         );
     }
 
@@ -82,7 +117,7 @@ mod tests {
     fn check_bencode_integer() {
         assert_eq!(
             bencode_integer(b"i3e"),
-            Ok((&vec![][..], Bencode::Integer(3)))
+            Ok((&vec![][..], BencodeValue::Integer(3)))
         );
     }
 
@@ -92,24 +127,23 @@ mod tests {
             bencode_list(b"l5:UTF-8i3ee"),
             Ok((
                 &vec![][..],
-                Bencode::List(vec![
-                    Bencode::String(b"UTF-8".to_vec()),
-                    Bencode::Integer(3)
+                BencodeValue::List(vec![
+                    blob(b"5:UTF-8", BencodeValue::String(b"UTF-8")),
+                    blob(b"i3e", BencodeValue::Integer(3))
                 ])
             ))
         );
     }
-
     #[test]
     fn check_bencode_dictionary() {
         assert_eq!(
             bencode_dictionary(b"d3:cow3:moo4:spam4:eggse"),
             Ok((
                 &vec![][..],
-                Bencode::Dictionary(
+                BencodeValue::Dictionary(
                     vec![
-                        ("cow".into(), Bencode::String(b"moo".to_vec())),
-                        ("spam".into(), Bencode::String(b"eggs".to_vec()))
+                        ("cow", blob(b"3:moo", BencodeValue::String(b"moo"))),
+                        ("spam", blob(b"4:eggs", BencodeValue::String(b"eggs")))
                     ]
                     .into_iter()
                     .collect()
@@ -121,13 +155,16 @@ mod tests {
             bencode_dictionary(b"d4:spaml1:a1:bee"),
             Ok((
                 &vec![][..],
-                Bencode::Dictionary(
+                BencodeValue::Dictionary(
                     vec![(
-                        "spam".into(),
-                        Bencode::List(vec![
-                            Bencode::String(b"a".to_vec()),
-                            Bencode::String(b"b".to_vec())
-                        ])
+                        "spam",
+                        blob(
+                            b"l1:a1:be",
+                            BencodeValue::List(vec![
+                                blob(b"1:a", BencodeValue::String(b"a")),
+                                blob(b"1:b", BencodeValue::String(b"b"))
+                            ])
+                        )
                     ),]
                     .into_iter()
                     .collect()

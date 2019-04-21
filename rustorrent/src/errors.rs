@@ -20,6 +20,8 @@ pub enum RustorrentError {
     IO(std::io::Error),
     #[fail(display = "try from bencode {}", _0)]
     TryFromBencode(TryFromBencode),
+    #[fail(display = "convert {}", _0)]
+    Convert(std::convert::Infallible),
 }
 
 impl From<std::io::Error> for RustorrentError {
@@ -31,5 +33,11 @@ impl From<std::io::Error> for RustorrentError {
 impl From<TryFromBencode> for RustorrentError {
     fn from(value: TryFromBencode) -> Self {
         RustorrentError::TryFromBencode(value)
+    }
+}
+
+impl From<std::convert::Infallible> for RustorrentError {
+    fn from(value: std::convert::Infallible) -> Self {
+        RustorrentError::Convert(value)
     }
 }
