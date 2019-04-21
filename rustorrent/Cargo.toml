@@ -18,3 +18,4 @@ env_logger = "0.6"
 
 reqwest = "0.9"
 sha-1 = "0.8"
+percent-encoding = "1.0"

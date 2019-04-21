@@ -1,13 +1,46 @@
 use super::*;
+use crate::errors::RustorrentError;
+
+use percent_encoding::{percent_encode, USERINFO_ENCODE_SET};
+use reqwest;
+use sha1::{Digest, Sha1};
 
 use std::convert::TryInto;
 
 #[derive(Debug)]
 pub struct Torrent<'a> {
     pub raw: &'a [u8],
-    pub announce: &'a str,
+    pub announce_url: &'a str,
     pub announce_list: Option<Vec<Vec<&'a str>>>,
     pub creation_date: Option<i64>,
+    pub info: BencodeBlob<'a>,
+}
+
+const PEER_ID: [u8; 20] = *b"rustorrent          ";
+
+fn url_encode(data: &[u8]) -> String {
+    percent_encode(data, USERINFO_ENCODE_SET).to_string()
+}
+
+impl<'a> Torrent<'a> {
+    pub fn announce(&self) -> Result<(), RustorrentError> {
+        let mut hasher = Sha1::default();
+        hasher.input(self.info.source);
+        let info_hash = hasher.result();
+
+        let client = reqwest::Client::new();
+        let mut response = client
+            .get(&format!(
+                "{}?info_hash={}&peer_id={}",
+                self.announce_url,
+                url_encode(&info_hash[..]),
+                url_encode(&PEER_ID[..])
+            ))
+            .send()?;
+        dbg!(&response);
+        dbg!(&response.text());
+        Ok(())
+    }
 }
 
 impl<'a> TryFrom<BencodeBlob<'a>> for Torrent<'a> {
@@ -16,13 +49,14 @@ impl<'a> TryFrom<BencodeBlob<'a>> for Torrent<'a> {
     fn try_from(value: BencodeBlob<'a>) -> Result<Self, Self::Error> {
         let dictionary: Vec<_> = value.value.try_into()?;
 
-        let mut announce = None;
+        let mut announce_url = None;
         let mut announce_list = None;
         let mut creation_date = None;
+        let mut info = None;
 
         for (key, value) in dictionary {
             match key {
-                "announce" => announce = Some(value.value.try_into()?),
+                "announce" => announce_url = Some(value.value.try_into()?),
                 "announce-list" => {
                     let value_list: Vec<BencodeBlob> = value.value.try_into()?;
                     let value_list_list: Vec<Vec<&str>> = value_list
@@ -35,15 +69,17 @@ impl<'a> TryFrom<BencodeBlob<'a>> for Torrent<'a> {
                     announce_list = Some(value_list_list);
                 }
                 "creation date" => creation_date = Some(value.value.try_into()?),
+                "info" => info = Some(value),
                 _ => (),
             }
         }
 
         Ok(Torrent {
             raw: value.source,
-            announce: announce.unwrap(),
+            announce_url: announce_url.unwrap(),
             announce_list,
             creation_date,
+            info: info.unwrap(),
         })
     }
 }

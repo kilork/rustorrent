@@ -22,22 +22,21 @@ pub enum RustorrentError {
     TryFromBencode(TryFromBencode),
     #[fail(display = "convert {}", _0)]
     Convert(std::convert::Infallible),
+    #[fail(display = "HTTP client {}", _0)]
+    HTTPClient(reqwest::Error),
 }
 
-impl From<std::io::Error> for RustorrentError {
-    fn from(value: std::io::Error) -> Self {
-        RustorrentError::IO(value)
-    }
+macro_rules! from_rustorrent_error {
+    ($i:ty, $g:ident) => {
+        impl From<$i> for RustorrentError {
+            fn from(value: $i) -> Self {
+                RustorrentError::$g(value)
+            }
+        }
+    };
 }
 
-impl From<TryFromBencode> for RustorrentError {
-    fn from(value: TryFromBencode) -> Self {
-        RustorrentError::TryFromBencode(value)
-    }
-}
-
-impl From<std::convert::Infallible> for RustorrentError {
-    fn from(value: std::convert::Infallible) -> Self {
-        RustorrentError::Convert(value)
-    }
-}
+from_rustorrent_error!(reqwest::Error, HTTPClient);
+from_rustorrent_error!(TryFromBencode, TryFromBencode);
+from_rustorrent_error!(std::io::Error, IO);
+from_rustorrent_error!(std::convert::Infallible, Convert);

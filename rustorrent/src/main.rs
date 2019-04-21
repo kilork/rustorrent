@@ -15,8 +15,16 @@ fn main() -> Result<(), ExitFailure> {
     info!("downloading {:?}", cli.torrent.to_str());
 
     let mut buf = vec![];
+
     let torrent = parse_torrent(&cli.torrent, &mut buf)
         .with_context(|_| format!("could not parse torrent {:?}", &cli.torrent))?;
+
+    torrent.announce().with_context(|_| {
+        format!(
+            "could not announce torrent to tracker {}",
+            torrent.announce_url
+        )
+    })?;
 
     Ok(())
 }
