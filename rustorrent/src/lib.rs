@@ -10,7 +10,7 @@ use std::path::Path;
 use errors::RustorrentError;
 use types::Torrent;
 
-pub fn parse_torrent<'a>(filename: impl AsRef<Path>) -> Result<(), RustorrentError> {
+pub fn parse_torrent(filename: impl AsRef<Path>) -> Result<(), RustorrentError> {
     let mut f = File::open(filename)?;
 
     let mut buf = vec![];

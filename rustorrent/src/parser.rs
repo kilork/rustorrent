@@ -39,13 +39,13 @@ named!(
 
 named!(
     bencode_string<BencodeValue>,
-    do_parse!(len: integer >> char!(':') >> s: take!(len) >> (BencodeValue::String(s.into())))
+    do_parse!(len: integer >> char!(':') >> s: take!(len) >> (BencodeValue::String(s)))
 );
 
 named!(
     bencode_string_s<&str>,
     do_parse!(
-        len: integer >> char!(':') >> s: map_res!(take!(len), std::str::from_utf8) >> (s.into())
+        len: integer >> char!(':') >> s: map_res!(take!(len), std::str::from_utf8) >> (s)
     )
 );
 
@@ -53,7 +53,7 @@ named!(
     bencode_integer<BencodeValue>,
     delimited!(
         char!('i'),
-        map!(integer, |x: i64| BencodeValue::Integer(x)),
+        map!(integer, BencodeValue::Integer),
         char!('e')
     )
 );
@@ -75,7 +75,7 @@ named!(
         char!('d'),
         map!(
             many0!(tuple!(bencode_string_s, parser_bencode)),
-            |x: Vec<(&str, BencodeBlob)>| BencodeValue::Dictionary(x)
+            BencodeValue::Dictionary
         ),
         char!('e')
     )
