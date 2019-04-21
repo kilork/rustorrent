@@ -10,6 +10,8 @@ use std::path::Path;
 use errors::RustorrentError;
 use types::Torrent;
 
+use sha1::{Digest, Sha1};
+
 pub fn parse_torrent<'a>(
     filename: impl AsRef<Path>,
     buf: &'a mut std::vec::Vec<u8>,

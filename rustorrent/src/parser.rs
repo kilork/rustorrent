@@ -44,18 +44,12 @@ named!(
 
 named!(
     bencode_string_s<&str>,
-    do_parse!(
-        len: integer >> char!(':') >> s: map_res!(take!(len), std::str::from_utf8) >> (s)
-    )
+    do_parse!(len: integer >> char!(':') >> s: map_res!(take!(len), std::str::from_utf8) >> (s))
 );
 
 named!(
     bencode_integer<BencodeValue>,
-    delimited!(
-        char!('i'),
-        map!(integer, BencodeValue::Integer),
-        char!('e')
-    )
+    delimited!(char!('i'), map!(integer, BencodeValue::Integer), char!('e'))
 );
 
 named!(
