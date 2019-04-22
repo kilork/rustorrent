@@ -81,9 +81,9 @@ named!(
 );
 
 pub fn parse_bencode(bytes: &[u8]) -> Result<BencodeBlob, RustorrentError> {
-    let bencode_blob = parser_bencode(bytes).map(|x| x.1)?;
-
-    Ok(bencode_blob)
+    parser_bencode(bytes)
+        .map(|x| x.1)
+        .map_err(RustorrentError::from)
 }
 
 #[cfg(test)]

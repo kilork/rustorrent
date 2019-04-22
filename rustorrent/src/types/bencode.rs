@@ -20,8 +20,7 @@ impl<'a> TryFrom<&'a [u8]> for BencodeBlob<'a> {
     type Error = RustorrentError;
 
     fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
-        let result = parse_bencode(value)?;
-        Ok(result)
+        parse_bencode(value)
     }
 }
 

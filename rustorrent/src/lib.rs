@@ -18,7 +18,7 @@ pub fn parse_torrent<'a>(
 
     f.read_to_end(buf)?;
 
-    let torrent: Torrent = parser::parse_bencode(buf)?.try_into()?;
+    let torrent = buf.as_slice().try_into()?;
 
     Ok(torrent)
 }

@@ -44,9 +44,21 @@ impl<'a> Torrent<'a> {
         let bencode: BencodeBlob = buf[..].try_into()?;
         let bencode_dictionary: Vec<(_, _)> = bencode.value.try_into()?;
 
-        dbg!(bencode_dictionary.iter().map(|x| x.0).collect::<Vec<&str>>());
+        dbg!(bencode_dictionary
+            .iter()
+            .map(|x| x.0)
+            .collect::<Vec<&str>>());
 
         Ok(())
+    }
+}
+
+impl<'a> TryFrom<&'a [u8]> for Torrent<'a> {
+    type Error = RustorrentError;
+
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        let bencode: BencodeBlob = value.try_into()?;
+        bencode.try_into().map_err(RustorrentError::from)
     }
 }
 
