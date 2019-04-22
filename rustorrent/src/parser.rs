@@ -1,3 +1,4 @@
+use crate::errors::RustorrentError;
 use crate::types::{BencodeBlob, BencodeValue};
 
 use nom::*;
@@ -5,22 +6,15 @@ use nom::*;
 macro_rules! recognize_map (
     ($i:expr, $submac:ident!( $($args:tt)* ), $g:expr) => (
         {
-            pub fn _unify<I, T, R, F: FnOnce(I, T) -> R>(f: F, i: I, t: T) -> R {
-                f(i, t)
-            }
-
-            use nom::lib::std::result::Result::*;
-
             use nom::Offset;
             use nom::Slice;
-            let i_ = $i.clone();
-            match $submac!(i_, $($args)*) {
-                Ok((i, res)) => {
-                    let index = (&$i).offset(&i);
-                    Ok((i, _unify($g, ($i).slice(..index), res) ))
-                },
-                Err(e) => Err(e)
-            }
+            $submac!($i, $($args)*).map(
+                |(i, res)|
+                    (i, $g(
+                        ($i).slice( .. (&$i).offset(&i) ),
+                        res
+                    ))
+            )
         }
     );
 );
@@ -86,8 +80,10 @@ named!(
     )
 );
 
-pub fn parse_bencode(bytes: &[u8]) -> BencodeBlob {
-    parser_bencode(bytes).unwrap().1
+pub fn parse_bencode(bytes: &[u8]) -> Result<BencodeBlob, RustorrentError> {
+    let bencode_blob = parser_bencode(bytes).map(|x| x.1)?;
+
+    Ok(bencode_blob)
 }
 
 #[cfg(test)]

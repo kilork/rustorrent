@@ -37,8 +37,15 @@ impl<'a> Torrent<'a> {
                 url_encode(&PEER_ID[..])
             ))
             .send()?;
-        dbg!(&response);
-        dbg!(&response.text());
+
+        let mut buf: Vec<u8> = vec![];
+        response.copy_to(&mut buf)?;
+
+        let bencode: BencodeBlob = buf[..].try_into()?;
+        let bencode_dictionary: Vec<(_, _)> = bencode.value.try_into()?;
+
+        dbg!(bencode_dictionary.iter().map(|x| x.0).collect::<Vec<&str>>());
+
         Ok(())
     }
 }

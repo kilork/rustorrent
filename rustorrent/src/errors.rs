@@ -24,6 +24,8 @@ pub enum RustorrentError {
     Convert(std::convert::Infallible),
     #[fail(display = "HTTP client {}", _0)]
     HTTPClient(reqwest::Error),
+    #[fail(display = "parser fail")]
+    Parser,
 }
 
 macro_rules! from_rustorrent_error {
@@ -40,3 +42,9 @@ from_rustorrent_error!(reqwest::Error, HTTPClient);
 from_rustorrent_error!(TryFromBencode, TryFromBencode);
 from_rustorrent_error!(std::io::Error, IO);
 from_rustorrent_error!(std::convert::Infallible, Convert);
+
+impl<'a> From<nom::Err<&'a [u8]>> for RustorrentError {
+    fn from(_value: nom::Err<&'a [u8]>) -> Self {
+        RustorrentError::Parser
+    }
+}

@@ -1,4 +1,6 @@
 use super::*;
+use crate::errors::RustorrentError;
+use crate::parser::parse_bencode;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct BencodeBlob<'a> {
@@ -11,6 +13,15 @@ impl<'a> Deref for BencodeBlob<'a> {
 
     fn deref(&self) -> &BencodeValue<'a> {
         &self.value
+    }
+}
+
+impl<'a> TryFrom<&'a [u8]> for BencodeBlob<'a> {
+    type Error = RustorrentError;
+
+    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+        let result = parse_bencode(value)?;
+        Ok(result)
     }
 }
 
