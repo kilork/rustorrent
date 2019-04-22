@@ -1,8 +1,8 @@
 use std::convert::TryFrom;
-use std::ops::Deref;
 
 use crate::errors::TryFromBencode;
 
+#[macro_use]
 mod bencode;
 mod torrent;
 

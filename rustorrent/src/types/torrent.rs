@@ -1,7 +1,8 @@
 use super::*;
 use crate::errors::RustorrentError;
 
-use percent_encoding::{percent_encode, USERINFO_ENCODE_SET};
+use log::debug;
+use percent_encoding::{percent_encode, SIMPLE_ENCODE_SET, USERINFO_ENCODE_SET};
 use reqwest;
 use sha1::{Digest, Sha1};
 
@@ -14,6 +15,18 @@ pub struct Torrent<'a> {
     pub announce_list: Option<Vec<Vec<&'a str>>>,
     pub creation_date: Option<i64>,
     pub info: BencodeBlob<'a>,
+}
+
+#[derive(Debug)]
+pub struct TrackerAnnounceResponse<'a> {
+    pub interval: Option<i64>,
+    pub failure_reason: Option<&'a str>,
+    // pub peers: Option<Vec<Peer<'a>>>,
+}
+
+#[derive(Debug)]
+pub struct Peer<'a> {
+    pub id: Option<&'a str>,
 }
 
 const PEER_ID: [u8; 20] = *b"rustorrent          ";
@@ -29,25 +42,30 @@ impl<'a> Torrent<'a> {
         let info_hash = hasher.result();
 
         let client = reqwest::Client::new();
-        let mut response = client
-            .get(&format!(
-                "{}?info_hash={}&peer_id={}",
-                self.announce_url,
-                url_encode(&info_hash[..]),
-                url_encode(&PEER_ID[..])
-            ))
-            .send()?;
+
+        let url = format!(
+            "{}?info_hash={}&peer_id={}",
+            self.announce_url,
+            url_encode(&info_hash[..]),
+            url_encode(&PEER_ID[..])
+        );
+
+        debug!("Get tracker announce from: {}", url);
+
+        let mut response = client.get(&url).send()?;
 
         let mut buf: Vec<u8> = vec![];
         response.copy_to(&mut buf)?;
 
-        let bencode: BencodeBlob = buf[..].try_into()?;
-        let bencode_dictionary: Vec<(_, _)> = bencode.value.try_into()?;
+        debug!(
+            "Tracker response (url encoded): {}",
+            percent_encode(&buf, SIMPLE_ENCODE_SET).to_string()
+        );
 
-        dbg!(bencode_dictionary
-            .iter()
-            .map(|x| x.0)
-            .collect::<Vec<&str>>());
+        let bencode: BencodeBlob = buf[..].try_into()?;
+
+        let tracker_announce_response: TrackerAnnounceResponse = bencode.try_into()?;
+        dbg!(tracker_announce_response);
 
         Ok(())
     }
@@ -62,43 +80,20 @@ impl<'a> TryFrom<&'a [u8]> for Torrent<'a> {
     }
 }
 
-impl<'a> TryFrom<BencodeBlob<'a>> for Torrent<'a> {
-    type Error = TryFromBencode;
+try_from_bencode!(Torrent<'a>,
+    normal: ("announce" => announce_url),
+    optional: (
+        "announce-list" => announce_list,
+        "creation date" => creation_date
+    ),
+    bencode: ("info" => info),
+    raw: (raw)
+);
 
-    fn try_from(value: BencodeBlob<'a>) -> Result<Self, Self::Error> {
-        let dictionary: Vec<_> = value.value.try_into()?;
-
-        let mut announce_url = None;
-        let mut announce_list = None;
-        let mut creation_date = None;
-        let mut info = None;
-
-        for (key, value) in dictionary {
-            match key {
-                "announce" => announce_url = Some(value.value.try_into()?),
-                "announce-list" => {
-                    let value_list: Vec<BencodeBlob> = value.value.try_into()?;
-                    let value_list_list: Vec<Vec<&str>> = value_list
-                        .into_iter()
-                        .map(|l| l.value.try_into().unwrap())
-                        .map(|l: Vec<BencodeBlob>| {
-                            l.into_iter().map(|k| k.value.try_into().unwrap()).collect()
-                        })
-                        .collect();
-                    announce_list = Some(value_list_list);
-                }
-                "creation date" => creation_date = Some(value.value.try_into()?),
-                "info" => info = Some(value),
-                _ => (),
-            }
-        }
-
-        Ok(Torrent {
-            raw: value.source,
-            announce_url: announce_url.unwrap(),
-            announce_list,
-            creation_date,
-            info: info.unwrap(),
-        })
-    }
-}
+try_from_bencode!(TrackerAnnounceResponse<'a>,
+    optional: (
+        "interval" => interval,
+        "failure reason" => failure_reason
+        // "peers" => peers
+    ),
+);
