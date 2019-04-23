@@ -66,8 +66,7 @@ impl<'a> TryFrom<BencodeValue<'a>> for u16 {
     type Error = TryFromBencode;
 
     fn try_from(value: BencodeValue<'a>) -> Result<Self, Self::Error> {
-        let res: i64 = value.try_into()?;
-        Ok(res as u16)
+        value.try_into().map(|x: i64| x as u16)
     }
 }
 blanket_blob_value!(u16);

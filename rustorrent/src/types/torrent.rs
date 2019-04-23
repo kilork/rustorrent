@@ -112,7 +112,7 @@ impl<'a> TryFrom<BencodeBlob<'a>> for Vec<Peer<'a>> {
                 .chunks_exact(6)
                 .map(|peer| Peer {
                     ip: Ipv4Addr::new(peer[0], peer[1], peer[2], peer[3]),
-                    port: peer[4] as u16 * 256 + peer[5] as u16,
+                    port: u16::from(peer[4]) * 256u16 + u16::from(peer[5]),
                     peer_id: None,
                 })
                 .collect()),
