@@ -1,4 +1,5 @@
 use failure::*;
+use log::debug;
 
 #[derive(Debug, Fail)]
 pub enum TryFromBencode {
@@ -12,6 +13,8 @@ pub enum TryFromBencode {
     NotDictionary,
     #[fail(display = "not valid utf-8 {}", _0)]
     NotUtf8(std::str::Utf8Error),
+    #[fail(display = "not valid ip {}", _0)]
+    NotValidIp(std::net::AddrParseError),
 }
 
 #[derive(Debug, Fail)]
@@ -32,6 +35,7 @@ macro_rules! from_rustorrent_error {
     ($i:ty, $g:ident) => {
         impl From<$i> for RustorrentError {
             fn from(value: $i) -> Self {
+                debug!("{}", value);
                 RustorrentError::$g(value)
             }
         }
@@ -45,6 +49,7 @@ from_rustorrent_error!(std::convert::Infallible, Convert);
 
 impl<'a> From<nom::Err<&'a [u8]>> for RustorrentError {
     fn from(_value: nom::Err<&'a [u8]>) -> Self {
+        debug!("{}", _value);
         RustorrentError::Parser
     }
 }

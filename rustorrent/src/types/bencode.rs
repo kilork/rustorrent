@@ -2,6 +2,7 @@ use super::*;
 use crate::errors::RustorrentError;
 use crate::parser::parse_bencode;
 use std::convert::TryInto;
+use std::net::Ipv4Addr;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct BencodeBlob<'a> {
@@ -61,6 +62,16 @@ impl<'a> TryFrom<BencodeValue<'a>> for i64 {
 }
 blanket_blob_value!(i64);
 
+impl<'a> TryFrom<BencodeValue<'a>> for u16 {
+    type Error = TryFromBencode;
+
+    fn try_from(value: BencodeValue<'a>) -> Result<Self, Self::Error> {
+        let res: i64 = value.try_into()?;
+        Ok(res as u16)
+    }
+}
+blanket_blob_value!(u16);
+
 impl<'a> TryFrom<BencodeValue<'a>> for Vec<BencodeBlob<'a>> {
     type Error = TryFromBencode;
 
@@ -106,6 +117,17 @@ impl<'a> TryFrom<BencodeValue<'a>> for Vec<Vec<&'a str>> {
 }
 blanket_blob_value!(Vec<Vec<&'a str>>);
 
+impl<'a> TryFrom<BencodeValue<'a>> for Ipv4Addr {
+    type Error = TryFromBencode;
+
+    fn try_from(value: BencodeValue<'a>) -> Result<Self, Self::Error> {
+        value
+            .try_into()
+            .and_then(|s: &str| s.parse().map_err(TryFromBencode::from))
+    }
+}
+blanket_blob_value!(Ipv4Addr);
+
 impl<'a> From<BencodeBlob<'a>> for BencodeValue<'a> {
     fn from(blob: BencodeBlob<'a>) -> Self {
         blob.value
@@ -118,14 +140,22 @@ impl From<std::str::Utf8Error> for TryFromBencode {
     }
 }
 
+impl From<std::net::AddrParseError> for TryFromBencode {
+    fn from(value: std::net::AddrParseError) -> Self {
+        TryFromBencode::NotValidIp(value)
+    }
+}
+
 macro_rules! try_from_bencode {
     ($type:ty,
-        $(normal: ($($normal_key:expr => $normal_field:ident),*),)*
-        $(optional: ($($optional_key:expr => $optional_field:ident),*),)*
-        $(bencode: ($($bencode_key:expr => $bencode_field:ident),*),)*
+        $(normal: ($($normal_key:expr => $normal_field:ident),*)$(,)*)*
+        $(optional: ($($optional_key:expr => $optional_field:ident),*)$(,)*)*
+        $(bencode: ($($bencode_key:expr => $bencode_field:ident),*)$(,)*)*
         $(raw: ($($raw:ident),*))*) => {
         impl<'a> TryFrom<BencodeBlob<'a>> for $type {
+
             type Error = TryFromBencode;
+
             fn try_from(value: BencodeBlob<'a>) -> Result<Self, Self::Error> {
                 let _source = value.source.clone();
                 let dictionary: Vec<_> = value.try_into()?;
@@ -151,5 +181,14 @@ macro_rules! try_from_bencode {
                 })
             }
         }
-    };
+
+        impl<'a> TryFrom<&'a [u8]> for $type {
+            type Error = RustorrentError;
+
+            fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+                let bencode: BencodeBlob = value.try_into()?;
+                bencode.try_into().map_err(RustorrentError::from)
+            }
+        }
+    }
 }
