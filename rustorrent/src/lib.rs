@@ -1,6 +1,6 @@
 mod errors;
 mod parser;
-mod types;
+pub mod types;
 
 use std::convert::TryInto;
 use std::fs::File;

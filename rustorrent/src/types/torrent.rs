@@ -41,7 +41,7 @@ fn url_encode(data: &[u8]) -> String {
 }
 
 impl<'a> Torrent<'a> {
-    pub fn announce(&self) -> Result<(), RustorrentError> {
+    pub fn announce(&self, buf: &'a mut Vec<u8>) -> Result<TrackerAnnounceResponse, RustorrentError> {
         let mut hasher = Sha1::default();
         hasher.input(self.info.source);
         let info_hash = hasher.result();
@@ -49,7 +49,7 @@ impl<'a> Torrent<'a> {
         let client = reqwest::Client::new();
 
         let url = format!(
-            "{}?info_hash={}&peer_id={}&port=6970&compact=1",
+            "{}?info_hash={}&peer_id={}&port=6970&compact=0",
             self.announce_url,
             url_encode(&info_hash[..]),
             url_encode(&PEER_ID[..])
@@ -59,19 +59,16 @@ impl<'a> Torrent<'a> {
 
         let mut response = client.get(&url).send()?;
 
-        let mut buf: Vec<u8> = vec![];
-        response.copy_to(&mut buf)?;
+        response.copy_to(buf)?;
 
         debug!(
             "Tracker response (url encoded): {}",
             percent_encode(&buf, SIMPLE_ENCODE_SET).to_string()
         );
+        let tracker_announce_response = buf.as_slice().try_into()?;
+        debug!("Tracker response parsed: {:#?}", tracker_announce_response);
 
-        let tracker_announce_response: TrackerAnnounceResponse = buf.as_slice().try_into()?;
-
-        dbg!(tracker_announce_response);
-
-        Ok(())
+        Ok(tracker_announce_response)
     }
 }
 
