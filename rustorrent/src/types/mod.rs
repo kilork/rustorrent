@@ -7,6 +7,6 @@ mod config;
 mod bencode;
 mod torrent;
 
-pub use config::Config;
 pub use bencode::{BencodeBlob, BencodeValue};
+pub use config::{Config, Settings};
 pub use torrent::Torrent;

@@ -1,7 +1,7 @@
 use clap_verbosity_flag::Verbosity;
+use rustorrent::types::Config;
 use std::path::PathBuf;
 use structopt::StructOpt;
-use rustorrent::types::Config;
 
 /// Extremely fast and simple torrent client
 #[derive(StructOpt)]

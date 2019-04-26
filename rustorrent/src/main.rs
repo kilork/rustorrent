@@ -1,7 +1,7 @@
 use exitfailure::ExitFailure;
 use failure::ResultExt;
-use log::info;
-use rustorrent::parse_torrent;
+use log::{debug, info};
+use rustorrent::{parse_torrent, types::Settings};
 
 mod cli;
 
@@ -11,9 +11,22 @@ const PEER_PORT_MAX: u16 = 6889;
 fn main() -> Result<(), ExitFailure> {
     let cli = cli::from_args();
 
-    cli.verbose.setup_env_logger("rustorrent")?;
+    cli.verbose.setup_env_logger(env!("CARGO_PKG_NAME"))?;
 
     info!("starting torrent client");
+
+    let settings = load_settings()?;
+
+    let mut settings = settings.override_with(&cli.config);
+    let mut config = &mut settings.config;
+
+    if config.port.is_none() {
+        config.port = Some(PEER_PORT);
+    }
+
+    if config.port_max.is_none() {
+        config.port_max = Some(PEER_PORT_MAX);
+    }
 
     info!("downloading {:?}", cli.torrent.to_str());
 
@@ -32,4 +45,10 @@ fn main() -> Result<(), ExitFailure> {
     })?;
 
     Ok(())
+}
+
+fn load_settings() -> Result<Settings, std::io::Error> {
+    debug!("loading settings");
+
+    confy::load(env!("CARGO_PKG_NAME"))
 }

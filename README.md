@@ -9,3 +9,13 @@ Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org/).
 - Implements bittorrent client.
 
 ## Usage
+
+## Configuration
+
+We use [confy](https://docs.rs/confy) for configuration. Configuration is stored in `toml` format.
+
+Locations:
+
+| OS  | Location                                                       |
+|-----|----------------------------------------------------------------|
+| Mac | ~/Library/Preferences/rs.rustorrent.rustorrent/rustorrent.toml |

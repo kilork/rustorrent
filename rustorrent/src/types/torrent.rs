@@ -41,7 +41,10 @@ fn url_encode(data: &[u8]) -> String {
 }
 
 impl<'a> Torrent<'a> {
-    pub fn announce(&self, buf: &'a mut Vec<u8>) -> Result<TrackerAnnounceResponse, RustorrentError> {
+    pub fn announce(
+        &self,
+        buf: &'a mut Vec<u8>,
+    ) -> Result<TrackerAnnounceResponse, RustorrentError> {
         let mut hasher = Sha1::default();
         hasher.input(self.info.source);
         let info_hash = hasher.result();

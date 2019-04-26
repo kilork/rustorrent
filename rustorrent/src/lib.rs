@@ -12,7 +12,7 @@ use types::Torrent;
 
 pub fn parse_torrent<'a>(
     filename: impl AsRef<Path>,
-    buf: &'a mut std::vec::Vec<u8>,
+    buf: &'a mut Vec<u8>,
 ) -> Result<Torrent, RustorrentError> {
     let mut f = File::open(filename)?;
 

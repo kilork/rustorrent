@@ -4,7 +4,7 @@ use structopt::StructOpt;
 use std::net::Ipv4Addr;
 
 /// Data to be both passed as arguments and in form of config file
-#[derive(StructOpt, Serialize, Deserialize)]
+#[derive(StructOpt, Serialize, Deserialize, Debug)]
 pub struct Config {
     /// Forces compact parameter behavior for announce request
     ///
@@ -32,6 +32,25 @@ impl Default for Config {
             ipv4: None,
             port: None,
             port_max: None,
+        }
+    }
+}
+
+/// Global application settings
+#[derive(Serialize, Deserialize, Default, Debug)]
+pub struct Settings {
+    pub config: Config,
+}
+
+impl Settings {
+    pub fn override_with(&self, config: &Config) -> Self {
+        Self {
+            config: Config {
+                compact: config.compact.or(self.config.compact),
+                ipv4: config.ipv4.or(self.config.ipv4),
+                port: config.port.or(self.config.port),
+                port_max: config.port_max.or(self.config.port_max),
+            },
         }
     }
 }
