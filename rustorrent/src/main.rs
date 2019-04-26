@@ -22,11 +22,19 @@ fn main() -> Result<(), ExitFailure> {
 
     if config.port.is_none() {
         config.port = Some(PEER_PORT);
+        if config.port_max.is_none() {
+            config.port_max = Some(PEER_PORT_MAX);
+        }
+    } else if config.port_max.is_none() {
+        config.port_max = config.port;
     }
 
-    if config.port_max.is_none() {
-        config.port_max = Some(PEER_PORT_MAX);
-    }
+    assert!(
+        config.port <= config.port_max,
+        "Max port must be greater than starting port"
+    );
+
+    debug!("calculated settings {:#?}", settings);
 
     info!("downloading {:?}", cli.torrent.to_str());
 
@@ -37,12 +45,14 @@ fn main() -> Result<(), ExitFailure> {
 
     let mut announce_buf = vec![];
 
-    torrent.announce(&mut announce_buf).with_context(|_| {
-        format!(
-            "could not announce torrent to tracker {}",
-            torrent.announce_url
-        )
-    })?;
+    torrent
+        .announce(&mut announce_buf, &settings)
+        .with_context(|_| {
+            format!(
+                "could not announce torrent to tracker {}",
+                torrent.announce_url
+            )
+        })?;
 
     Ok(())
 }

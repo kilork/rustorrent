@@ -44,6 +44,7 @@ impl<'a> Torrent<'a> {
     pub fn announce(
         &self,
         buf: &'a mut Vec<u8>,
+        settings: &Settings,
     ) -> Result<TrackerAnnounceResponse, RustorrentError> {
         let mut hasher = Sha1::default();
         hasher.input(self.info.source);
@@ -51,12 +52,22 @@ impl<'a> Torrent<'a> {
 
         let client = reqwest::Client::new();
 
-        let url = format!(
-            "{}?info_hash={}&peer_id={}&port=6970&compact=0",
+        let mut url = format!(
+            "{}?info_hash={}&peer_id={}",
             self.announce_url,
             url_encode(&info_hash[..]),
             url_encode(&PEER_ID[..])
         );
+
+        let config = &settings.config;
+
+        if let Some(port) = config.port {
+            url += format!("&port={}", port).as_str();
+        }
+
+        if let Some(compact) = config.compact {
+            url += format!("&compact={}", if compact { 1 } else { 0 }).as_str();
+        }
 
         debug!("Get tracker announce from: {}", url);
 
