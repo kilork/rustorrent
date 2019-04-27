@@ -38,57 +38,50 @@ pub struct Peer {
     pub port: u16,
 }
 
-const PEER_ID: [u8; 20] = *b"rustorrent          ";
-
-fn url_encode(data: &[u8]) -> String {
-    data.iter()
-        .map(|&x| percent_encode_byte(x))
-        .collect::<String>()
-}
-
 impl Torrent {
-    pub fn announce(
-        &self,
-        settings: &Settings,
-    ) -> Result<TrackerAnnounceResponse, RustorrentError> {
-        let info_hash = self.info_sha1_hash();
+    /*
+        pub fn announce(
+            &self,
+            settings: &Settings,
+        ) -> Result<TrackerAnnounceResponse, RustorrentError> {
+            let info_hash = self.info_sha1_hash();
 
-        let client = reqwest::Client::new();
+            let client = reqwest::r#async::Client::new();
 
-        let mut url = format!(
-            "{}?info_hash={}&peer_id={}",
-            self.announce_url,
-            url_encode(&info_hash[..]),
-            url_encode(&PEER_ID[..])
-        );
+            let mut url = format!(
+                "{}?info_hash={}&peer_id={}",
+                self.announce_url,
+                url_encode(&info_hash[..]),
+                url_encode(&PEER_ID[..])
+            );
 
-        let config = &settings.config;
+            let config = &settings.config;
 
-        if let Some(port) = config.port {
-            url += format!("&port={}", port).as_str();
+            if let Some(port) = config.port {
+                url += format!("&port={}", port).as_str();
+            }
+
+            if let Some(compact) = config.compact {
+                url += format!("&compact={}", if compact { 1 } else { 0 }).as_str();
+            }
+
+            debug!("Get tracker announce from: {}", url);
+
+            let mut response = client.get(&url).send()?;
+
+            let mut buf = vec![];
+            response.copy_to(&mut buf)?;
+
+            debug!(
+                "Tracker response (url encoded): {}",
+                percent_encode(&buf, SIMPLE_ENCODE_SET).to_string()
+            );
+            let tracker_announce_response = buf.try_into()?;
+            debug!("Tracker response parsed: {:#?}", tracker_announce_response);
+
+            Ok(tracker_announce_response)
         }
-
-        if let Some(compact) = config.compact {
-            url += format!("&compact={}", if compact { 1 } else { 0 }).as_str();
-        }
-
-        debug!("Get tracker announce from: {}", url);
-
-        let mut response = client.get(&url).send()?;
-
-        let mut buf = vec![];
-        response.copy_to(&mut buf)?;
-
-        debug!(
-            "Tracker response (url encoded): {}",
-            percent_encode(&buf, SIMPLE_ENCODE_SET).to_string()
-        );
-        let tracker_announce_response = buf.try_into()?;
-        debug!("Tracker response parsed: {:#?}", tracker_announce_response);
-
-        Ok(tracker_announce_response)
-    }
-
+    */
     pub fn info_sha1_hash(&self) -> GenericArray<u8, U20> {
         Sha1::digest(self.info.source.as_slice())
     }
