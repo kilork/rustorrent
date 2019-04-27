@@ -33,12 +33,14 @@ named!(
 
 named!(
     bencode_string<BencodeValue>,
-    do_parse!(len: integer >> char!(':') >> s: take!(len) >> (BencodeValue::String(s)))
+    do_parse!(len: integer >> char!(':') >> s: take!(len) >> (BencodeValue::String(s.into())))
 );
 
 named!(
-    bencode_string_s<&str>,
-    do_parse!(len: integer >> char!(':') >> s: map_res!(take!(len), std::str::from_utf8) >> (s))
+    bencode_string_s<String>,
+    do_parse!(
+        len: integer >> char!(':') >> s: map_res!(take!(len), std::str::from_utf8) >> (s.into())
+    )
 );
 
 named!(
@@ -73,8 +75,8 @@ named!(
     parser_bencode<BencodeBlob>,
     recognize_map!(
         alt!(bencode_string | bencode_integer | bencode_list | bencode_dictionary),
-        |i, r| BencodeBlob {
-            source: i,
+        |i: &[u8], r| BencodeBlob {
+            source: i.to_vec(),
             value: r
         }
     )
@@ -91,15 +93,18 @@ mod tests {
     use super::*;
     use crate::types::BencodeBlob;
 
-    fn blob<'a>(source: &'a [u8], value: BencodeValue<'a>) -> BencodeBlob<'a> {
-        BencodeBlob { source, value }
+    fn blob(source: &[u8], value: BencodeValue) -> BencodeBlob {
+        BencodeBlob {
+            source: source.to_vec(),
+            value,
+        }
     }
 
     #[test]
     fn check_bencode_string() {
         assert_eq!(
             bencode_string(b"5:UTF-8"),
-            Ok((&vec![][..], BencodeValue::String(b"UTF-8")))
+            Ok((&vec![][..], BencodeValue::String(b"UTF-8".to_vec())))
         );
     }
 
@@ -118,7 +123,7 @@ mod tests {
             Ok((
                 &vec![][..],
                 BencodeValue::List(vec![
-                    blob(b"5:UTF-8", BencodeValue::String(b"UTF-8")),
+                    blob(b"5:UTF-8", BencodeValue::String(b"UTF-8".to_vec())),
                     blob(b"i3e", BencodeValue::Integer(3))
                 ])
             ))
@@ -132,8 +137,14 @@ mod tests {
                 &vec![][..],
                 BencodeValue::Dictionary(
                     vec![
-                        ("cow", blob(b"3:moo", BencodeValue::String(b"moo"))),
-                        ("spam", blob(b"4:eggs", BencodeValue::String(b"eggs")))
+                        (
+                            "cow".into(),
+                            blob(b"3:moo", BencodeValue::String(b"moo".to_vec()))
+                        ),
+                        (
+                            "spam".into(),
+                            blob(b"4:eggs", BencodeValue::String(b"eggs".to_vec()))
+                        )
                     ]
                     .into_iter()
                     .collect()
@@ -147,12 +158,12 @@ mod tests {
                 &vec![][..],
                 BencodeValue::Dictionary(
                     vec![(
-                        "spam",
+                        "spam".into(),
                         blob(
                             b"l1:a1:be",
                             BencodeValue::List(vec![
-                                blob(b"1:a", BencodeValue::String(b"a")),
-                                blob(b"1:b", BencodeValue::String(b"b"))
+                                blob(b"1:a", BencodeValue::String(b"a".to_vec())),
+                                blob(b"1:b", BencodeValue::String(b"b".to_vec()))
                             ])
                         )
                     ),]

@@ -5,55 +5,55 @@ use std::convert::TryInto;
 use std::net::Ipv4Addr;
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct BencodeBlob<'a> {
-    pub source: &'a [u8],
-    pub value: BencodeValue<'a>,
+pub struct BencodeBlob {
+    pub source: Vec<u8>,
+    pub value: BencodeValue,
 }
 
-impl<'a> TryFrom<&'a [u8]> for BencodeBlob<'a> {
+impl TryFrom<Vec<u8>> for BencodeBlob {
     type Error = RustorrentError;
 
-    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
-        parse_bencode(value)
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        parse_bencode(&value)
     }
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum BencodeValue<'a> {
-    String(&'a [u8]),
+pub enum BencodeValue {
+    String(Vec<u8>),
     Integer(i64),
-    List(Vec<BencodeBlob<'a>>),
-    Dictionary(Vec<(&'a str, BencodeBlob<'a>)>),
+    List(Vec<BencodeBlob>),
+    Dictionary(Vec<(String, BencodeBlob)>),
 }
 
 macro_rules! blanket_blob_value {
     ($type:ty) => {
-        impl<'a> TryFrom<BencodeBlob<'a>> for $type {
+        impl TryFrom<BencodeBlob> for $type {
             type Error = TryFromBencode;
 
-            fn try_from(value: BencodeBlob<'a>) -> Result<Self, Self::Error> {
+            fn try_from(value: BencodeBlob) -> Result<Self, Self::Error> {
                 BencodeValue::from(value).try_into()
             }
         }
     };
 }
 
-impl<'a> TryFrom<BencodeValue<'a>> for &'a str {
+impl TryFrom<BencodeValue> for String {
     type Error = TryFromBencode;
 
-    fn try_from(value: BencodeValue<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: BencodeValue) -> Result<Self, Self::Error> {
         match value {
-            BencodeValue::String(s) => Ok(std::str::from_utf8(&s)?),
+            BencodeValue::String(s) => Ok(std::str::from_utf8(&s)?.into()),
             _ => Err(TryFromBencode::NotString),
         }
     }
 }
-blanket_blob_value!(&'a str);
+blanket_blob_value!(String);
 
-impl<'a> TryFrom<BencodeValue<'a>> for i64 {
+impl TryFrom<BencodeValue> for i64 {
     type Error = TryFromBencode;
 
-    fn try_from(value: BencodeValue<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: BencodeValue) -> Result<Self, Self::Error> {
         match value {
             BencodeValue::Integer(s) => Ok(s),
             _ => Err(TryFromBencode::NotInteger),
@@ -62,73 +62,73 @@ impl<'a> TryFrom<BencodeValue<'a>> for i64 {
 }
 blanket_blob_value!(i64);
 
-impl<'a> TryFrom<BencodeValue<'a>> for u16 {
+impl TryFrom<BencodeValue> for u16 {
     type Error = TryFromBencode;
 
-    fn try_from(value: BencodeValue<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: BencodeValue) -> Result<Self, Self::Error> {
         value.try_into().map(|x: i64| x as u16)
     }
 }
 blanket_blob_value!(u16);
 
-impl<'a> TryFrom<BencodeValue<'a>> for Vec<BencodeBlob<'a>> {
+impl TryFrom<BencodeValue> for Vec<BencodeBlob> {
     type Error = TryFromBencode;
 
-    fn try_from(value: BencodeValue<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: BencodeValue) -> Result<Self, Self::Error> {
         match value {
             BencodeValue::List(s) => Ok(s),
             _ => Err(TryFromBencode::NotList),
         }
     }
 }
-blanket_blob_value!(Vec<BencodeBlob<'a>>);
+blanket_blob_value!(Vec<BencodeBlob>);
 
-impl<'a> TryFrom<BencodeValue<'a>> for Vec<(&'a str, BencodeBlob<'a>)> {
+impl TryFrom<BencodeValue> for Vec<(String, BencodeBlob)> {
     type Error = TryFromBencode;
 
-    fn try_from(value: BencodeValue<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: BencodeValue) -> Result<Self, Self::Error> {
         match value {
             BencodeValue::Dictionary(s) => Ok(s),
             _ => Err(TryFromBencode::NotDictionary),
         }
     }
 }
-blanket_blob_value!(Vec<(&'a str, BencodeBlob<'a>)>);
+blanket_blob_value!(Vec<(String, BencodeBlob)>);
 
-impl<'a> TryFrom<BencodeValue<'a>> for Vec<&'a str> {
+impl TryFrom<BencodeValue> for Vec<String> {
     type Error = TryFromBencode;
 
-    fn try_from(value: BencodeValue<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: BencodeValue) -> Result<Self, Self::Error> {
         match value {
             BencodeValue::List(s) => Ok(s.into_iter().map(|i| i.try_into().unwrap()).collect()),
             _ => Err(TryFromBencode::NotDictionary),
         }
     }
 }
-blanket_blob_value!(Vec<&'a str>);
+blanket_blob_value!(Vec<String>);
 
-impl<'a> TryFrom<BencodeValue<'a>> for Vec<Vec<&'a str>> {
+impl TryFrom<BencodeValue> for Vec<Vec<String>> {
     type Error = TryFromBencode;
 
-    fn try_from(value: BencodeValue<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: BencodeValue) -> Result<Self, Self::Error> {
         value.try_into()
     }
 }
-blanket_blob_value!(Vec<Vec<&'a str>>);
+blanket_blob_value!(Vec<Vec<String>>);
 
-impl<'a> TryFrom<BencodeValue<'a>> for Ipv4Addr {
+impl TryFrom<BencodeValue> for Ipv4Addr {
     type Error = TryFromBencode;
 
-    fn try_from(value: BencodeValue<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: BencodeValue) -> Result<Self, Self::Error> {
         value
             .try_into()
-            .and_then(|s: &str| s.parse().map_err(TryFromBencode::from))
+            .and_then(|s: String| s.parse().map_err(TryFromBencode::from))
     }
 }
 blanket_blob_value!(Ipv4Addr);
 
-impl<'a> From<BencodeBlob<'a>> for BencodeValue<'a> {
-    fn from(blob: BencodeBlob<'a>) -> Self {
+impl From<BencodeBlob> for BencodeValue {
+    fn from(blob: BencodeBlob) -> Self {
         blob.value
     }
 }
@@ -151,11 +151,11 @@ macro_rules! try_from_bencode {
         $(optional: ($($optional_key:expr => $optional_field:ident),*)$(,)*)*
         $(bencode: ($($bencode_key:expr => $bencode_field:ident),*)$(,)*)*
         $(raw: ($($raw:ident),*))*) => {
-        impl<'a> TryFrom<BencodeBlob<'a>> for $type {
+        impl TryFrom<BencodeBlob> for $type {
 
             type Error = TryFromBencode;
 
-            fn try_from(value: BencodeBlob<'a>) -> Result<Self, Self::Error> {
+            fn try_from(value: BencodeBlob) -> Result<Self, Self::Error> {
                 let _source = value.source.clone();
                 let dictionary: Vec<_> = value.try_into()?;
 
@@ -164,7 +164,7 @@ macro_rules! try_from_bencode {
                 $($(let mut $bencode_field = None;)*)*
 
                 for (key, value) in dictionary {
-                    match key {
+                    match key.as_str() {
                         $($($normal_key => $normal_field = Some(value.try_into()?),)*)*
                         $($($optional_key => $optional_field = Some(value.try_into()?),)*)*
                         $($($bencode_key => $bencode_field = Some(value),)*)*
@@ -173,7 +173,7 @@ macro_rules! try_from_bencode {
                 }
 
                 Ok(Self {
-                    $($($raw: _source,)*)*
+                    $($($raw: _source.to_vec(),)*)*
                     $($($normal_field: $normal_field.unwrap(),)*)*
                     $($($optional_field,)*)*
                     $($($bencode_field: $bencode_field.unwrap(),)*)*
@@ -181,10 +181,10 @@ macro_rules! try_from_bencode {
             }
         }
 
-        impl<'a> TryFrom<&'a [u8]> for $type {
+        impl TryFrom<Vec<u8>> for $type {
             type Error = RustorrentError;
 
-            fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
+            fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
                 let bencode: BencodeBlob = value.try_into()?;
                 bencode.try_into().map_err(RustorrentError::from)
             }

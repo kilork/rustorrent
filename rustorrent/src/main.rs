@@ -1,7 +1,8 @@
 use exitfailure::ExitFailure;
 use failure::ResultExt;
 use log::{debug, info};
-use rustorrent::{parse_torrent, types::Settings};
+use rustorrent::app::RustorrentApp;
+use rustorrent::types::{torrent::parse_torrent, Settings};
 
 mod cli;
 
@@ -36,23 +37,12 @@ fn main() -> Result<(), ExitFailure> {
 
     debug!("calculated settings {:#?}", settings);
 
-    info!("downloading {:?}", cli.torrent.to_str());
+    let mut app = RustorrentApp::new(settings);
 
-    let mut buf = vec![];
+    app.add_torrent_from_file(&cli.torrent)?;
 
-    let torrent = parse_torrent(&cli.torrent, &mut buf)
-        .with_context(|_| format!("could not parse torrent {:?}", &cli.torrent))?;
-
-    let mut announce_buf = vec![];
-
-    torrent
-        .announce(&mut announce_buf, &settings)
-        .with_context(|_| {
-            format!(
-                "could not announce torrent to tracker {}",
-                torrent.announce_url
-            )
-        })?;
+    app.start()
+        .with_context(|err| format!("Could not start app: {}", err))?;
 
     Ok(())
 }

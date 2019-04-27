@@ -1,34 +1,40 @@
 use super::*;
 use crate::errors::RustorrentError;
-use std::net::Ipv4Addr;
 
 use log::debug;
 use percent_encoding::{percent_encode, percent_encode_byte, SIMPLE_ENCODE_SET};
 use reqwest;
-use sha1::{Digest, Sha1};
+use sha1::{
+    digest::generic_array::{typenum::U20, GenericArray},
+    Digest, Sha1,
+};
 
 use std::convert::TryInto;
+use std::fs::File;
+use std::io::Read;
+use std::net::Ipv4Addr;
+use std::path::Path;
 
 #[derive(Debug, PartialEq)]
-pub struct Torrent<'a> {
-    pub raw: &'a [u8],
-    pub announce_url: &'a str,
-    pub announce_list: Option<Vec<Vec<&'a str>>>,
+pub struct Torrent {
+    pub raw: Vec<u8>,
+    pub announce_url: String,
+    pub announce_list: Option<Vec<Vec<String>>>,
     pub creation_date: Option<i64>,
-    pub info: BencodeBlob<'a>,
+    pub info: BencodeBlob,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct TrackerAnnounceResponse<'a> {
+pub struct TrackerAnnounceResponse {
     pub interval: Option<i64>,
-    pub failure_reason: Option<&'a str>,
-    pub peers: Option<Vec<Peer<'a>>>,
+    pub failure_reason: Option<String>,
+    pub peers: Option<Vec<Peer>>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Peer<'a> {
+pub struct Peer {
     pub ip: Ipv4Addr,
-    pub peer_id: Option<&'a str>,
+    pub peer_id: Option<String>,
     pub port: u16,
 }
 
@@ -40,15 +46,12 @@ fn url_encode(data: &[u8]) -> String {
         .collect::<String>()
 }
 
-impl<'a> Torrent<'a> {
+impl Torrent {
     pub fn announce(
         &self,
-        buf: &'a mut Vec<u8>,
         settings: &Settings,
     ) -> Result<TrackerAnnounceResponse, RustorrentError> {
-        let mut hasher = Sha1::default();
-        hasher.input(self.info.source);
-        let info_hash = hasher.result();
+        let info_hash = self.info_sha1_hash();
 
         let client = reqwest::Client::new();
 
@@ -73,20 +76,25 @@ impl<'a> Torrent<'a> {
 
         let mut response = client.get(&url).send()?;
 
-        response.copy_to(buf)?;
+        let mut buf = vec![];
+        response.copy_to(&mut buf)?;
 
         debug!(
             "Tracker response (url encoded): {}",
             percent_encode(&buf, SIMPLE_ENCODE_SET).to_string()
         );
-        let tracker_announce_response = buf.as_slice().try_into()?;
+        let tracker_announce_response = buf.try_into()?;
         debug!("Tracker response parsed: {:#?}", tracker_announce_response);
 
         Ok(tracker_announce_response)
     }
+
+    pub fn info_sha1_hash(&self) -> GenericArray<u8, U20> {
+        Sha1::digest(self.info.source.as_slice())
+    }
 }
 
-try_from_bencode!(Torrent<'a>,
+try_from_bencode!(Torrent,
     normal: ("announce" => announce_url),
     optional: (
         "announce-list" => announce_list,
@@ -96,7 +104,7 @@ try_from_bencode!(Torrent<'a>,
     raw: (raw)
 );
 
-try_from_bencode!(TrackerAnnounceResponse<'a>,
+try_from_bencode!(TrackerAnnounceResponse,
     optional: (
         "interval" => interval,
         "failure reason" => failure_reason,
@@ -104,7 +112,7 @@ try_from_bencode!(TrackerAnnounceResponse<'a>,
     )
 );
 
-try_from_bencode!(Peer<'a>,
+try_from_bencode!(Peer,
     normal: (
         "ip" => ip,
         "port" => port
@@ -114,10 +122,10 @@ try_from_bencode!(Peer<'a>,
     )
 );
 
-impl<'a> TryFrom<BencodeBlob<'a>> for Vec<Peer<'a>> {
+impl TryFrom<BencodeBlob> for Vec<Peer> {
     type Error = TryFromBencode;
 
-    fn try_from(blob: BencodeBlob<'a>) -> Result<Self, Self::Error> {
+    fn try_from(blob: BencodeBlob) -> Result<Self, Self::Error> {
         match blob.value {
             BencodeValue::String(s) => Ok(s
                 .chunks_exact(6)
@@ -133,6 +141,18 @@ impl<'a> TryFrom<BencodeBlob<'a>> for Vec<Peer<'a>> {
     }
 }
 
+pub fn parse_torrent(filename: impl AsRef<Path>) -> Result<Torrent, RustorrentError> {
+    let mut buf = vec![];
+
+    let mut f = File::open(filename)?;
+
+    f.read_to_end(&mut buf)?;
+
+    let torrent = buf.try_into()?;
+
+    Ok(torrent)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,13 +160,13 @@ mod tests {
     #[test]
     fn parse_peer() {
         let peer_bytes = b"d2:ip9:127.0.0.17:peer id20:rustorrent          4:porti6970ee";
-        let peer: Peer = peer_bytes[..].try_into().unwrap();
+        let peer: Peer = peer_bytes.to_vec().try_into().unwrap();
         assert_eq!(
             peer,
             Peer {
                 ip: Ipv4Addr::new(127, 0, 0, 1),
                 port: 6970,
-                peer_id: Some("rustorrent          ")
+                peer_id: Some("rustorrent          ".into())
             }
         );
     }
@@ -155,7 +175,7 @@ mod tests {
     fn parse_compact_0() {
         let tracker_response = b"d8:completei1e10:incompletei1e8:intervali600e5:peersld2:ip9:127.0.0.17:peer id20:-TR2940-pm2sh9i76t4d4:porti62437eed2:ip9:127.0.0.17:peer id20:rustorrent          4:porti6970eeee";
         let tracker_announce_response: TrackerAnnounceResponse =
-            tracker_response[..].try_into().unwrap();
+            tracker_response.to_vec().try_into().unwrap();
         assert_eq!(
             tracker_announce_response,
             TrackerAnnounceResponse {
@@ -165,12 +185,12 @@ mod tests {
                     Peer {
                         ip: Ipv4Addr::new(127, 0, 0, 1),
                         port: 62437,
-                        peer_id: Some("-TR2940-pm2sh9i76t4d")
+                        peer_id: Some("-TR2940-pm2sh9i76t4d".into())
                     },
                     Peer {
                         ip: Ipv4Addr::new(127, 0, 0, 1),
                         port: 6970,
-                        peer_id: Some("rustorrent          ")
+                        peer_id: Some("rustorrent          ".into())
                     }
                 ]),
             }
@@ -181,7 +201,7 @@ mod tests {
     fn parse_compact_1() {
         let tracker_response = b"d8:completei1e10:incompletei1e8:intervali600e5:peers12:\x7F\x00\x00\x01\x1B:\x7F\x00\x00\x01\xF3\xE56:peers60:e";
         let tracker_announce_response: TrackerAnnounceResponse =
-            tracker_response[..].try_into().unwrap();
+            tracker_response.to_vec().try_into().unwrap();
         assert_eq!(
             tracker_announce_response,
             TrackerAnnounceResponse {
