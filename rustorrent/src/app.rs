@@ -17,10 +17,11 @@ use log::{debug, error, info};
 use percent_encoding::{percent_encode, percent_encode_byte, SIMPLE_ENCODE_SET};
 use reqwest::r#async::{Client, Decoder};
 use tokio::io;
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
 
 use crate::errors::RustorrentError;
+use crate::types::peer::Peer;
 use crate::types::torrent::parse_torrent;
 use crate::types::torrent::{Torrent, TrackerAnnounceResponse};
 use crate::types::Settings;
@@ -37,12 +38,6 @@ pub struct TorrentProcess {
     pub hash_id: [u8; 20],
 }
 
-pub struct TorrentProcessFeature {
-    pub process: Arc<TorrentProcess>,
-    pub state: TorrentProcessState,
-    pub settings: Arc<Settings>,
-}
-
 impl TorrentProcess {}
 
 const PEER_ID: [u8; 20] = *b"-rs0001-zzzzxxxxyyyy";
@@ -53,70 +48,115 @@ fn url_encode(data: &[u8]) -> String {
         .collect::<String>()
 }
 
+pub struct TorrentProcessFeature {
+    pub process: Arc<TorrentProcess>,
+    pub state: TorrentProcessState,
+    pub settings: Arc<Settings>,
+}
+
+impl TorrentProcessFeature {
+    fn announce_request(&mut self) -> Poll<(), ()> {
+        let client = Client::new();
+
+        let mut url = format!(
+            "{}?info_hash={}&peer_id={}",
+            self.process.torrent.announce_url,
+            url_encode(&self.process.hash_id[..]),
+            url_encode(&PEER_ID[..])
+        );
+
+        let config = &self.settings.config;
+
+        if let Some(port) = config.port {
+            url += format!("&port={}", port).as_str();
+        }
+
+        if let Some(compact) = config.compact {
+            url += format!("&compact={}", if compact { 1 } else { 0 }).as_str();
+        }
+
+        debug!("Get tracker announce from: {}", url);
+
+        let response = client
+            .get(&url)
+            .send()
+            .and_then(|mut res| {
+                println!("{}", res.status());
+
+                let body = mem::replace(res.body_mut(), Decoder::empty());
+                body.concat2()
+            })
+            .and_then(|body| {
+                let mut buf = vec![];
+                let mut body = std::io::Cursor::new(body);
+                std::io::copy(&mut body, &mut buf).unwrap();
+                Ok(buf)
+            });
+
+        self.state = TorrentProcessState::AnnounceRequestTracker(Box::new(response));
+        task::current().notify();
+        Ok(Async::NotReady)
+    }
+
+    fn announce_response(&mut self, response: Vec<u8>) -> Poll<(), ()> {
+        debug!(
+            "Tracker response (url encoded): {}",
+            percent_encode(&response, SIMPLE_ENCODE_SET).to_string()
+        );
+        let tracker_announce_response: TrackerAnnounceResponse =
+            response.try_into().map_err(|_| ())?;
+        debug!("Tracker response parsed: {:#?}", tracker_announce_response);
+
+        self.state = TorrentProcessState::ConnectPeers(tracker_announce_response.peers.unwrap());
+        task::current().notify();
+        Ok(Async::NotReady)
+    }
+}
+
 impl Future for TorrentProcessFeature {
     type Item = ();
     type Error = ();
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        // info!("torrent is now in state {:?}", self.state);
         match self.state {
             TorrentProcessState::Done => Ok(Async::Ready(())),
-            TorrentProcessState::Announce => {
-                let client = Client::new();
-
-                let mut url = format!(
-                    "{}?info_hash={}&peer_id={}",
-                    self.process.torrent.announce_url,
-                    url_encode(&self.process.hash_id[..]),
-                    url_encode(&PEER_ID[..])
-                );
-
-                let config = &self.settings.config;
-
-                if let Some(port) = config.port {
-                    url += format!("&port={}", port).as_str();
-                }
-
-                if let Some(compact) = config.compact {
-                    url += format!("&compact={}", if compact { 1 } else { 0 }).as_str();
-                }
-
-                debug!("Get tracker announce from: {}", url);
-
-                let response = client
-                    .get(&url)
-                    .send()
-                    .and_then(|mut res| {
-                        println!("{}", res.status());
-
-                        let body = mem::replace(res.body_mut(), Decoder::empty());
-                        body.concat2()
-                    })
-                    .and_then(|body| {
-                        let mut buf = vec![];
-                        let mut body = std::io::Cursor::new(body);
-                        std::io::copy(&mut body, &mut buf).unwrap();
-                        Ok(buf)
-                    });
-
-                self.state = TorrentProcessState::AnnounceRequestTracker(Box::new(response));
-                task::current().notify();
-                Ok(Async::NotReady)
-            }
+            TorrentProcessState::Announce => self.announce_request(),
             TorrentProcessState::AnnounceRequestTracker(ref mut request) => {
                 debug!("receiving");
                 let response = try_ready!(request.poll().map_err(|_| ()));
-
-                debug!(
-                    "Tracker response (url encoded): {}",
-                    percent_encode(&response, SIMPLE_ENCODE_SET).to_string()
-                );
-                let tracker_announce_response: TrackerAnnounceResponse =
-                    response.try_into().map_err(|_| ())?;
-                debug!("Tracker response parsed: {:#?}", tracker_announce_response);
-
-                self.state = TorrentProcessState::Done;
-                task::current().notify();
+                self.announce_response(response)
+            }
+            TorrentProcessState::ConnectPeers(ref mut peers) => {
+                for peer in peers {
+                    let addr = SocketAddr::new(peer.ip.into(), peer.port);
+                    debug!("Handshake with {}", addr);
+                    let process = self.process.clone();
+                    let tcp_stream = TcpStream::connect(&addr)
+                        .and_then(move |stream| {
+                            let mut buf = vec![];
+                            buf.extend_from_slice(&crate::types::HANDSHAKE_PREFIX);
+                            buf.extend_from_slice(&process.hash_id);
+                            buf.extend_from_slice(&PEER_ID);
+                            tokio::io::write_all(stream, buf)
+                        })
+                        .and_then(move |(stream, buf)| {
+                            debug!("Handshake sent to {} (url encoded): {} (len: {})",
+                                addr,
+                                percent_encode(&buf, SIMPLE_ENCODE_SET).to_string(), buf.len());
+                            let buf = vec![];
+                            tokio::io::read_to_end(stream, buf)
+                        })
+                        .and_then(move |(stream, buf)| {
+                            debug!(
+                                "Handshake reply from {} (url encoded): {} (len: {})",
+                                addr,
+                                percent_encode(&buf, SIMPLE_ENCODE_SET).to_string(), buf.len()
+                            );
+                            Ok(())
+                        })
+                        .map_err(move |err| error!("Peer connect to {} failed: {}", addr, err));
+                    tokio::spawn(tcp_stream);
+                }
                 Ok(Async::NotReady)
             }
         }
@@ -127,6 +167,7 @@ impl Future for TorrentProcessFeature {
 pub enum TorrentProcessState {
     Announce,
     AnnounceRequestTracker(Box<dyn Future<Item = Vec<u8>, Error = reqwest::Error> + Send>),
+    ConnectPeers(Vec<Peer>),
     Done,
 }
 
