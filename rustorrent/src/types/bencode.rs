@@ -1,5 +1,4 @@
 use super::*;
-use crate::errors::RustorrentError;
 use crate::parser::parse_bencode;
 use std::convert::TryInto;
 use std::net::Ipv4Addr;

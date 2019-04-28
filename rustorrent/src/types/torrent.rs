@@ -1,18 +1,13 @@
 use super::*;
-use crate::errors::RustorrentError;
+use crate::types::peer::Peer;
 
-use log::debug;
-use percent_encoding::{percent_encode, percent_encode_byte, SIMPLE_ENCODE_SET};
-use reqwest;
 use sha1::{
     digest::generic_array::{typenum::U20, GenericArray},
     Digest, Sha1,
 };
 
-use std::convert::TryInto;
 use std::fs::File;
 use std::io::Read;
-use std::net::Ipv4Addr;
 use std::path::Path;
 
 #[derive(Debug, PartialEq)]
@@ -31,59 +26,11 @@ pub struct TrackerAnnounceResponse {
     pub peers: Option<Vec<Peer>>,
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Peer {
-    pub ip: Ipv4Addr,
-    pub peer_id: Option<String>,
-    pub port: u16,
-}
-
 impl Torrent {
-    /*
-        pub fn announce(
-            &self,
-            settings: &Settings,
-        ) -> Result<TrackerAnnounceResponse, RustorrentError> {
-            let info_hash = self.info_sha1_hash();
-
-            let client = reqwest::r#async::Client::new();
-
-            let mut url = format!(
-                "{}?info_hash={}&peer_id={}",
-                self.announce_url,
-                url_encode(&info_hash[..]),
-                url_encode(&PEER_ID[..])
-            );
-
-            let config = &settings.config;
-
-            if let Some(port) = config.port {
-                url += format!("&port={}", port).as_str();
-            }
-
-            if let Some(compact) = config.compact {
-                url += format!("&compact={}", if compact { 1 } else { 0 }).as_str();
-            }
-
-            debug!("Get tracker announce from: {}", url);
-
-            let mut response = client.get(&url).send()?;
-
-            let mut buf = vec![];
-            response.copy_to(&mut buf)?;
-
-            debug!(
-                "Tracker response (url encoded): {}",
-                percent_encode(&buf, SIMPLE_ENCODE_SET).to_string()
-            );
-            let tracker_announce_response = buf.try_into()?;
-            debug!("Tracker response parsed: {:#?}", tracker_announce_response);
-
-            Ok(tracker_announce_response)
-        }
-    */
-    pub fn info_sha1_hash(&self) -> GenericArray<u8, U20> {
-        Sha1::digest(self.info.source.as_slice())
+    pub fn info_sha1_hash(&self) -> [u8; 20] {
+        Sha1::digest(self.info.source.as_slice())[..]
+            .try_into()
+            .expect("20 bytes array expected from Sha1 calculation")
     }
 }
 
@@ -105,35 +52,6 @@ try_from_bencode!(TrackerAnnounceResponse,
     )
 );
 
-try_from_bencode!(Peer,
-    normal: (
-        "ip" => ip,
-        "port" => port
-    ),
-    optional: (
-        "peer id" => peer_id
-    )
-);
-
-impl TryFrom<BencodeBlob> for Vec<Peer> {
-    type Error = TryFromBencode;
-
-    fn try_from(blob: BencodeBlob) -> Result<Self, Self::Error> {
-        match blob.value {
-            BencodeValue::String(s) => Ok(s
-                .chunks_exact(6)
-                .map(|peer| Peer {
-                    ip: Ipv4Addr::new(peer[0], peer[1], peer[2], peer[3]),
-                    port: u16::from(peer[4]) * 256u16 + u16::from(peer[5]),
-                    peer_id: None,
-                })
-                .collect()),
-            BencodeValue::List(l) => Ok(l.into_iter().map(|x| x.try_into().unwrap()).collect()),
-            _ => Err(TryFromBencode::NotDictionary),
-        }
-    }
-}
-
 pub fn parse_torrent(filename: impl AsRef<Path>) -> Result<Torrent, RustorrentError> {
     let mut buf = vec![];
 
@@ -149,6 +67,7 @@ pub fn parse_torrent(filename: impl AsRef<Path>) -> Result<Torrent, RustorrentEr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::Ipv4Addr;
 
     #[test]
     fn parse_peer() {

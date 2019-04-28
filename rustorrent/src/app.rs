@@ -16,7 +16,6 @@ use futures::try_ready;
 use log::{debug, error, info};
 use percent_encoding::{percent_encode, percent_encode_byte, SIMPLE_ENCODE_SET};
 use reqwest::r#async::{Client, Decoder};
-use sha1::digest::generic_array::{typenum::U20, GenericArray};
 use tokio::io;
 use tokio::net::TcpListener;
 use tokio::prelude::*;
@@ -35,7 +34,7 @@ pub struct RustorrentApp {
 
 pub struct TorrentProcess {
     pub torrent: Torrent,
-    pub hash_id: GenericArray<u8, U20>,
+    pub hash_id: [u8; 20],
 }
 
 pub struct TorrentProcessFeature {
@@ -46,7 +45,7 @@ pub struct TorrentProcessFeature {
 
 impl TorrentProcess {}
 
-const PEER_ID: [u8; 20] = *b"rustorrent          ";
+const PEER_ID: [u8; 20] = *b"-rs0001-zzzzxxxxyyyy";
 
 fn url_encode(data: &[u8]) -> String {
     data.iter()
