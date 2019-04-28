@@ -3,7 +3,7 @@ use crate::parser::parse_bencode;
 use std::convert::TryInto;
 use std::net::Ipv4Addr;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq)]
 pub struct BencodeBlob {
     pub source: Vec<u8>,
     pub value: BencodeValue,
@@ -17,7 +17,7 @@ impl TryFrom<Vec<u8>> for BencodeBlob {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq)]
 pub enum BencodeValue {
     String(Vec<u8>),
     Integer(i64),
