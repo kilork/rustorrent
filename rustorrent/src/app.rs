@@ -140,17 +140,20 @@ impl Future for TorrentProcessFeature {
                             tokio::io::write_all(stream, buf)
                         })
                         .and_then(move |(stream, buf)| {
-                            debug!("Handshake sent to {} (url encoded): {} (len: {})",
+                            debug!(
+                                "Handshake sent to {} (url encoded): {} (len: {})",
                                 addr,
-                                percent_encode(&buf, SIMPLE_ENCODE_SET).to_string(), buf.len());
-                            let buf = vec![];
-                            tokio::io::read_to_end(stream, buf)
+                                percent_encode(&buf, SIMPLE_ENCODE_SET).to_string(),
+                                buf.len()
+                            );
+                            tokio::io::read_exact(stream, vec![0; 68])
                         })
                         .and_then(move |(stream, buf)| {
                             debug!(
                                 "Handshake reply from {} (url encoded): {} (len: {})",
                                 addr,
-                                percent_encode(&buf, SIMPLE_ENCODE_SET).to_string(), buf.len()
+                                percent_encode(&buf, SIMPLE_ENCODE_SET).to_string(),
+                                buf.len()
                             );
                             Ok(())
                         })
@@ -211,7 +214,10 @@ impl RustorrentApp {
 
         let server = listener
             .incoming()
-            .for_each(|socket| Ok(()))
+            .for_each(|socket| {
+                let (reader, writer) = socket.split();
+                Ok(())
+            })
             .map_err(|err| {
                 error!("accept error = {:?}", err);
             });

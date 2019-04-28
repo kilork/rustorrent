@@ -5,9 +5,9 @@ use crate::errors::{RustorrentError, TryFromBencode};
 mod config;
 #[macro_use]
 mod bencode;
+pub mod message;
 pub mod peer;
 pub mod torrent;
-pub mod message;
 
 pub use bencode::{BencodeBlob, BencodeValue};
 pub use config::{Config, Settings};
