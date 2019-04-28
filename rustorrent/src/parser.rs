@@ -129,6 +129,7 @@ mod tests {
             ))
         );
     }
+
     #[test]
     fn check_bencode_dictionary() {
         assert_eq!(
@@ -169,6 +170,16 @@ mod tests {
                     ),]
                     .into_iter()
                     .collect()
+                )
+            ))
+        );
+
+        assert_eq!(
+            bencode_dictionary(b"de"),
+            Ok((
+                &vec![][..],
+                BencodeValue::Dictionary(
+                    vec![]
                 )
             ))
         );
