@@ -2,7 +2,7 @@ use exitfailure::ExitFailure;
 use failure::ResultExt;
 use log::{debug, info};
 use rustorrent::app::RustorrentApp;
-use rustorrent::types::{torrent::parse_torrent, Settings};
+use rustorrent::types::Settings;
 
 mod cli;
 

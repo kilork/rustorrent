@@ -1,4 +1,5 @@
 use super::*;
+use crate::types::peer::Handshake;
 
 use std::convert::TryInto;
 

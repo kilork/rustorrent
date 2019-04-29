@@ -2,7 +2,7 @@ use super::*;
 // use crate::parser::parse_message;
 
 /// Messages in the protocol take the form of <length prefix><message ID><payload>. The length prefix is a four byte big-endian value. The message ID is a single decimal byte. The payload is message dependent.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Message {
     /// keep-alive: <len=0000>
     ///

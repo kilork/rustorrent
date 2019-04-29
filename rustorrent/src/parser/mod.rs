@@ -1,9 +1,9 @@
 use crate::errors::RustorrentError;
-use crate::types::{peer::Handshake, BencodeBlob, BencodeValue};
 
 use nom::*;
 
 mod bencode;
+mod message;
 mod peer;
 
 pub use bencode::parse_bencode;

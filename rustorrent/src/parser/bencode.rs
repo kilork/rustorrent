@@ -1,4 +1,5 @@
 use super::*;
+use crate::types::{BencodeBlob, BencodeValue};
 
 macro_rules! recognize_map (
     ($i:expr, $submac:ident!( $($args:tt)* ), $g:expr) => (
