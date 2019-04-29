@@ -1,3 +1,4 @@
+use crate::types::peer::Handshake;
 use std::cell::RefCell;
 use std::convert::TryInto;
 use std::mem;
@@ -5,6 +6,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::RwLock;
+use std::time::{Duration, Instant};
 
 use exitfailure::ExitFailure;
 use failure::{Context, ResultExt};
@@ -16,10 +18,12 @@ use futures::sync::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures::try_ready;
 use log::{debug, error, info};
 use percent_encoding::{percent_encode, percent_encode_byte, SIMPLE_ENCODE_SET};
-use reqwest::r#async::{Client, Decoder};
+use reqwest::r#async::{Client, Decoder as ReqwestDecoder};
+use tokio::codec::Decoder;
 use tokio::io;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
+use tokio::timer::Interval;
 
 use crate::errors::RustorrentError;
 use crate::types::message::{Message, MessageCodec, MessageCodecError};
@@ -85,7 +89,7 @@ impl TorrentProcessFeature {
             .and_then(|mut res| {
                 println!("{}", res.status());
 
-                let body = mem::replace(res.body_mut(), Decoder::empty());
+                let body = mem::replace(res.body_mut(), ReqwestDecoder::empty());
                 body.concat2()
             })
             .and_then(|body| {
@@ -133,6 +137,20 @@ impl Future for TorrentProcessFeature {
                     let addr = SocketAddr::new(peer.ip.into(), peer.port);
                     debug!("Handshake with {}", addr);
                     let process = self.process.clone();
+                    let process_reply = self.process.clone();
+                    let (tx, rx) = channel(10);
+
+                    let conntx = tx.clone();
+
+                    let task_keepalive = Interval::new(Instant::now(), Duration::from_secs(10))
+                        .for_each(move |_| {
+                            let conntx = conntx.clone();
+                            conntx
+                                .send(Message::KeepAlive)
+                                .map(|_| ())
+                                .map_err(|_| tokio::timer::Error::shutdown())
+                        })
+                        .map_err(move |e| error!("Peer {}: interval errored; err={:?}", addr, e));
                     let tcp_stream = TcpStream::connect(&addr)
                         .and_then(move |stream| {
                             let mut buf = vec![];
@@ -150,6 +168,7 @@ impl Future for TorrentProcessFeature {
                             );
                             tokio::io::read_exact(stream, vec![0; 68])
                         })
+                        .map_err(move |err| error!("Peer connect to {} failed: {}", addr, err))
                         .and_then(move |(stream, buf)| {
                             debug!(
                                 "Handshake reply from {} (url encoded): {} (len: {})",
@@ -158,12 +177,20 @@ impl Future for TorrentProcessFeature {
                                 buf.len()
                             );
 
+                            let handshake: Handshake = buf.try_into().unwrap();
+
+                            if handshake.info_hash != process_reply.hash_id {
+                                error!("Peer {}: hash is wrong. Disconnect.", addr);
+                                return Err(());
+                            }
+
                             let (writer, reader) = stream.framed(MessageCodec::default()).split();
-                            let (tx, rx) = channel(10);
 
                             let writer = writer.sink_map_err(|err| error!("{}", err));
 
-                            let sink = rx.forward(writer);
+                            let sink = rx.forward(writer).inspect(move |(_a, _sink)| {
+                                debug!("Peer {}: updated", addr);
+                            });
                             tokio::spawn(sink.map(|_| ()));
 
                             let mut conntx = tx.clone();
@@ -172,22 +199,24 @@ impl Future for TorrentProcessFeature {
                                     debug!("Peer {}: received message {:?}", addr, frame);
                                     match frame {
                                         Message::KeepAlive => {
-                                            if let Err(err) = conntx.start_send(Message::KeepAlive) {
-                                                error!("send exception: {}", err);
+                                            if let Err(err) = conntx.start_send(Message::KeepAlive)
+                                            {
+                                                error!("Peer {}: send exception: {}", addr, err);
                                             }
                                         }
-                                        _ => ()
+                                        _ => (),
                                     }
                                     Ok(())
                                 })
-                                .map_err(|err| error!("message codec error: {}", err));
+                                .map_err(move |err| {
+                                    error!("Peer {}: message codec error: {}", addr, err)
+                                });
 
                             tokio::spawn(conn);
 
                             Ok(())
-                        })
-                        .map_err(move |err| error!("Peer connect to {} failed: {}", addr, err));
-                    tokio::spawn(tcp_stream);
+                        });
+                    tokio::spawn(tcp_stream.join(task_keepalive).map(|_| ()));
                 }
                 Ok(Async::NotReady)
             }
