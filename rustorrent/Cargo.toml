@@ -24,6 +24,7 @@ tokio = "0.1"
 tokio-signal = "0.2"
 futures = "0.1"
 confy = "0.3"
+bytes = "0.4"
 
 [dependencies.serde]
 version = "1.0"

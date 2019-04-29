@@ -1,5 +1,11 @@
 use super::*;
+use crate::parser::parser_message;
 // use crate::parser::parse_message;
+
+use bytes::{BufMut, BytesMut};
+use failure::Fail;
+use nom::Offset;
+use tokio::codec::{Decoder, Encoder};
 
 /// Messages in the protocol take the form of <length prefix><message ID><payload>. The length prefix is a four byte big-endian value. The message ID is a single decimal byte. The payload is message dependent.
 #[derive(Debug, PartialEq)]
@@ -80,4 +86,57 @@ pub enum Message {
     ///
     /// The port message is sent by newer versions of the Mainline that implements a DHT tracker. The listen port is the port this peer's DHT node is listening on. This peer should be inserted in the local routing table (if DHT tracker is supported).
     Port(u16),
+}
+
+#[derive(Fail, Debug)]
+pub enum MessageCodecError {
+    #[fail(display = "IO Error: {}", _0)]
+    IoError(std::io::Error),
+    #[fail(display = "Couldn't parse incoming frame: {}", _0)]
+    ParseError(String),
+}
+
+impl From<std::io::Error> for MessageCodecError {
+    fn from(err: std::io::Error) -> Self {
+        MessageCodecError::IoError(err)
+    }
+}
+pub struct MessageCodec {}
+
+impl Decoder for MessageCodec {
+    type Item = Message;
+    type Error = MessageCodecError;
+
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        let (consumed, f) = match parser_message(buf) {
+            Err(e) => {
+                if e.is_incomplete() {
+                    return Ok(None);
+                } else {
+                    return Err(MessageCodecError::ParseError(format!("{:?}", e)));
+                }
+            }
+            Ok((i, frame)) => (buf.offset(i), frame),
+        };
+
+        buf.split_to(consumed);
+
+        Ok(Some(f))
+    }
+}
+
+impl Encoder for MessageCodec {
+    type Item = Message;
+    type Error = MessageCodecError;
+
+    fn encode(&mut self, frame: Message, buf: &mut BytesMut) -> Result<(), Self::Error> {
+        match frame {
+            Message::KeepAlive => {
+                buf.reserve(4);
+                buf.put_u32_be(0);
+            }
+            _ => panic!("Unsupported type"),
+        }
+        Ok(())
+    }
 }

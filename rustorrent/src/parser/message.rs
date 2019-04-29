@@ -2,7 +2,7 @@ use super::*;
 use crate::types::message::Message;
 
 named!(
-    parser_message<Message>,
+    pub parser_message<Message>,
     do_parse!(
         len: be_u32
             >> m: switch!(value!(len),
