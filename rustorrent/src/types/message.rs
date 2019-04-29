@@ -101,6 +101,8 @@ impl From<std::io::Error> for MessageCodecError {
         MessageCodecError::IoError(err)
     }
 }
+
+#[derive(Default)]
 pub struct MessageCodec {}
 
 impl Decoder for MessageCodec {

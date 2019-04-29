@@ -11,6 +11,7 @@ use failure::{Context, ResultExt};
 use futures::future::join_all;
 use futures::lazy;
 use futures::prelude::*;
+use futures::sync::mpsc::{channel, Receiver, Sender};
 use futures::sync::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures::try_ready;
 use log::{debug, error, info};
@@ -21,6 +22,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
 
 use crate::errors::RustorrentError;
+use crate::types::message::{Message, MessageCodec, MessageCodecError};
 use crate::types::peer::Peer;
 use crate::types::torrent::parse_torrent;
 use crate::types::torrent::{Torrent, TrackerAnnounceResponse};
@@ -155,6 +157,33 @@ impl Future for TorrentProcessFeature {
                                 percent_encode(&buf, SIMPLE_ENCODE_SET).to_string(),
                                 buf.len()
                             );
+
+                            let (writer, reader) = stream.framed(MessageCodec::default()).split();
+                            let (tx, rx) = channel(10);
+
+                            let writer = writer.sink_map_err(|err| error!("{}", err));
+
+                            let sink = rx.forward(writer);
+                            tokio::spawn(sink.map(|_| ()));
+
+                            let mut conntx = tx.clone();
+                            let conn = reader
+                                .for_each(move |frame| {
+                                    debug!("Peer {}: received message {:?}", addr, frame);
+                                    match frame {
+                                        Message::KeepAlive => {
+                                            if let Err(err) = conntx.start_send(Message::KeepAlive) {
+                                                error!("send exception: {}", err);
+                                            }
+                                        }
+                                        _ => ()
+                                    }
+                                    Ok(())
+                                })
+                                .map_err(|err| error!("message codec error: {}", err));
+
+                            tokio::spawn(conn);
+
                             Ok(())
                         })
                         .map_err(move |err| error!("Peer connect to {} failed: {}", addr, err));
@@ -166,7 +195,6 @@ impl Future for TorrentProcessFeature {
     }
 }
 
-// #[derive(Debug)]
 pub enum TorrentProcessState {
     Announce,
     AnnounceRequestTracker(Box<dyn Future<Item = Vec<u8>, Error = reqwest::Error> + Send>),
