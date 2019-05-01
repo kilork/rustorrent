@@ -1,5 +1,5 @@
 use failure::*;
-use log::debug;
+use log::error;
 
 #[derive(Debug, Fail)]
 pub enum TryFromBencode {
@@ -31,13 +31,15 @@ pub enum RustorrentError {
     HTTPClient(reqwest::Error),
     #[fail(display = "parser fail")]
     Parser,
+    #[fail(display = "tokio unbounded receiver {}", _0)]
+    TokioMpscUnboundedRecvError(tokio::sync::mpsc::error::UnboundedRecvError)
 }
 
 macro_rules! from_rustorrent_error {
     ($i:ty, $g:ident) => {
         impl From<$i> for RustorrentError {
             fn from(value: $i) -> Self {
-                debug!("{}", value);
+                error!("{}", value);
                 RustorrentError::$g(value)
             }
         }
@@ -49,10 +51,11 @@ from_rustorrent_error!(TryFromBencode, TryFromBencode);
 from_rustorrent_error!(std::io::Error, IO);
 from_rustorrent_error!(std::convert::Infallible, Convert);
 from_rustorrent_error!(core::array::TryFromSliceError, ConvertFromSlice);
+from_rustorrent_error!(tokio::sync::mpsc::error::UnboundedRecvError, TokioMpscUnboundedRecvError);
 
 impl<'a> From<nom::Err<&'a [u8]>> for RustorrentError {
     fn from(_value: nom::Err<&'a [u8]>) -> Self {
-        debug!("{}", _value);
+        error!("{}", _value);
         RustorrentError::Parser
     }
 }

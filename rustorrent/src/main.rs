@@ -3,6 +3,9 @@ use failure::ResultExt;
 use log::{debug, info};
 use rustorrent::app::RustorrentApp;
 use rustorrent::types::Settings;
+use rustorrent::RustorrentError;
+use tokio::prelude::future::lazy;
+use futures::Future;
 
 mod cli;
 
@@ -37,12 +40,16 @@ fn main() -> Result<(), ExitFailure> {
 
     debug!("calculated settings {:#?}", settings);
 
-    let mut app = RustorrentApp::new(settings);
+    let mut rt = tokio::runtime::Runtime::new()?;
 
-    app.add_torrent_from_file(&cli.torrent)?;
+    rt.block_on(lazy(move || -> Result<(), ExitFailure> {
+        let mut app = RustorrentApp::new(settings);
 
-    app.start()
-        .with_context(|err| format!("Could not start app: {}", err))?;
+        app.add_torrent_from_file(&cli.torrent)
+            .with_context(|_| format!("Could not add torrent {:?}", cli.torrent))?;
+
+        Ok(app.run().wait()?)
+    }))?;
 
     Ok(())
 }

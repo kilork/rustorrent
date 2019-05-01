@@ -8,5 +8,5 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use errors::RustorrentError;
+pub use errors::RustorrentError;
 use types::torrent::Torrent;

@@ -2,9 +2,13 @@ use crate::types::peer::Handshake;
 use std::cell::RefCell;
 use std::convert::TryInto;
 use std::mem;
+use std::mem::drop;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::ops::Deref;
 use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
@@ -14,16 +18,17 @@ use futures::future::join_all;
 use futures::lazy;
 use futures::prelude::*;
 use futures::sync::mpsc::{channel, Receiver, Sender};
-use futures::sync::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
+// use futures::sync::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures::try_ready;
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use percent_encoding::{percent_encode, percent_encode_byte, SIMPLE_ENCODE_SET};
 use reqwest::r#async::{Client, Decoder as ReqwestDecoder};
 use tokio::codec::Decoder;
 use tokio::io;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
-use tokio::timer::Interval;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::timer::{Delay, Interval};
 
 use crate::errors::RustorrentError;
 use crate::types::message::{Message, MessageCodec, MessageCodecError};
@@ -33,18 +38,34 @@ use crate::types::torrent::{Torrent, TrackerAnnounceResponse};
 use crate::types::Settings;
 
 pub struct RustorrentApp {
-    pub settings: Arc<Settings>,
-    pub processes: Arc<RwLock<Vec<Arc<TorrentProcess>>>>,
-    torrent_request_sender: UnboundedSender<TorrentRequest>,
-    torrent_request_receiver: RefCell<Option<UnboundedReceiver<TorrentRequest>>>,
+    inner: Arc<Inner>,
+}
+
+impl Deref for RustorrentApp {
+    type Target = Arc<Inner>;
+    fn deref(&self) -> &Arc<Inner> {
+        return &self.inner;
+    }
+}
+
+pub struct Inner {
+    pub settings: Settings,
+    pub processes: RwLock<Vec<Arc<TorrentProcess>>>,
+    command_sender: UnboundedSender<RustorrentCommand>,
+    command_receiver: Mutex<Option<UnboundedReceiver<RustorrentCommand>>>,
 }
 
 pub struct TorrentProcess {
-    pub torrent: Torrent,
-    pub hash_id: [u8; 20],
+    path: PathBuf,
+    torrent: Torrent,
+    hash_id: [u8; 20],
+    announce_future: Option<Box<dyn Future<Item = (), Error = RustorrentError> + Send>>,
 }
 
-impl TorrentProcess {}
+pub enum RustorrentCommand {
+    AddTorrent(PathBuf),
+    Quit,
+}
 
 const PEER_ID: [u8; 20] = *b"-rs0001-zzzzxxxxyyyy";
 
@@ -54,6 +75,100 @@ fn url_encode(data: &[u8]) -> String {
         .collect::<String>()
 }
 
+impl Inner {
+    pub fn add_torrent_from_file(&self, filename: impl AsRef<Path>) -> Result<(), RustorrentError> {
+        info!("Adding torrent from file: {:?}", filename.as_ref());
+        let command = RustorrentCommand::AddTorrent(filename.as_ref().into());
+        self.send_command(command)
+    }
+
+    fn send_command(&self, command: RustorrentCommand) -> Result<(), RustorrentError> {
+        tokio::spawn(
+            self.command_sender
+                .clone()
+                .send(command)
+                .map(|_| ())
+                .map_err(|err| error!("send failed: {}", err)),
+        );
+        Ok(())
+    }
+
+    fn command_add_torrent(&self, path: PathBuf) -> Result<Arc<TorrentProcess>, RustorrentError> {
+        debug!("Run command: adding torrent from file: {:?}", path);
+        let torrent = parse_torrent(&path)?;
+        let hash_id = torrent.info_sha1_hash();
+        if self
+            .processes
+            .read()
+            .unwrap()
+            .iter()
+            .filter(|x| x.hash_id == hash_id)
+            .next()
+            .is_some()
+        {
+            warn!("Torrent already in the list: {}", url_encode(&hash_id));
+        }
+        let process = Arc::new(TorrentProcess {
+            path,
+            torrent,
+            hash_id,
+            announce_future: None,
+        });
+        self.processes.write().unwrap().push(process.clone());
+        Ok(process)
+    }
+
+    fn command_start_announce_process(
+        &self,
+        torrent_process: Arc<TorrentProcess>,
+    ) -> Result<(), RustorrentError> {
+        Ok(())
+    }
+}
+
+impl RustorrentApp {
+    pub fn new(settings: Settings) -> Self {
+        let (command_sender, command_receiver) = unbounded_channel();
+        Self {
+            inner: Arc::new(Inner {
+                settings,
+                processes: RwLock::new(vec![]),
+                command_sender,
+                command_receiver: Mutex::new(Some(command_receiver)),
+            }),
+        }
+    }
+
+    pub fn run(&mut self) -> impl Future<Item = (), Error = RustorrentError> {
+        let receiver = self.command_receiver.lock().unwrap().take().unwrap();
+        let (close_sender, close_receiver) = futures::sync::oneshot::channel::<()>();
+        let close_sender = Arc::new(Mutex::new(Some(close_sender)));
+        let this = self.clone();
+        receiver
+            .map_err(|err| RustorrentError::from(err))
+            .for_each(move |x| {
+                match x {
+                    RustorrentCommand::AddTorrent(filename) => {
+                        this.command_add_torrent(filename)
+                            .and_then(|torrent_process| {
+                                this.command_start_announce_process(torrent_process)
+                            })?;
+                    }
+                    RustorrentCommand::Quit => {
+                        info!("Quit now");
+                        let sender = close_sender.lock().unwrap().take().unwrap();
+                        sender.send(()).unwrap();
+                    }
+                }
+                Ok(())
+            })
+            .select2(close_receiver)
+            .map_err(|_| ())
+            .then(|_| Ok(()))
+    }
+}
+
+/*
 pub struct TorrentProcessFeature {
     pub process: Arc<TorrentProcess>,
     pub state: TorrentProcessState,
@@ -193,16 +308,13 @@ impl Future for TorrentProcessFeature {
                             });
                             tokio::spawn(sink.map(|_| ()));
 
-                            let mut conntx = tx.clone();
                             let conn = reader
                                 .for_each(move |frame| {
                                     debug!("Peer {}: received message {:?}", addr, frame);
                                     match frame {
                                         Message::KeepAlive => {
-                                            if let Err(err) = conntx.start_send(Message::KeepAlive)
-                                            {
-                                                error!("Peer {}: send exception: {}", addr, err);
-                                            }
+                                            let conntx = tx.clone();
+                                            tokio::spawn(conntx.send(Message::KeepAlive).map(|_| ()).map_err(|_| ()));
                                         }
                                         _ => (),
                                     }
@@ -285,6 +397,7 @@ impl RustorrentApp {
         let torrent_requests = torrent_request_receiver
             .for_each(move |request| {
                 info!("adding request!");
+
                 let feature: Box<dyn Future<Item = (), Error = ()> + Send> = match request {
                     TorrentRequest::Add(process) => Box::new(TorrentProcessFeature {
                         settings: settings.clone(),
@@ -298,8 +411,39 @@ impl RustorrentApp {
             .map_err(|e| error!("error = {:?}", e));
         info!("starting run loop");
 
-        tokio::run(server.join(torrent_requests).map(|_| ()));
+        let (sender, receiver) = futures::sync::oneshot::channel::<()>();
+        let all = lazy(move || {
+            let when = Instant::now() + Duration::from_secs(15);
+            let task = Delay::new(when)
+                .and_then(|_| {
+                    info!("time to break!");
+                    sender.send(()).unwrap();
+                    info!("break sended!");
+
+                    Ok(())
+                })
+                .map_err(|_| ());
+            // tokio::spawn(task);
+            server.join3(torrent_requests, task).map(|_| ())
+        });
+
+        let receiver = receiver
+            .and_then(|_| {
+                info!("received the shit");
+                Ok(())
+            })
+            .map(|_| ())
+            .map_err(|err| error!("{}", err));
+        tokio::run(
+            all.select2(receiver)
+                .map_err(|_| error!("error"))
+                .then(|_| {
+                    info!("done");
+                    Ok(())
+                }),
+        );
 
         Ok(())
     }
 }
+*/
