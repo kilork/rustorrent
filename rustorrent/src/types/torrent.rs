@@ -70,6 +70,12 @@ mod tests {
     use std::net::Ipv4Addr;
 
     #[test]
+    fn parse_torrent() {
+        let torrent_bytes = b"d8:announce36:http://bt1.archive.org:6969/announce13:announce-listll36:http://bt1.archive.org:6969/announceel36:http://bt2.archive.org:6969/announceee4:infoi1ee";
+        let _torrent: Torrent = torrent_bytes.to_vec().try_into().unwrap();
+    }
+
+    #[test]
     fn parse_peer() {
         let peer_bytes = b"d2:ip9:127.0.0.17:peer id20:rustorrent          4:porti6970ee";
         let peer: Peer = peer_bytes.to_vec().try_into().unwrap();

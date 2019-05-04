@@ -97,16 +97,17 @@ impl Inner {
         debug!("Run command: adding torrent from file: {:?}", path);
         let torrent = parse_torrent(&path)?;
         let hash_id = torrent.info_sha1_hash();
-        if self
+        if let Some(process) = self
             .processes
             .read()
             .unwrap()
             .iter()
             .filter(|x| x.hash_id == hash_id)
+            .cloned()
             .next()
-            .is_some()
         {
             warn!("Torrent already in the list: {}", url_encode(&hash_id));
+            return Ok(process);
         }
         let process = Arc::new(TorrentProcess {
             path,
@@ -122,6 +123,54 @@ impl Inner {
         &self,
         torrent_process: Arc<TorrentProcess>,
     ) -> Result<(), RustorrentError> {
+        let client = Client::new();
+
+        let mut url = format!(
+            "{}?info_hash={}&peer_id={}",
+            torrent_process.torrent.announce_url,
+            url_encode(&torrent_process.hash_id[..]),
+            url_encode(&PEER_ID[..])
+        );
+
+        let config = &self.settings.config;
+
+        if let Some(port) = config.port {
+            url += format!("&port={}", port).as_str();
+        }
+
+        if let Some(compact) = config.compact {
+            url += format!("&compact={}", if compact { 1 } else { 0 }).as_str();
+        }
+
+        debug!("Get tracker announce from: {}", url);
+
+        let process = client
+            .get(&url)
+            .send()
+            .and_then(|mut res| {
+                println!("{}", res.status());
+
+                let body = mem::replace(res.body_mut(), ReqwestDecoder::empty());
+                body.concat2()
+            })
+            .and_then(|body| {
+                let mut buf = vec![];
+                let mut body = std::io::Cursor::new(body);
+                std::io::copy(&mut body, &mut buf).unwrap();
+                Ok(buf)
+            })
+            .map_err(|err| RustorrentError::from(err))
+            .and_then(|response| {
+                debug!(
+                    "Tracker response (url encoded): {}",
+                    percent_encode(&response, SIMPLE_ENCODE_SET).to_string()
+                );
+                let tracker_announce_response: TrackerAnnounceResponse = response.try_into()?;
+                debug!("Tracker response parsed: {:#?}", tracker_announce_response);
+                Ok(())
+            })
+            .map_err(|err| error!("Error in announce request: {}", err));
+        tokio::spawn(process);
         Ok(())
     }
 }

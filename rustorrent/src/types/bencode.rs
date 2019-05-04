@@ -110,7 +110,9 @@ impl TryFrom<BencodeValue> for Vec<Vec<String>> {
     type Error = TryFromBencode;
 
     fn try_from(value: BencodeValue) -> Result<Self, Self::Error> {
-        value.try_into()
+        value
+            .try_into()
+            .map(|list: Vec<BencodeBlob>| list.into_iter().map(|i| i.try_into().unwrap()).collect())
     }
 }
 blanket_blob_value!(Vec<Vec<String>>);

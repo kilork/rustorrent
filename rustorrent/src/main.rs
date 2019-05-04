@@ -1,11 +1,11 @@
 use exitfailure::ExitFailure;
 use failure::ResultExt;
+use futures::Future;
 use log::{debug, info};
 use rustorrent::app::RustorrentApp;
 use rustorrent::types::Settings;
 use rustorrent::RustorrentError;
 use tokio::prelude::future::lazy;
-use futures::Future;
 
 mod cli;
 
