@@ -34,7 +34,7 @@ use crate::errors::RustorrentError;
 use crate::types::message::{Message, MessageCodec, MessageCodecError};
 use crate::types::peer::Peer;
 use crate::types::torrent::parse_torrent;
-use crate::types::torrent::{Torrent, TrackerAnnounceResponse};
+use crate::types::torrent::{Torrent, TrackerAnnounce};
 use crate::types::Settings;
 
 pub struct RustorrentApp {
@@ -59,7 +59,24 @@ pub struct TorrentProcess {
     path: PathBuf,
     torrent: Torrent,
     hash_id: [u8; 20],
-    announce_future: Option<Box<dyn Future<Item = (), Error = RustorrentError> + Send>>,
+    torrent_state: Arc<Mutex<TorrentProcessState>>,
+    announce_state: Arc<Mutex<AnnounceState>>,
+}
+
+pub enum TorrentProcessState {
+    Init,
+    Download,
+    DownloadUpload,
+    Upload,
+    Checksum,
+    Finished,
+}
+
+#[derive(Debug)]
+pub enum AnnounceState {
+    Idle,
+    Request,
+    Error(RustorrentError),
 }
 
 pub enum RustorrentCommand {
@@ -113,7 +130,8 @@ impl Inner {
             path,
             torrent,
             hash_id,
-            announce_future: None,
+            torrent_state: Arc::new(Mutex::new(TorrentProcessState::Init)),
+            announce_state: Arc::new(Mutex::new(AnnounceState::Idle)),
         });
         self.processes.write().unwrap().push(process.clone());
         Ok(process)
@@ -123,6 +141,18 @@ impl Inner {
         &self,
         torrent_process: Arc<TorrentProcess>,
     ) -> Result<(), RustorrentError> {
+        {
+            let mut announce_state = torrent_process.announce_state.lock().unwrap();
+            match *announce_state {
+                AnnounceState::Idle => {
+                    *announce_state = AnnounceState::Request;
+                }
+                _ => {
+                    debug!("torrent process announce already running");
+                    return Ok(());
+                }
+            }
+        }
         let client = Client::new();
 
         let mut url = format!(
@@ -143,6 +173,8 @@ impl Inner {
         }
 
         debug!("Get tracker announce from: {}", url);
+
+        let announce_state = torrent_process.announce_state.clone();
 
         let process = client
             .get(&url)
@@ -165,11 +197,22 @@ impl Inner {
                     "Tracker response (url encoded): {}",
                     percent_encode(&response, SIMPLE_ENCODE_SET).to_string()
                 );
-                let tracker_announce_response: TrackerAnnounceResponse = response.try_into()?;
+                let tracker_announce_response: TrackerAnnounce = response.try_into()?;
                 debug!("Tracker response parsed: {:#?}", tracker_announce_response);
                 Ok(())
             })
-            .map_err(|err| error!("Error in announce request: {}", err));
+            .map_err(move |err| {
+                error!("Error in announce request: {}", err);
+                let mut announce_state = announce_state.lock().unwrap();
+                match *announce_state {
+                    AnnounceState::Request => {
+                        *announce_state = AnnounceState::Error(err);
+                    }
+                    _ => {
+                        warn!("Wrong announce process state");
+                    }
+                }
+            });
         tokio::spawn(process);
         Ok(())
     }
@@ -273,7 +316,7 @@ impl TorrentProcessFeature {
             "Tracker response (url encoded): {}",
             percent_encode(&response, SIMPLE_ENCODE_SET).to_string()
         );
-        let tracker_announce_response: TrackerAnnounceResponse =
+        let tracker_announce_response: TrackerAnnounce =
             response.try_into().map_err(|_| ())?;
         debug!("Tracker response parsed: {:#?}", tracker_announce_response);
 

@@ -33,6 +33,8 @@ pub enum RustorrentError {
     Parser,
     #[fail(display = "tokio unbounded receiver {}", _0)]
     TokioMpscUnboundedRecvError(tokio::sync::mpsc::error::UnboundedRecvError),
+    #[fail(display = "failure because of: {}", _0)]
+    FailureReason(String),
 }
 
 macro_rules! from_rustorrent_error {

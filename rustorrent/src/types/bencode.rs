@@ -151,15 +151,27 @@ macro_rules! try_from_bencode {
         $(normal: ($($normal_key:expr => $normal_field:ident),*)$(,)*)*
         $(optional: ($($optional_key:expr => $optional_field:ident),*)$(,)*)*
         $(bencode: ($($bencode_key:expr => $bencode_field:ident),*)$(,)*)*
-        $(raw: ($($raw:ident),*))*) => {
+        $(raw: ($($raw:ident),*))*
+        $(failure: $($failure_key:expr),*)*
+        ) => {
         impl TryFrom<BencodeBlob> for $type {
 
-            type Error = TryFromBencode;
+            type Error = RustorrentError;
 
             fn try_from(value: BencodeBlob) -> Result<Self, Self::Error> {
                 let _source = value.source.clone();
                 let dictionary: Vec<_> = value.try_into()?;
-
+/*
+                $($(
+                    let _failure_key: String = $failure_key.into();
+                    match dictionary.as_slice() {
+                    [(_failure_key, _value)] => {
+                        let value = dictionary.into_iter().next().unwrap().1;
+                        return Err(RustorrentError::FailureReason(value.try_into()?));
+                    },
+                    _ => (),
+                })*)*
+*/
                 $($(let mut $normal_field = None;)*)*
                 $($(let mut $optional_field = None;)*)*
                 $($(let mut $bencode_field = None;)*)*
@@ -169,6 +181,7 @@ macro_rules! try_from_bencode {
                         $($($normal_key => $normal_field = Some(value.try_into()?),)*)*
                         $($($optional_key => $optional_field = Some(value.try_into()?),)*)*
                         $($($bencode_key => $bencode_field = Some(value),)*)*
+                        $($($failure_key => return Err(RustorrentError::FailureReason(value.try_into()?)),)*)*
                         _ => (),
                     }
                 }
