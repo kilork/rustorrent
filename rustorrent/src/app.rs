@@ -55,6 +55,7 @@ pub struct Inner {
     command_receiver: Mutex<Option<UnboundedReceiver<RustorrentCommand>>>,
 }
 
+#[derive(Debug)]
 pub struct TorrentProcess {
     path: PathBuf,
     torrent: Torrent,
@@ -63,6 +64,7 @@ pub struct TorrentProcess {
     announce_state: Arc<Mutex<AnnounceState>>,
 }
 
+#[derive(Debug)]
 pub enum TorrentProcessState {
     Init,
     Download,
@@ -174,13 +176,14 @@ impl Inner {
 
         debug!("Get tracker announce from: {}", url);
 
-        let announce_state = torrent_process.announce_state.clone();
+        let announce_state_succ = torrent_process.announce_state.clone();
+        let announce_state_err = torrent_process.announce_state.clone();
 
         let process = client
             .get(&url)
             .send()
             .and_then(|mut res| {
-                println!("{}", res.status());
+                debug!("Result code: {}", res.status());
 
                 let body = mem::replace(res.body_mut(), ReqwestDecoder::empty());
                 body.concat2()
@@ -192,26 +195,19 @@ impl Inner {
                 Ok(buf)
             })
             .map_err(|err| RustorrentError::from(err))
-            .and_then(|response| {
+            .and_then(move |response| {
                 debug!(
                     "Tracker response (url encoded): {}",
                     percent_encode(&response, SIMPLE_ENCODE_SET).to_string()
                 );
-                let tracker_announce_response: TrackerAnnounce = response.try_into()?;
-                debug!("Tracker response parsed: {:#?}", tracker_announce_response);
+                let tracker_announce: TrackerAnnounce = response.try_into()?;
+                debug!("Tracker response parsed: {:#?}", tracker_announce);
+                *announce_state_succ.lock().unwrap() = AnnounceState::Idle;
                 Ok(())
             })
             .map_err(move |err| {
                 error!("Error in announce request: {}", err);
-                let mut announce_state = announce_state.lock().unwrap();
-                match *announce_state {
-                    AnnounceState::Request => {
-                        *announce_state = AnnounceState::Error(err);
-                    }
-                    _ => {
-                        warn!("Wrong announce process state");
-                    }
-                }
+                *announce_state_err.lock().unwrap() = AnnounceState::Error(err);
             });
         tokio::spawn(process);
         Ok(())
