@@ -48,7 +48,8 @@ fn main() -> Result<(), ExitFailure> {
     rt.block_on(lazy(move || -> Result<(), ExitFailure> {
         let mut app = RustorrentApp::new(settings);
 
-        app.add_torrent_from_file(&cli.torrent)
+        app.clone()
+            .add_torrent_from_file(&cli.torrent)
             .with_context(|_| format!("Could not add torrent {:?}", cli.torrent))?;
 
         Ok(app.run().wait()?)

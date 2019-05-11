@@ -82,6 +82,7 @@ pub enum AnnounceState {
 }
 
 pub enum RustorrentCommand {
+    ProcessAnnounce(Arc<TorrentProcess>, TrackerAnnounce),
     AddTorrent(PathBuf),
     Quit,
 }
@@ -95,13 +96,16 @@ fn url_encode(data: &[u8]) -> String {
 }
 
 impl Inner {
-    pub fn add_torrent_from_file(&self, filename: impl AsRef<Path>) -> Result<(), RustorrentError> {
+    pub fn add_torrent_from_file(
+        self: Arc<Self>,
+        filename: impl AsRef<Path>,
+    ) -> Result<(), RustorrentError> {
         info!("Adding torrent from file: {:?}", filename.as_ref());
         let command = RustorrentCommand::AddTorrent(filename.as_ref().into());
         self.send_command(command)
     }
 
-    fn send_command(&self, command: RustorrentCommand) -> Result<(), RustorrentError> {
+    fn send_command(self: Arc<Self>, command: RustorrentCommand) -> Result<(), RustorrentError> {
         tokio::spawn(
             self.command_sender
                 .clone()
@@ -112,7 +116,10 @@ impl Inner {
         Ok(())
     }
 
-    fn command_add_torrent(&self, path: PathBuf) -> Result<Arc<TorrentProcess>, RustorrentError> {
+    fn command_add_torrent(
+        self: Arc<Self>,
+        path: PathBuf,
+    ) -> Result<Arc<TorrentProcess>, RustorrentError> {
         debug!("Run command: adding torrent from file: {:?}", path);
         let torrent = parse_torrent(&path)?;
         let hash_id = torrent.info_sha1_hash();
@@ -140,7 +147,7 @@ impl Inner {
     }
 
     fn command_start_announce_process(
-        &self,
+        self: Arc<Self>,
         torrent_process: Arc<TorrentProcess>,
     ) -> Result<(), RustorrentError> {
         {
@@ -155,6 +162,7 @@ impl Inner {
                 }
             }
         }
+
         let client = Client::new();
 
         let mut url = format!(
@@ -178,6 +186,8 @@ impl Inner {
 
         let announce_state_succ = torrent_process.announce_state.clone();
         let announce_state_err = torrent_process.announce_state.clone();
+
+        let this = self.clone();
 
         let process = client
             .get(&url)
@@ -203,6 +213,9 @@ impl Inner {
                 let tracker_announce: TrackerAnnounce = response.try_into()?;
                 debug!("Tracker response parsed: {:#?}", tracker_announce);
                 *announce_state_succ.lock().unwrap() = AnnounceState::Idle;
+                let process_announce =
+                    RustorrentCommand::ProcessAnnounce(torrent_process.clone(), tracker_announce);
+                this.send_command(process_announce)?;
                 Ok(())
             })
             .map_err(move |err| {
@@ -235,17 +248,22 @@ impl RustorrentApp {
         receiver
             .map_err(|err| RustorrentError::from(err))
             .for_each(move |x| {
+                let this = this.clone();
+                let this2 = this.clone();
                 match x {
                     RustorrentCommand::AddTorrent(filename) => {
                         this.command_add_torrent(filename)
                             .and_then(|torrent_process| {
-                                this.command_start_announce_process(torrent_process)
+                                this2.command_start_announce_process(torrent_process)
                             })?;
                     }
                     RustorrentCommand::Quit => {
                         info!("Quit now");
                         let sender = close_sender.lock().unwrap().take().unwrap();
                         sender.send(()).unwrap();
+                    }
+                    RustorrentCommand::ProcessAnnounce(process, tracker_announce) => {
+                        info!("time to process announce");
                     }
                 }
                 Ok(())
