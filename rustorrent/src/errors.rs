@@ -35,6 +35,8 @@ pub enum RustorrentError {
     TokioMpscUnboundedRecvError(tokio::sync::mpsc::error::UnboundedRecvError),
     #[fail(display = "failure because of: {}", _0)]
     FailureReason(String),
+    #[fail(display = "timer failure: {}", _0)]
+    TimerFailure(tokio::timer::Error),
 }
 
 macro_rules! from_rustorrent_error {
@@ -53,6 +55,7 @@ from_rustorrent_error!(TryFromBencode, TryFromBencode);
 from_rustorrent_error!(std::io::Error, IO);
 from_rustorrent_error!(std::convert::Infallible, Convert);
 from_rustorrent_error!(core::array::TryFromSliceError, ConvertFromSlice);
+from_rustorrent_error!(tokio::timer::Error, TimerFailure);
 from_rustorrent_error!(
     tokio::sync::mpsc::error::UnboundedRecvError,
     TokioMpscUnboundedRecvError

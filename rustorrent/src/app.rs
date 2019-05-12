@@ -249,12 +249,12 @@ impl RustorrentApp {
             .map_err(|err| RustorrentError::from(err))
             .for_each(move |x| {
                 let this = this.clone();
-                let this2 = this.clone();
+                let this_announce = this.clone();
                 match x {
                     RustorrentCommand::AddTorrent(filename) => {
                         this.command_add_torrent(filename)
                             .and_then(|torrent_process| {
-                                this2.command_start_announce_process(torrent_process)
+                                this_announce.command_start_announce_process(torrent_process)
                             })?;
                     }
                     RustorrentCommand::Quit => {
@@ -264,6 +264,24 @@ impl RustorrentApp {
                     }
                     RustorrentCommand::ProcessAnnounce(process, tracker_announce) => {
                         info!("time to process announce");
+                        let state = process.announce_state.lock().unwrap();
+                        match *state {
+                            AnnounceState::Idle => {
+                                let process_copy_delay = process.clone();
+                                let when = Instant::now()
+                                    + Duration::from_secs(tracker_announce.interval as u64);
+                                let task = Delay::new(when)
+                                    .map_err(|err| RustorrentError::from(err))
+                                    .and_then(|_| {
+                                        info!("time to reannounce!");
+                                        this.command_start_announce_process(process_copy_delay)?;
+                                        Ok(())
+                                    })
+                                    .map_err(|_| ());
+                                tokio::spawn(task);
+                            }
+                            _ => return Err(RustorrentError::FailureReason("Qqq".into())),
+                        }
                     }
                 }
                 Ok(())
