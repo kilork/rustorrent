@@ -225,6 +225,42 @@ impl Inner {
         tokio::spawn(process);
         Ok(())
     }
+
+    fn command_process_announce(
+        self: Arc<Self>,
+        torrent_process: Arc<TorrentProcess>,
+        tracker_announce: TrackerAnnounce,
+    ) -> Result<(), RustorrentError> {
+        info!("time to process announce");
+        match *torrent_process.announce_state.lock().unwrap() {
+            AnnounceState::Idle => {
+                let process_copy_delay = torrent_process.clone();
+                let when = Instant::now() + Duration::from_secs(tracker_announce.interval as u64);
+                let task = Delay::new(when)
+                    .map_err(|err| RustorrentError::from(err))
+                    .and_then(|_| {
+                        info!("time to reannounce!");
+                        self.command_start_announce_process(process_copy_delay)?;
+                        Ok(())
+                    })
+                    .map_err(|_| ());
+                tokio::spawn(task);
+            }
+            AnnounceState::Error(ref error) => {
+                return Err(RustorrentError::FailureReason(format!(
+                    "Announce failure: {}",
+                    error
+                )))
+            }
+            ref state => {
+                return Err(RustorrentError::FailureReason(format!(
+                    "Wrong state: {:?}",
+                    state
+                )))
+            }
+        }
+        Ok(())
+    }
 }
 
 impl RustorrentApp {
@@ -262,26 +298,8 @@ impl RustorrentApp {
                         let sender = close_sender.lock().unwrap().take().unwrap();
                         sender.send(()).unwrap();
                     }
-                    RustorrentCommand::ProcessAnnounce(process, tracker_announce) => {
-                        info!("time to process announce");
-                        let state = process.announce_state.lock().unwrap();
-                        match *state {
-                            AnnounceState::Idle => {
-                                let process_copy_delay = process.clone();
-                                let when = Instant::now()
-                                    + Duration::from_secs(tracker_announce.interval as u64);
-                                let task = Delay::new(when)
-                                    .map_err(|err| RustorrentError::from(err))
-                                    .and_then(|_| {
-                                        info!("time to reannounce!");
-                                        this.command_start_announce_process(process_copy_delay)?;
-                                        Ok(())
-                                    })
-                                    .map_err(|_| ());
-                                tokio::spawn(task);
-                            }
-                            _ => return Err(RustorrentError::FailureReason("Qqq".into())),
-                        }
+                    RustorrentCommand::ProcessAnnounce(torrent_process, tracker_announce) => {
+                        this.command_process_announce(torrent_process, tracker_announce)?;
                     }
                 }
                 Ok(())
