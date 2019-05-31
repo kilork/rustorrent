@@ -1,5 +1,4 @@
 use crate::types::peer::Handshake;
-use std::cell::RefCell;
 use std::convert::TryInto;
 use std::mem;
 use std::mem::drop;
@@ -11,6 +10,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
+use std::{cell::RefCell, io::ErrorKind::ConnectionRefused};
 
 use exitfailure::ExitFailure;
 use failure::{Context, ResultExt};
@@ -18,7 +18,6 @@ use futures::future::join_all;
 use futures::lazy;
 use futures::prelude::*;
 use futures::sync::mpsc::{channel, Receiver, Sender};
-// use futures::sync::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures::try_ready;
 use log::{debug, error, info, warn};
 use percent_encoding::{percent_encode, percent_encode_byte, SIMPLE_ENCODE_SET};
@@ -44,7 +43,7 @@ pub struct RustorrentApp {
 impl Deref for RustorrentApp {
     type Target = Arc<Inner>;
     fn deref(&self) -> &Arc<Inner> {
-        return &self.inner;
+        &self.inner
     }
 }
 
@@ -78,11 +77,12 @@ pub enum TorrentProcessState {
 pub enum AnnounceState {
     Idle,
     Request,
-    Error(RustorrentError),
+    Error(Arc<RustorrentError>),
 }
 
 pub enum RustorrentCommand {
     ProcessAnnounce(Arc<TorrentProcess>, TrackerAnnounce),
+    ProcessAnnounceError(Arc<TorrentProcess>, Arc<RustorrentError>),
     AddTorrent(PathBuf),
     Quit,
 }
@@ -187,7 +187,10 @@ impl Inner {
         let announce_state_succ = torrent_process.announce_state.clone();
         let announce_state_err = torrent_process.announce_state.clone();
 
-        let this = self.clone();
+        let this_response = self.clone();
+        let this_err = self.clone();
+        let torrent_process_response = torrent_process.clone();
+        let torrent_process_err = torrent_process.clone();
 
         let process = client
             .get(&url)
@@ -204,7 +207,7 @@ impl Inner {
                 std::io::copy(&mut body, &mut buf).unwrap();
                 Ok(buf)
             })
-            .map_err(|err| RustorrentError::from(err))
+            .map_err(RustorrentError::from)
             .and_then(move |response| {
                 debug!(
                     "Tracker response (url encoded): {}",
@@ -214,15 +217,40 @@ impl Inner {
                 debug!("Tracker response parsed: {:#?}", tracker_announce);
                 *announce_state_succ.lock().unwrap() = AnnounceState::Idle;
                 let process_announce =
-                    RustorrentCommand::ProcessAnnounce(torrent_process.clone(), tracker_announce);
-                this.send_command(process_announce)?;
+                    RustorrentCommand::ProcessAnnounce(torrent_process_response, tracker_announce);
+                this_response.send_command(process_announce)?;
                 Ok(())
             })
             .map_err(move |err| {
                 error!("Error in announce request: {}", err);
-                *announce_state_err.lock().unwrap() = AnnounceState::Error(err);
+                let err = Arc::new(err);
+                *announce_state_err.lock().unwrap() = AnnounceState::Error(err.clone());
+                let process_announce =
+                    RustorrentCommand::ProcessAnnounceError(torrent_process_err, err);
+                this_err
+                    .send_command(process_announce)
+                    .map_err(|err| error!("{}", err))
+                    .unwrap();
             });
         tokio::spawn(process);
+        Ok(())
+    }
+
+    fn spawn_delayed_announce(
+        self: Arc<Self>,
+        torrent_process: Arc<TorrentProcess>,
+        after: Duration,
+    ) -> Result<(), RustorrentError> {
+        let when = Instant::now() + after;
+        let task = Delay::new(when)
+            .map_err(RustorrentError::from)
+            .and_then(|_| {
+                info!("time to reannounce!");
+                self.command_start_announce_process(torrent_process)?;
+                Ok(())
+            })
+            .map_err(|_| ());
+        tokio::spawn(task);
         Ok(())
     }
 
@@ -234,17 +262,10 @@ impl Inner {
         info!("time to process announce");
         match *torrent_process.announce_state.lock().unwrap() {
             AnnounceState::Idle => {
-                let process_copy_delay = torrent_process.clone();
-                let when = Instant::now() + Duration::from_secs(tracker_announce.interval as u64);
-                let task = Delay::new(when)
-                    .map_err(|err| RustorrentError::from(err))
-                    .and_then(|_| {
-                        info!("time to reannounce!");
-                        self.command_start_announce_process(process_copy_delay)?;
-                        Ok(())
-                    })
-                    .map_err(|_| ());
-                tokio::spawn(task);
+                self.spawn_delayed_announce(
+                    torrent_process.clone(),
+                    Duration::from_secs(tracker_announce.interval as u64),
+                )?;
             }
             AnnounceState::Error(ref error) => {
                 return Err(RustorrentError::FailureReason(format!(
@@ -282,17 +303,38 @@ impl RustorrentApp {
         let close_sender = Arc::new(Mutex::new(Some(close_sender)));
         let this = self.clone();
         receiver
-            .map_err(|err| RustorrentError::from(err))
+            .map_err(RustorrentError::from)
             .for_each(move |x| {
                 let this = this.clone();
-                let this_announce = this.clone();
                 match x {
                     RustorrentCommand::AddTorrent(filename) => {
+                        let this_announce = this.clone();
                         this.command_add_torrent(filename)
                             .and_then(|torrent_process| {
                                 this_announce.command_start_announce_process(torrent_process)
                             })?;
                     }
+                    RustorrentCommand::ProcessAnnounceError(torrent_process, err) => match *err {
+                        RustorrentError::HTTPClient(ref err) => {
+                            if err.is_http() {
+                                if let Some(err) =
+                                    err.get_ref().and_then(|e| e.downcast_ref::<hyper::Error>())
+                                {
+                                    if err.is_connect() {
+                                        error!("connection refused!");
+
+                                        *torrent_process.announce_state.lock().unwrap() =
+                                            AnnounceState::Idle;
+                                        this.spawn_delayed_announce(
+                                            torrent_process,
+                                            Duration::from_secs(5),
+                                        )?;
+                                    }
+                                }
+                            }
+                        }
+                        ref other => error!("Process announce error: {}", other),
+                    },
                     RustorrentCommand::Quit => {
                         info!("Quit now");
                         let sender = close_sender.lock().unwrap().take().unwrap();

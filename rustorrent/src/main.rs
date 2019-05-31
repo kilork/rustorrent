@@ -4,7 +4,6 @@ use futures::Future;
 use log::{debug, info};
 use rustorrent::app::RustorrentApp;
 use rustorrent::types::Settings;
-use rustorrent::RustorrentError;
 use tokio::prelude::future::lazy;
 
 mod cli;
@@ -58,7 +57,7 @@ fn main() -> Result<(), ExitFailure> {
     Ok(())
 }
 
-fn load_settings() -> Result<Settings, std::io::Error> {
+fn load_settings() -> std::io::Result<Settings> {
     debug!("loading settings");
 
     confy::load(env!("CARGO_PKG_NAME"))
