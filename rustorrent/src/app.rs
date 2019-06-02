@@ -6,7 +6,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::ops::Deref;
 use std::path::Path;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::RwLock;
@@ -103,6 +103,10 @@ impl Inner {
         info!("Adding torrent from file: {:?}", filename.as_ref());
         let command = RustorrentCommand::AddTorrent(filename.as_ref().into());
         self.send_command(command)
+    }
+
+    pub fn command_quit(self: Arc<Self>)-> Result<(), RustorrentError> {
+        self.send_command(RustorrentCommand::Quit)
     }
 
     fn send_command(self: Arc<Self>, command: RustorrentCommand) -> Result<(), RustorrentError> {
@@ -282,6 +286,29 @@ impl Inner {
         }
         Ok(())
     }
+
+    fn start_info_update_loop(self: Arc<Self>, is_running: Arc<AtomicBool>) {
+        let interval = Interval::new(Instant::now(), Duration::from_secs(1));
+
+        let is_running_clone = is_running.clone();
+        let interval_task = interval
+            .map_err(RustorrentError::from)
+            .take_while(move |_| Ok(is_running_clone.load(Ordering::SeqCst)))
+            .for_each(move |_| {
+                for process in self.processes.read().unwrap().iter() {
+                    let announce_state = process.announce_state.lock().unwrap();
+                    let torrent_state = process.torrent_state.lock().unwrap();
+                    info!(
+                        "{:?} {:?} {:?}",
+                        process.path, announce_state, torrent_state
+                    );
+                }
+                Ok(())
+            })
+            .map_err(|_| ());
+        tokio::spawn(interval_task);
+    }
+
 }
 
 impl RustorrentApp {
@@ -297,29 +324,13 @@ impl RustorrentApp {
         }
     }
 
+
     pub fn run(&mut self) -> impl Future<Item = (), Error = RustorrentError> {
         let is_running = Arc::new(AtomicBool::new(true));
 
-        let interval = Interval::new(Instant::now(), Duration::from_secs(1));
+        let can_try_count = Arc::new(AtomicUsize::new(10));
 
-        let this = self.clone();
-        let is_running_clone = is_running.clone();
-        let interval_task = interval
-            .map_err(RustorrentError::from)
-            .take_while(move |_| Ok(is_running_clone.load(Ordering::SeqCst)))
-            .for_each(move |_| {
-                for process in this.processes.read().unwrap().iter() {
-                    let announce_state = process.announce_state.lock().unwrap();
-                    let torrent_state = process.torrent_state.lock().unwrap();
-                    info!(
-                        "{:?} {:?} {:?}",
-                        process.path, announce_state, torrent_state
-                    );
-                }
-                Ok(())
-            })
-            .map_err(|_| ());
-        tokio::spawn(interval_task);
+        self.clone().start_info_update_loop(is_running.clone());
 
         let receiver = self.command_receiver.lock().unwrap().take().unwrap();
         let (close_sender, close_receiver) = futures::sync::oneshot::channel::<()>();
@@ -329,6 +340,7 @@ impl RustorrentApp {
             .map_err(RustorrentError::from)
             .for_each(move |x| {
                 let this = this.clone();
+                let can_try_count = can_try_count.clone();
                 match x {
                     RustorrentCommand::AddTorrent(filename) => {
                         let this_announce = this.clone();
@@ -345,6 +357,10 @@ impl RustorrentApp {
                                 {
                                     if err.is_connect() {
                                         error!("connection refused!");
+                                        if can_try_count.fetch_sub(1, Ordering::SeqCst) == 0 {
+                                            error!("Cannot connect to announce server, giving up");
+                                            this.clone().command_quit()?;
+                                        }
 
                                         *torrent_process.announce_state.lock().unwrap() =
                                             AnnounceState::Idle;
