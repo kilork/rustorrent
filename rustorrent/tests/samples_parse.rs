@@ -13,10 +13,10 @@ fn parse_plan_9_torrent() -> Result<(), RustorrentError> {
 
     assert_eq!(None, info.length);
 
-    let files = info.files.unwrap();
+    let files = info.files.as_ref().unwrap();
     assert_eq!(
         files,
-        vec![
+        &vec![
             TorrentInfoFile {
                 length: 383971,
                 path: vec!["Plan_9_from_Outer_Space_1959.asr.js".into(),],
@@ -60,6 +60,19 @@ fn parse_plan_9_torrent() -> Result<(), RustorrentError> {
         ]
     );
 
+    let total_len = 383971
+        + 51637
+        + 346429
+        + 56478797
+        + 758756235
+        + 390383680
+        + 11287
+        + 293299508
+        + 4675
+        + 3209;
+
+    assert_eq!(info.len(), total_len);
+
     assert_eq!(info.pieces.len() % 20, 0);
 
     Ok(())
@@ -73,6 +86,8 @@ fn parse_ferris_torrent() -> Result<(), RustorrentError> {
     let info = torrent.info()?;
 
     assert_eq!(Some(349133), info.length);
+    assert_eq!(349133, info.len());
+    assert_eq!("ferris.gif", info.name);
 
     Ok(())
 }

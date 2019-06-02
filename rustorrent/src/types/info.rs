@@ -15,6 +15,18 @@ pub struct TorrentInfoFile {
     pub path: Vec<String>,
 }
 
+impl TorrentInfo {
+    pub fn len(&self) -> usize {
+        if let Some(len) = self.length {
+            len as usize
+        } else if let Some(files) = &self.files {
+            files.iter().map(|x| x.length).sum::<i64>() as usize
+        } else {
+            panic!("Wrong torrent info block");
+        }
+    }
+}
+
 try_from_bencode!(TorrentInfo,
     normal: (
         "name" => name,
