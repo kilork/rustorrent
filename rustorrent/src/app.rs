@@ -1,4 +1,3 @@
-use crate::types::peer::Handshake;
 use std::convert::TryInto;
 use std::mem;
 use std::mem::drop;
@@ -30,7 +29,9 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::timer::{Delay, Interval};
 
 use crate::errors::RustorrentError;
+use crate::types::info::TorrentInfo;
 use crate::types::message::{Message, MessageCodec, MessageCodecError};
+use crate::types::peer::Handshake;
 use crate::types::peer::Peer;
 use crate::types::torrent::parse_torrent;
 use crate::types::torrent::{Torrent, TrackerAnnounce};
@@ -58,9 +59,11 @@ pub struct Inner {
 pub struct TorrentProcess {
     path: PathBuf,
     torrent: Torrent,
+    info: TorrentInfo,
     hash_id: [u8; 20],
     torrent_state: Arc<Mutex<TorrentProcessState>>,
     announce_state: Arc<Mutex<AnnounceState>>,
+    stats: Arc<Mutex<TorrentProcessStats>>,
 }
 
 #[derive(Debug)]
@@ -146,12 +149,20 @@ impl Inner {
             warn!("Torrent already in the list: {}", url_encode(&hash_id));
             return Ok(process);
         }
+        let info = torrent.info()?;
+        let left = info.len();
         let process = Arc::new(TorrentProcess {
             path,
             torrent,
+            info,
             hash_id,
             torrent_state: Arc::new(Mutex::new(TorrentProcessState::Init)),
             announce_state: Arc::new(Mutex::new(AnnounceState::Idle)),
+            stats: Arc::new(Mutex::new(TorrentProcessStats {
+                downloaded: 0,
+                uploaded: 0,
+                left,
+            })),
         });
         self.processes.write().unwrap().push(process.clone());
         Ok(process)
@@ -305,9 +316,10 @@ impl Inner {
                 for process in self.processes.read().unwrap().iter() {
                     let announce_state = process.announce_state.lock().unwrap();
                     let torrent_state = process.torrent_state.lock().unwrap();
+                    let stats = process.stats.lock().unwrap();
                     info!(
-                        "{:?} {:?} {:?}",
-                        process.path, announce_state, torrent_state
+                        "{:?} {:?} {:?} {:?}",
+                        process.path, announce_state, torrent_state, stats
                     );
                 }
                 Ok(())
