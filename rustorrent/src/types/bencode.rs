@@ -129,17 +129,6 @@ impl TryFrom<BencodeValue> for Vec<Vec<String>> {
 }
 blanket_blob_value!(Vec<Vec<String>>);
 
-impl TryFrom<BencodeValue> for Vec<Vec<u8>> {
-    type Error = TryFromBencode;
-
-    fn try_from(value: BencodeValue) -> Result<Self, Self::Error> {
-        value
-            .try_into()
-            .map(|list: Vec<BencodeBlob>| list.into_iter().map(|i| i.try_into().unwrap()).collect())
-    }
-}
-blanket_blob_value!(Vec<Vec<u8>>);
-
 impl TryFrom<BencodeValue> for Ipv4Addr {
     type Error = TryFromBencode;
 

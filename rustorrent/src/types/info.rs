@@ -4,7 +4,7 @@ use super::*;
 pub struct TorrentInfo {
     pub name: String,
     pub piece_length: i64,
-    pub pieces: Vec<Vec<u8>>,
+    pub pieces: Vec<u8>,
     pub length: Option<i64>,
     pub files: Option<Vec<TorrentInfoFile>>,
 }
