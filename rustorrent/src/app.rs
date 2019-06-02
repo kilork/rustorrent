@@ -6,11 +6,11 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::ops::Deref;
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
-use std::{cell::RefCell, io::ErrorKind::ConnectionRefused};
 
 use exitfailure::ExitFailure;
 use failure::{Context, ResultExt};
@@ -298,6 +298,29 @@ impl RustorrentApp {
     }
 
     pub fn run(&mut self) -> impl Future<Item = (), Error = RustorrentError> {
+        let is_running = Arc::new(AtomicBool::new(true));
+
+        let interval = Interval::new(Instant::now(), Duration::from_secs(1));
+
+        let this = self.clone();
+        let is_running_clone = is_running.clone();
+        let interval_task = interval
+            .map_err(RustorrentError::from)
+            .take_while(move |_| Ok(is_running_clone.load(Ordering::SeqCst)))
+            .for_each(move |_| {
+                for process in this.processes.read().unwrap().iter() {
+                    let announce_state = process.announce_state.lock().unwrap();
+                    let torrent_state = process.torrent_state.lock().unwrap();
+                    info!(
+                        "{:?} {:?} {:?}",
+                        process.path, announce_state, torrent_state
+                    );
+                }
+                Ok(())
+            })
+            .map_err(|_| ());
+        tokio::spawn(interval_task);
+
         let receiver = self.command_receiver.lock().unwrap().take().unwrap();
         let (close_sender, close_receiver) = futures::sync::oneshot::channel::<()>();
         let close_sender = Arc::new(Mutex::new(Some(close_sender)));
@@ -339,6 +362,7 @@ impl RustorrentApp {
                         info!("Quit now");
                         let sender = close_sender.lock().unwrap().take().unwrap();
                         sender.send(()).unwrap();
+                        is_running.store(false, Ordering::SeqCst);
                     }
                     RustorrentCommand::ProcessAnnounce(torrent_process, tracker_announce) => {
                         this.command_process_announce(torrent_process, tracker_announce)?;
