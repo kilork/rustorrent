@@ -1,11 +1,13 @@
-use super::*;
-use crate::types::peer::Peer;
-
-use sha1::{Digest, Sha1};
-
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+
+use sha1::{Digest, Sha1};
+
+use super::*;
+
+use crate::types::info::TorrentInfo;
+use crate::types::peer::Peer;
 
 #[derive(Debug, PartialEq)]
 pub struct Torrent {
@@ -27,6 +29,10 @@ impl Torrent {
         Sha1::digest(self.info.source.as_slice())[..]
             .try_into()
             .expect("20 bytes array expected from Sha1 calculation")
+    }
+
+    pub fn info(&self) -> Result<TorrentInfo, RustorrentError> {
+        self.info.clone().try_into()
     }
 }
 

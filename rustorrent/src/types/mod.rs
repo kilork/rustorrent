@@ -5,6 +5,7 @@ use crate::errors::{RustorrentError, TryFromBencode};
 mod config;
 #[macro_use]
 mod bencode;
+pub mod info;
 pub mod message;
 pub mod peer;
 pub mod torrent;

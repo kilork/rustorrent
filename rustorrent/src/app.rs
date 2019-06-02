@@ -64,6 +64,13 @@ pub struct TorrentProcess {
 }
 
 #[derive(Debug)]
+struct TorrentProcessStats {
+    downloaded: usize,
+    uploaded: usize,
+    left: usize,
+}
+
+#[derive(Debug)]
 pub enum TorrentProcessState {
     Init,
     Download,
@@ -105,7 +112,7 @@ impl Inner {
         self.send_command(command)
     }
 
-    pub fn command_quit(self: Arc<Self>)-> Result<(), RustorrentError> {
+    pub fn command_quit(self: Arc<Self>) -> Result<(), RustorrentError> {
         self.send_command(RustorrentCommand::Quit)
     }
 
@@ -308,7 +315,6 @@ impl Inner {
             .map_err(|_| ());
         tokio::spawn(interval_task);
     }
-
 }
 
 impl RustorrentApp {
@@ -323,7 +329,6 @@ impl RustorrentApp {
             }),
         }
     }
-
 
     pub fn run(&mut self) -> impl Future<Item = (), Error = RustorrentError> {
         let is_running = Arc::new(AtomicBool::new(true));

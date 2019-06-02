@@ -3,7 +3,7 @@ use crate::parser::parse_bencode;
 use std::convert::TryInto;
 use std::net::Ipv4Addr;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct BencodeBlob {
     pub source: Vec<u8>,
     pub value: BencodeValue,
@@ -17,7 +17,7 @@ impl TryFrom<Vec<u8>> for BencodeBlob {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum BencodeValue {
     String(Vec<u8>),
     Integer(i64),
@@ -36,6 +36,18 @@ macro_rules! blanket_blob_value {
         }
     };
 }
+
+impl TryFrom<BencodeValue> for Vec<u8> {
+    type Error = TryFromBencode;
+
+    fn try_from(value: BencodeValue) -> Result<Self, Self::Error> {
+        match value {
+            BencodeValue::String(s) => Ok(s),
+            _ => Err(TryFromBencode::NotString),
+        }
+    }
+}
+blanket_blob_value!(Vec<u8>);
 
 impl TryFrom<BencodeValue> for String {
     type Error = TryFromBencode;
@@ -116,6 +128,17 @@ impl TryFrom<BencodeValue> for Vec<Vec<String>> {
     }
 }
 blanket_blob_value!(Vec<Vec<String>>);
+
+impl TryFrom<BencodeValue> for Vec<Vec<u8>> {
+    type Error = TryFromBencode;
+
+    fn try_from(value: BencodeValue) -> Result<Self, Self::Error> {
+        value
+            .try_into()
+            .map(|list: Vec<BencodeBlob>| list.into_iter().map(|i| i.try_into().unwrap()).collect())
+    }
+}
+blanket_blob_value!(Vec<Vec<u8>>);
 
 impl TryFrom<BencodeValue> for Ipv4Addr {
     type Error = TryFromBencode;
