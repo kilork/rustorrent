@@ -16,6 +16,10 @@ pub struct TorrentInfoFile {
 }
 
 impl TorrentInfo {
+    /// Returns total length of torrent in bytes.
+    ///
+    /// For single file torrent it is the size of this file.
+    /// For multi files torrent it is the sum of all file sizes.
     pub fn len(&self) -> usize {
         if let Some(len) = self.length {
             len as usize
@@ -24,6 +28,17 @@ impl TorrentInfo {
         } else {
             panic!("Wrong torrent info block");
         }
+    }
+
+    /// Count of pieces in torrent.
+    pub fn pieces_count(&self) -> usize {
+        self.pieces.len() / 20
+    }
+
+    /// Piece by index.
+    pub fn piece(&self, index: usize) -> Option<&[u8]> {
+        let index = index * 20;
+        self.pieces.get(index..index + 20)
     }
 }
 
@@ -54,5 +69,25 @@ impl TryFrom<BencodeBlob> for Vec<TorrentInfoFile> {
             BencodeValue::List(l) => Ok(l.into_iter().map(|x| x.try_into().unwrap()).collect()),
             _ => Err(TryFromBencode::NotList),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pieces() {
+        let torrent_info = TorrentInfo {
+            name: "torrent_info".into(),
+            piece_length: 10,
+            pieces: b"a123456789b123456789c123456789d123456789".to_vec(),
+            length: Some(100),
+            files: None,
+        };
+        assert_eq!(torrent_info.pieces_count(), 2);
+        assert_eq!(torrent_info.piece(0), Some(b"a123456789b123456789".as_ref()));
+        assert_eq!(torrent_info.piece(1), Some(b"c123456789d123456789".as_ref()));
+        assert_eq!(torrent_info.piece(2), None);
     }
 }

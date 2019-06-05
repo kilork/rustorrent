@@ -187,12 +187,16 @@ impl Inner {
 
         let client = Client::new();
 
-        let mut url = format!(
-            "{}?info_hash={}&peer_id={}",
-            torrent_process.torrent.announce_url,
-            url_encode(&torrent_process.hash_id[..]),
-            url_encode(&PEER_ID[..])
-        );
+        let mut url = {
+            let stats = torrent_process.stats.lock().unwrap();
+            format!(
+                "{}?info_hash={}&peer_id={}&left={}",
+                torrent_process.torrent.announce_url,
+                url_encode(&torrent_process.hash_id[..]),
+                url_encode(&PEER_ID[..]),
+                stats.left
+            )
+        };
 
         let config = &self.settings.config;
 
