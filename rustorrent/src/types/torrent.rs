@@ -6,7 +6,7 @@ use sha1::{Digest, Sha1};
 
 use super::*;
 
-use crate::types::info::TorrentInfo;
+use crate::types::info::{TorrentInfo, TorrentInfoRaw};
 use crate::types::peer::Peer;
 
 #[derive(Debug, PartialEq)]
@@ -32,7 +32,10 @@ impl Torrent {
     }
 
     pub fn info(&self) -> Result<TorrentInfo, RustorrentError> {
-        self.info.clone().try_into()
+        self.info
+            .clone()
+            .try_into()
+            .map(|x: TorrentInfoRaw| x.into())
     }
 }
 

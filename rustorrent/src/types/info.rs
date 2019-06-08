@@ -1,21 +1,66 @@
 use super::*;
 
-#[derive(Debug, PartialEq)]
+use std::path::PathBuf;
+
+#[derive(Debug)]
 pub struct TorrentInfo {
+    pub piece_length: usize,
+    pub pieces: Vec<Piece>,
+    pub mapping: Vec<PieceToFiles>,
+    pub length: usize,
+    pub files: Vec<TorrentInfoFile>,
+}
+
+impl TorrentInfo {
+    /// Returns total length of torrent in bytes.
+    ///
+    /// For single file torrent it is the size of this file.
+    /// For multi files torrent it is the sum of all file sizes.
+    pub fn len(&self) -> usize {
+        self.length
+    }
+}
+
+impl From<TorrentInfoRaw> for TorrentInfo {
+    fn from(value: TorrentInfoRaw) -> Self {
+        unimplemented!()
+    }
+}
+
+#[derive(Debug)]
+pub struct TorrentInfoFile {
+    pub path: PathBuf,
+    pub length: usize,
+}
+
+#[derive(Debug)]
+pub struct Piece([u8; 20]);
+
+#[derive(Debug)]
+pub struct PieceToFiles(Vec<FileBlock>);
+
+#[derive(Debug)]
+pub struct FileBlock {
+    file_index: usize,
+    file_offset: usize,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct TorrentInfoRaw {
     pub name: String,
     pub piece_length: i64,
     pub pieces: Vec<u8>,
     pub length: Option<i64>,
-    pub files: Option<Vec<TorrentInfoFile>>,
+    pub files: Option<Vec<TorrentInfoFileRaw>>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct TorrentInfoFile {
+pub struct TorrentInfoFileRaw {
     pub length: i64,
     pub path: Vec<String>,
 }
 
-impl TorrentInfo {
+impl TorrentInfoRaw {
     /// Returns total length of torrent in bytes.
     ///
     /// For single file torrent it is the size of this file.
@@ -42,7 +87,7 @@ impl TorrentInfo {
     }
 }
 
-try_from_bencode!(TorrentInfo,
+try_from_bencode!(TorrentInfoRaw,
     normal: (
         "name" => name,
         "piece length" => piece_length,
@@ -54,14 +99,14 @@ try_from_bencode!(TorrentInfo,
     ),
 );
 
-try_from_bencode!(TorrentInfoFile,
+try_from_bencode!(TorrentInfoFileRaw,
     normal: (
         "length" => length,
         "path" => path
     ),
 );
 
-impl TryFrom<BencodeBlob> for Vec<TorrentInfoFile> {
+impl TryFrom<BencodeBlob> for Vec<TorrentInfoFileRaw> {
     type Error = TryFromBencode;
 
     fn try_from(blob: BencodeBlob) -> Result<Self, Self::Error> {
@@ -78,7 +123,7 @@ mod tests {
 
     #[test]
     fn pieces() {
-        let torrent_info = TorrentInfo {
+        let torrent_info = TorrentInfoRaw {
             name: "torrent_info".into(),
             piece_length: 10,
             pieces: b"a123456789b123456789c123456789d123456789".to_vec(),
@@ -86,8 +131,14 @@ mod tests {
             files: None,
         };
         assert_eq!(torrent_info.pieces_count(), 2);
-        assert_eq!(torrent_info.piece(0), Some(b"a123456789b123456789".as_ref()));
-        assert_eq!(torrent_info.piece(1), Some(b"c123456789d123456789".as_ref()));
+        assert_eq!(
+            torrent_info.piece(0),
+            Some(b"a123456789b123456789".as_ref())
+        );
+        assert_eq!(
+            torrent_info.piece(1),
+            Some(b"c123456789d123456789".as_ref())
+        );
         assert_eq!(torrent_info.piece(2), None);
     }
 }

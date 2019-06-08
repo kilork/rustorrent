@@ -173,17 +173,7 @@ macro_rules! try_from_bencode {
             fn try_from(value: BencodeBlob) -> Result<Self, Self::Error> {
                 let _source = value.source.clone();
                 let dictionary: Vec<_> = value.try_into()?;
-/*
-                $($(
-                    let _failure_key: String = $failure_key.into();
-                    match dictionary.as_slice() {
-                    [(_failure_key, _value)] => {
-                        let value = dictionary.into_iter().next().unwrap().1;
-                        return Err(RustorrentError::FailureReason(value.try_into()?));
-                    },
-                    _ => (),
-                })*)*
-*/
+
                 $($(let mut $normal_field = None;)*)*
                 $($(let mut $optional_field = None;)*)*
                 $($(let mut $bencode_field = None;)*)*
