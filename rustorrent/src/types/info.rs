@@ -2,6 +2,8 @@ use super::*;
 
 use std::path::PathBuf;
 
+use crate::SHA1_SIZE;
+
 #[derive(Debug, PartialEq)]
 pub struct TorrentInfo {
     pub piece_length: usize,
@@ -26,7 +28,7 @@ impl From<TorrentInfoRaw> for TorrentInfo {
         let pieces = raw
             .pieces
             .as_slice()
-            .chunks_exact(20)
+            .chunks_exact(SHA1_SIZE)
             .map(|x| Piece(x.try_into().unwrap()))
             .collect();
 
@@ -51,7 +53,7 @@ impl From<TorrentInfoRaw> for TorrentInfo {
 
         let piece_length = raw.piece_length as usize;
 
-        let mapping = map_pieces_to_files(piece_length, length, &files);
+        let mapping = map_pieces_to_files(piece_length, &files);
 
         Self {
             piece_length,
@@ -63,12 +65,7 @@ impl From<TorrentInfoRaw> for TorrentInfo {
     }
 }
 
-fn map_pieces_to_files(
-    piece_length: usize,
-    length: usize,
-    files: &[TorrentInfoFile],
-) -> Vec<PieceToFiles> {
-    let mut total_length_remaining = length;
+fn map_pieces_to_files(piece_length: usize, files: &[TorrentInfoFile]) -> Vec<PieceToFiles> {
     let mut current_piece_left = piece_length;
     let mut current_piece = PieceToFiles(vec![]);
     let mut offset = 0;
@@ -88,7 +85,6 @@ fn map_pieces_to_files(
 
             file_remaining_length -= current_piece_left;
             file_offset += current_piece_left;
-            total_length_remaining -= current_piece_left;
             current_piece_left = piece_length;
 
             mapping.push(current_piece);
@@ -104,12 +100,13 @@ fn map_pieces_to_files(
             });
             current_piece_left -= file_remaining_length;
             offset += file_remaining_length;
-            total_length_remaining -= file_remaining_length;
         }
     }
+
     if !current_piece.0.is_empty() {
         mapping.push(current_piece);
     }
+
     mapping
 }
 
@@ -120,7 +117,7 @@ pub struct TorrentInfoFile {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Piece([u8; 20]);
+pub struct Piece([u8; SHA1_SIZE]);
 
 #[derive(Debug, PartialEq)]
 pub struct PieceToFiles(Vec<FileBlock>);
@@ -165,13 +162,13 @@ impl TorrentInfoRaw {
 
     /// Count of pieces in torrent.
     pub fn pieces_count(&self) -> usize {
-        self.pieces.len() / 20
+        self.pieces.len() / SHA1_SIZE
     }
 
     /// Piece by index.
     pub fn piece(&self, index: usize) -> Option<&[u8]> {
-        let index = index * 20;
-        self.pieces.get(index..index + 20)
+        let index = index * SHA1_SIZE;
+        self.pieces.get(index..index + SHA1_SIZE)
     }
 }
 
@@ -234,7 +231,6 @@ mod tests {
     fn pieces_to_files() {
         let result = map_pieces_to_files(
             100,
-            1000,
             &[TorrentInfoFile {
                 path: "test".into(),
                 length: 1000,
@@ -244,7 +240,6 @@ mod tests {
         assert_eq!(result.len(), 10);
 
         let result = map_pieces_to_files(
-            1000,
             1000,
             &[TorrentInfoFile {
                 path: "test".into(),
@@ -263,7 +258,6 @@ mod tests {
 
         let result = map_pieces_to_files(
             1000,
-            800,
             &[TorrentInfoFile {
                 path: "test".into(),
                 length: 800,
@@ -281,7 +275,6 @@ mod tests {
 
         let result = map_pieces_to_files(
             333,
-            1000,
             &[TorrentInfoFile {
                 path: "test".into(),
                 length: 1000,
@@ -319,7 +312,6 @@ mod tests {
 
         let result = map_pieces_to_files(
             500,
-            1200,
             &[
                 TorrentInfoFile {
                     path: "test1".into(),

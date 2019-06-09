@@ -8,6 +8,7 @@ use super::*;
 
 use crate::types::info::{TorrentInfo, TorrentInfoRaw};
 use crate::types::peer::Peer;
+use crate::SHA1_SIZE;
 
 #[derive(Debug, PartialEq)]
 pub struct Torrent {
@@ -25,7 +26,7 @@ pub struct TrackerAnnounce {
 }
 
 impl Torrent {
-    pub fn info_sha1_hash(&self) -> [u8; 20] {
+    pub fn info_sha1_hash(&self) -> [u8; SHA1_SIZE] {
         Sha1::digest(self.info.source.as_slice())[..]
             .try_into()
             .expect("20 bytes array expected from Sha1 calculation")

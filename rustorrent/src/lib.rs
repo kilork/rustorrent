@@ -3,10 +3,6 @@ mod errors;
 mod parser;
 pub mod types;
 
-use std::convert::TryInto;
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
-
 pub use errors::RustorrentError;
-use types::torrent::Torrent;
+
+pub(crate) const SHA1_SIZE: usize = 20;

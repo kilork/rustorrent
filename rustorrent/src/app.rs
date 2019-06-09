@@ -36,6 +36,7 @@ use crate::types::peer::Peer;
 use crate::types::torrent::parse_torrent;
 use crate::types::torrent::{Torrent, TrackerAnnounce};
 use crate::types::Settings;
+use crate::SHA1_SIZE;
 
 pub struct RustorrentApp {
     inner: Arc<Inner>,
@@ -60,7 +61,7 @@ pub struct TorrentProcess {
     path: PathBuf,
     torrent: Torrent,
     info: TorrentInfo,
-    hash_id: [u8; 20],
+    hash_id: [u8; SHA1_SIZE],
     torrent_state: Arc<Mutex<TorrentProcessState>>,
     announce_state: Arc<Mutex<AnnounceState>>,
     stats: Arc<Mutex<TorrentProcessStats>>,
