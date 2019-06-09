@@ -2,7 +2,7 @@ use super::*;
 
 use std::path::PathBuf;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct TorrentInfo {
     pub piece_length: usize,
     pub pieces: Vec<Piece>,
@@ -22,27 +22,115 @@ impl TorrentInfo {
 }
 
 impl From<TorrentInfoRaw> for TorrentInfo {
-    fn from(value: TorrentInfoRaw) -> Self {
-        unimplemented!()
+    fn from(raw: TorrentInfoRaw) -> Self {
+        let pieces = raw
+            .pieces
+            .as_slice()
+            .chunks_exact(20)
+            .map(|x| Piece(x.try_into().unwrap()))
+            .collect();
+
+        let length = raw.len();
+
+        let files = if let Some(length) = raw.length.map(|x| x.try_into().unwrap()) {
+            vec![TorrentInfoFile {
+                path: raw.name.into(),
+                length,
+            }]
+        } else if let Some(files) = raw.files {
+            files
+                .iter()
+                .map(|TorrentInfoFileRaw { path, length }| TorrentInfoFile {
+                    path: path.iter().collect(),
+                    length: *length as usize,
+                })
+                .collect()
+        } else {
+            panic!();
+        };
+
+        let piece_length = raw.piece_length as usize;
+
+        let mapping = map_pieces_to_files(piece_length, length, &files);
+
+        Self {
+            piece_length,
+            pieces,
+            mapping,
+            length,
+            files,
+        }
     }
 }
 
-#[derive(Debug)]
+fn map_pieces_to_files(
+    piece_length: usize,
+    length: usize,
+    files: &[TorrentInfoFile],
+) -> Vec<PieceToFiles> {
+    let mut total_length_remaining = length;
+    let mut current_piece_left = piece_length;
+    let mut current_piece = PieceToFiles(vec![]);
+    let mut offset = 0;
+
+    let mut mapping = vec![];
+
+    for (file_index, file) in files.iter().enumerate() {
+        let mut file_remaining_length = file.length;
+        let mut file_offset = 0;
+        while current_piece_left < file_remaining_length {
+            current_piece.0.push(FileBlock {
+                offset,
+                file_index,
+                file_offset,
+                size: current_piece_left,
+            });
+
+            file_remaining_length -= current_piece_left;
+            file_offset += current_piece_left;
+            total_length_remaining -= current_piece_left;
+            current_piece_left = piece_length;
+
+            mapping.push(current_piece);
+            current_piece = PieceToFiles(vec![]);
+            offset = 0;
+        }
+        if current_piece_left >= file_remaining_length {
+            current_piece.0.push(FileBlock {
+                offset,
+                file_index,
+                file_offset,
+                size: file_remaining_length,
+            });
+            current_piece_left -= file_remaining_length;
+            offset += file_remaining_length;
+            total_length_remaining -= file_remaining_length;
+        }
+    }
+    if !current_piece.0.is_empty() {
+        mapping.push(current_piece);
+    }
+    mapping
+}
+
+#[derive(Debug, PartialEq)]
 pub struct TorrentInfoFile {
     pub path: PathBuf,
     pub length: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Piece([u8; 20]);
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct PieceToFiles(Vec<FileBlock>);
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct FileBlock {
+    offset: usize,
     file_index: usize,
     file_offset: usize,
+    size: usize,
 }
 
 #[derive(Debug, PartialEq)]
@@ -140,5 +228,151 @@ mod tests {
             Some(b"c123456789d123456789".as_ref())
         );
         assert_eq!(torrent_info.piece(2), None);
+    }
+
+    #[test]
+    fn pieces_to_files() {
+        let result = map_pieces_to_files(
+            100,
+            1000,
+            &[TorrentInfoFile {
+                path: "test".into(),
+                length: 1000,
+            }],
+        );
+        dbg!(&result);
+        assert_eq!(result.len(), 10);
+
+        let result = map_pieces_to_files(
+            1000,
+            1000,
+            &[TorrentInfoFile {
+                path: "test".into(),
+                length: 1000,
+            }],
+        );
+        assert_eq!(
+            result,
+            vec![PieceToFiles(vec![FileBlock {
+                offset: 0,
+                file_index: 0,
+                file_offset: 0,
+                size: 1000,
+            }])]
+        );
+
+        let result = map_pieces_to_files(
+            1000,
+            800,
+            &[TorrentInfoFile {
+                path: "test".into(),
+                length: 800,
+            }],
+        );
+        assert_eq!(
+            result,
+            vec![PieceToFiles(vec![FileBlock {
+                offset: 0,
+                file_index: 0,
+                file_offset: 0,
+                size: 800,
+            }])]
+        );
+
+        let result = map_pieces_to_files(
+            333,
+            1000,
+            &[TorrentInfoFile {
+                path: "test".into(),
+                length: 1000,
+            }],
+        );
+        assert_eq!(
+            result,
+            vec![
+                PieceToFiles(vec![FileBlock {
+                    offset: 0,
+                    file_index: 0,
+                    file_offset: 0,
+                    size: 333,
+                }]),
+                PieceToFiles(vec![FileBlock {
+                    offset: 0,
+                    file_index: 0,
+                    file_offset: 333,
+                    size: 333,
+                }]),
+                PieceToFiles(vec![FileBlock {
+                    offset: 0,
+                    file_index: 0,
+                    file_offset: 666,
+                    size: 333,
+                }]),
+                PieceToFiles(vec![FileBlock {
+                    offset: 0,
+                    file_index: 0,
+                    file_offset: 999,
+                    size: 1,
+                }])
+            ]
+        );
+
+        let result = map_pieces_to_files(
+            500,
+            1200,
+            &[
+                TorrentInfoFile {
+                    path: "test1".into(),
+                    length: 300,
+                },
+                TorrentInfoFile {
+                    path: "test1".into(),
+                    length: 400,
+                },
+                TorrentInfoFile {
+                    path: "test1".into(),
+                    length: 500,
+                },
+            ],
+        );
+        assert_eq!(
+            result,
+            vec![
+                PieceToFiles(vec![
+                    FileBlock {
+                        offset: 0,
+                        file_index: 0,
+                        file_offset: 0,
+                        size: 300,
+                    },
+                    FileBlock {
+                        offset: 300,
+                        file_index: 1,
+                        file_offset: 0,
+                        size: 200,
+                    }
+                ]),
+                PieceToFiles(vec![
+                    FileBlock {
+                        offset: 0,
+                        file_index: 1,
+                        file_offset: 200,
+                        size: 200,
+                    },
+                    FileBlock {
+                        offset: 200,
+                        file_index: 2,
+                        file_offset: 0,
+                        size: 300,
+                    }
+                ]),
+                PieceToFiles(vec![FileBlock {
+                    offset: 0,
+                    file_index: 2,
+                    file_offset: 300,
+                    size: 200,
+                }])
+            ]
+        );
     }
 }
