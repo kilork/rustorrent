@@ -65,6 +65,44 @@ pub struct TorrentProcess {
     torrent_state: Arc<Mutex<TorrentProcessState>>,
     announce_state: Arc<Mutex<AnnounceState>>,
     stats: Arc<Mutex<TorrentProcessStats>>,
+    torrent_storage: RwLock<TorrentStorage>,
+}
+
+#[derive(Debug)]
+struct TorrentStorage {
+    pieces: Vec<Arc<TorrentPiece>>,
+    peers: Vec<Arc<TorrentPeer>>,
+}
+
+#[derive(Debug)]
+struct TorrentPiece {}
+
+#[derive(Debug)]
+struct TorrentPeer {
+    ip: Ipv4Addr,
+    port: u16,
+    announcement_count: AtomicUsize,
+    state: Mutex<TorrentPeerState>,
+}
+
+impl From<&Peer> for TorrentPeer {
+    fn from(value: &Peer) -> Self {
+        Self {
+            ip: value.ip,
+            port: value.port,
+            announcement_count: AtomicUsize::new(0),
+            state: Mutex::new(Default::default()),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct TorrentPeerState {}
+
+impl Default for TorrentPeerState {
+    fn default() -> Self {
+        Self {}
+    }
 }
 
 #[derive(Debug)]
@@ -164,6 +202,10 @@ impl Inner {
                 uploaded: 0,
                 left,
             })),
+            torrent_storage: RwLock::new(TorrentStorage {
+                pieces: vec![],
+                peers: vec![],
+            }),
         });
         self.processes.write().unwrap().push(process.clone());
         Ok(process)
@@ -307,6 +349,30 @@ impl Inner {
                 )))
             }
         }
+
+        let mut torrent_storage = torrent_process.torrent_storage.write().unwrap();
+        for peer in &tracker_announce.peers {
+            info!("Adding peer: {:?}", peer);
+            if let Some(existing_peer) = torrent_storage
+                .peers
+                .iter()
+                .filter(|x| x.ip == peer.ip && x.port == peer.port)
+                .next()
+            {
+                let announcement_count = existing_peer
+                    .announcement_count
+                    .fetch_add(1, Ordering::SeqCst);
+                debug!(
+                    "Peer {:?} announced {} time(s)",
+                    peer,
+                    announcement_count + 1
+                );
+            } else {
+                let peer = Arc::new(peer.into());
+                torrent_storage.peers.push(peer);
+            }
+        }
+
         Ok(())
     }
 

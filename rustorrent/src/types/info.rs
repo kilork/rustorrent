@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use crate::SHA1_SIZE;
 
+/// Normalized info from torrent.
 #[derive(Debug, PartialEq)]
 pub struct TorrentInfo {
     pub piece_length: usize,
