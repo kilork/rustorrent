@@ -209,7 +209,6 @@ impl Encoder for MessageCodec {
                 buf.put_u8(9);
                 buf.put_u16_be(port);
             }
-            _ => panic!("Unsupported type"),
         }
         Ok(())
     }
