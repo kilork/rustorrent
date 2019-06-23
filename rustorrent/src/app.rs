@@ -72,12 +72,14 @@ pub struct TorrentProcess {
 
 #[derive(Debug)]
 struct TorrentStorage {
-    pieces: Vec<Arc<TorrentPiece>>,
+    pieces: Vec<Arc<Mutex<TorrentPiece>>>,
     peers: Vec<Arc<TorrentPeer>>,
 }
 
-#[derive(Debug)]
-struct TorrentPiece {}
+#[derive(Debug, Default)]
+struct TorrentPiece {
+    downloaded: bool,
+}
 
 #[derive(Debug)]
 struct TorrentPeer {
@@ -105,6 +107,7 @@ enum TorrentPeerState {
         chocked: bool,
         interested: bool,
         sender: Sender<Message>,
+        pieces: Vec<u8>,
     },
     Finished,
 }
@@ -202,6 +205,7 @@ impl Inner {
         }
         let info = torrent.info()?;
         let left = info.len();
+        let pieces_count = info.pieces.len();
         let process = Arc::new(TorrentProcess {
             path,
             torrent,
@@ -215,7 +219,7 @@ impl Inner {
                 left,
             })),
             torrent_storage: RwLock::new(TorrentStorage {
-                pieces: vec![],
+                pieces: vec![Arc::new(Mutex::new(Default::default())); pieces_count],
                 peers: vec![],
             }),
         });
@@ -343,6 +347,57 @@ impl Inner {
     ) -> Result<(), RustorrentError> {
         info!("Handle message: {:?}", message);
 
+        match message {
+            Message::Bitfield(mut bitfield_pieces) => {
+                let mut need_to_download = false;
+                for (index, piece) in torrent_process
+                    .torrent_storage
+                    .read()
+                    .unwrap()
+                    .pieces
+                    .iter()
+                    .enumerate()
+                {
+                    let downloaded = piece.lock().unwrap().downloaded;
+                    if downloaded {
+                        continue;
+                    }
+                    let index_byte = index / 8;
+                    let index_bit = 128u8 >> (index % 8);
+
+                    info!(
+                        "Piece {} is not downloaded, checking presence in bitfield ({}:{})",
+                        index, index_byte, index_bit
+                    );
+
+                    if let Some(v) = bitfield_pieces.get(index_byte).map(|&v| v & index_bit) {
+                        if v == index_bit {
+                            info!("Found piece to download from peer");
+                            need_to_download = true;
+                            break;
+                        }
+                    }
+                }
+
+                if let TorrentPeerState::Connected {
+                    ref mut pieces,
+                    chocked,
+                    ref sender,
+                    ..
+                } = *torrent_peer.state.lock().unwrap()
+                {
+                    pieces.clear();
+                    pieces.append(&mut bitfield_pieces);
+
+                    if chocked && need_to_download {
+                        let conntx = sender.clone();
+                        tokio::spawn(conntx.send(Message::Interested).map(|_| ()).map_err(|_| ()));
+                    }
+                }
+            }
+            _ => warn!("Unsupported message {:?}", message),
+        }
+
         Ok(())
     }
 
@@ -417,6 +472,7 @@ impl Inner {
                     chocked: true,
                     interested: false,
                     sender: conntx_state.clone(),
+                    pieces: vec![],
                 };
 
                 let conn = reader
