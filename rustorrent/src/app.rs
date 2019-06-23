@@ -79,17 +79,16 @@ struct TorrentPiece {}
 
 #[derive(Debug)]
 struct TorrentPeer {
-    ip: Ipv4Addr,
-    port: u16,
+    addr: SocketAddr,
     announcement_count: AtomicUsize,
     state: Mutex<TorrentPeerState>,
 }
 
 impl From<&Peer> for TorrentPeer {
     fn from(value: &Peer) -> Self {
+        let addr = SocketAddr::new(IpAddr::V4(value.ip), value.port);
         Self {
-            ip: value.ip,
-            port: value.port,
+            addr,
             announcement_count: AtomicUsize::new(0),
             state: Mutex::new(Default::default()),
         }
@@ -97,11 +96,19 @@ impl From<&Peer> for TorrentPeer {
 }
 
 #[derive(Debug)]
-struct TorrentPeerState {}
+struct TorrentPeerState {
+    connected: bool,
+    chocked: bool,
+    interested: bool,
+}
 
 impl Default for TorrentPeerState {
     fn default() -> Self {
-        Self {}
+        Self {
+            connected: false,
+            chocked: true,
+            interested: false,
+        }
     }
 }
 
@@ -129,7 +136,8 @@ pub enum AnnounceState {
     Error(Arc<RustorrentError>),
 }
 
-pub enum RustorrentCommand {
+enum RustorrentCommand {
+    ConnectToPeer(Arc<TorrentProcess>, Arc<TorrentPeer>),
     ProcessAnnounce(Arc<TorrentProcess>, TrackerAnnounce),
     ProcessAnnounceError(Arc<TorrentProcess>, Arc<RustorrentError>),
     AddTorrent(PathBuf),
@@ -323,6 +331,92 @@ impl Inner {
         Ok(())
     }
 
+    fn command_connect_to_peer(
+        self: Arc<Self>,
+        torrent_process: Arc<TorrentProcess>,
+        torrent_peer: Arc<TorrentPeer>,
+    ) -> Result<(), RustorrentError> {
+        let (tx, rx) = channel(10);
+
+        let conntx = tx.clone();
+        let addr = torrent_peer.addr;
+        let task_keepalive = Interval::new(Instant::now(), Duration::from_secs(10))
+            .for_each(move |_| {
+                let conntx = conntx.clone();
+                conntx
+                    .send(Message::KeepAlive)
+                    .map(|_| ())
+                    .map_err(|_| tokio::timer::Error::shutdown())
+            })
+            .map_err(move |e| error!("Peer {}: interval errored; err={:?}", addr, e));
+
+        let torrent_process_handshake = torrent_process.clone();
+        let tcp_stream = TcpStream::connect(&addr)
+            .and_then(move |stream| {
+                let mut buf = vec![];
+                buf.extend_from_slice(&crate::types::HANDSHAKE_PREFIX);
+                buf.extend_from_slice(&torrent_process_handshake.hash_id);
+                buf.extend_from_slice(&PEER_ID);
+                tokio::io::write_all(stream, buf)
+            })
+            .and_then(move |(stream, buf)| {
+                debug!(
+                    "Handshake sent to {} (url encoded): {} (len: {})",
+                    addr,
+                    percent_encode(&buf, SIMPLE_ENCODE_SET).to_string(),
+                    buf.len()
+                );
+                tokio::io::read_exact(stream, vec![0; 68])
+            })
+            .map_err(move |err| error!("Peer connect to {} failed: {}", addr, err))
+            .and_then(move |(stream, buf)| {
+                debug!(
+                    "Handshake reply from {} (url encoded): {} (len: {})",
+                    addr,
+                    percent_encode(&buf, SIMPLE_ENCODE_SET).to_string(),
+                    buf.len()
+                );
+
+                let handshake: Handshake = buf.try_into().unwrap();
+
+                if handshake.info_hash != torrent_process.hash_id {
+                    error!("Peer {}: hash is wrong. Disconnect.", addr);
+                    return Err(());
+                }
+
+                let (writer, reader) = stream.framed(MessageCodec::default()).split();
+
+                let writer = writer.sink_map_err(|err| error!("{}", err));
+
+                let sink = rx.forward(writer).inspect(move |(_a, _sink)| {
+                    debug!("Peer {}: updated", addr);
+                });
+                tokio::spawn(sink.map(|_| ()));
+
+                let conn = reader
+                    .for_each(move |frame| {
+                        debug!("Peer {}: received message {:?}", addr, frame);
+                        match frame {
+                            Message::KeepAlive => {
+                                let conntx = tx.clone();
+                                tokio::spawn(
+                                    conntx.send(Message::KeepAlive).map(|_| ()).map_err(|_| ()),
+                                );
+                            }
+                            _ => (),
+                        }
+                        Ok(())
+                    })
+                    .map_err(move |err| error!("Peer {}: message codec error: {}", addr, err));
+
+                tokio::spawn(conn);
+
+                Ok(())
+            });
+        tokio::spawn(tcp_stream.join(task_keepalive).map(|_| ()));
+        Ok(())
+    }
+
     fn command_process_announce(
         self: Arc<Self>,
         torrent_process: Arc<TorrentProcess>,
@@ -331,7 +425,7 @@ impl Inner {
         info!("time to process announce");
         match *torrent_process.announce_state.lock().unwrap() {
             AnnounceState::Idle => {
-                self.spawn_delayed_announce(
+                self.clone().spawn_delayed_announce(
                     torrent_process.clone(),
                     Duration::from_secs(tracker_announce.interval as u64),
                 )?;
@@ -353,10 +447,11 @@ impl Inner {
         let mut torrent_storage = torrent_process.torrent_storage.write().unwrap();
         for peer in &tracker_announce.peers {
             info!("Adding peer: {:?}", peer);
+            let addr = SocketAddr::new(IpAddr::V4(peer.ip), peer.port);
             if let Some(existing_peer) = torrent_storage
                 .peers
                 .iter()
-                .filter(|x| x.ip == peer.ip && x.port == peer.port)
+                .filter(|x| x.addr == addr)
                 .next()
             {
                 let announcement_count = existing_peer
@@ -368,8 +463,11 @@ impl Inner {
                     announcement_count + 1
                 );
             } else {
-                let peer = Arc::new(peer.into());
-                torrent_storage.peers.push(peer);
+                let peer: Arc<TorrentPeer> = Arc::new(peer.into());
+                torrent_storage.peers.push(peer.clone());
+                let connect_to_peer =
+                    RustorrentCommand::ConnectToPeer(torrent_process.clone(), peer);
+                self.clone().send_command(connect_to_peer)?;
             }
         }
 
@@ -470,6 +568,9 @@ impl RustorrentApp {
                     }
                     RustorrentCommand::ProcessAnnounce(torrent_process, tracker_announce) => {
                         this.command_process_announce(torrent_process, tracker_announce)?;
+                    }
+                    RustorrentCommand::ConnectToPeer(torrent_process, torrent_peer) => {
+                        this.command_connect_to_peer(torrent_process, torrent_peer)?;
                     }
                 }
                 Ok(())
