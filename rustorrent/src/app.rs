@@ -29,6 +29,7 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::timer::{Delay, Interval};
 
 use crate::errors::RustorrentError;
+use crate::messages::message_bitfield;
 use crate::types::info::TorrentInfo;
 use crate::types::message::{Message, MessageCodec, MessageCodecError};
 use crate::types::peer::Handshake;
@@ -60,34 +61,34 @@ pub struct Inner {
 
 #[derive(Debug)]
 pub struct TorrentProcess {
-    path: PathBuf,
-    torrent: Torrent,
-    info: TorrentInfo,
-    hash_id: [u8; SHA1_SIZE],
-    torrent_state: Arc<Mutex<TorrentProcessState>>,
-    announce_state: Arc<Mutex<AnnounceState>>,
-    stats: Arc<Mutex<TorrentProcessStats>>,
-    torrent_storage: RwLock<TorrentStorage>,
+    pub(crate) path: PathBuf,
+    pub(crate) torrent: Torrent,
+    pub(crate) info: TorrentInfo,
+    pub(crate) hash_id: [u8; SHA1_SIZE],
+    pub(crate) torrent_state: Arc<Mutex<TorrentProcessState>>,
+    pub(crate) announce_state: Arc<Mutex<AnnounceState>>,
+    pub(crate) stats: Arc<Mutex<TorrentProcessStats>>,
+    pub(crate) torrent_storage: RwLock<TorrentStorage>,
 }
 
 #[derive(Debug)]
-struct TorrentStorage {
-    pieces: Vec<Arc<Mutex<TorrentPiece>>>,
-    peers: Vec<Arc<TorrentPeer>>,
+pub(crate) struct TorrentStorage {
+    pub(crate) pieces: Vec<Arc<Mutex<TorrentPiece>>>,
+    pub(crate) peers: Vec<Arc<TorrentPeer>>,
 }
 
 #[derive(Debug, Default)]
-struct TorrentPiece {
-    downloaded: bool,
-    data: Vec<u8>,
-    blocks: Vec<u8>,
+pub(crate) struct TorrentPiece {
+    pub(crate) downloaded: bool,
+    pub(crate) data: Vec<u8>,
+    pub(crate) blocks: Vec<u8>,
 }
 
 #[derive(Debug)]
-struct TorrentPeer {
-    addr: SocketAddr,
-    announcement_count: AtomicUsize,
-    state: Mutex<TorrentPeerState>,
+pub(crate) struct TorrentPeer {
+    pub(crate) addr: SocketAddr,
+    pub(crate) announcement_count: AtomicUsize,
+    pub(crate) state: Mutex<TorrentPeerState>,
 }
 
 impl From<&Peer> for TorrentPeer {
@@ -102,7 +103,7 @@ impl From<&Peer> for TorrentPeer {
 }
 
 #[derive(Debug)]
-enum TorrentPeerState {
+pub(crate) enum TorrentPeerState {
     Idle,
     Connecting,
     Connected {
@@ -121,10 +122,10 @@ impl Default for TorrentPeerState {
 }
 
 #[derive(Debug)]
-struct TorrentProcessStats {
-    downloaded: usize,
-    uploaded: usize,
-    left: usize,
+pub(crate) struct TorrentProcessStats {
+    pub(crate) downloaded: usize,
+    pub(crate) uploaded: usize,
+    pub(crate) left: usize,
 }
 
 #[derive(Debug)]
@@ -350,53 +351,8 @@ impl Inner {
         info!("Handle message: {:?}", message);
 
         match message {
-            Message::Bitfield(mut bitfield_pieces) => {
-                let mut need_to_download = false;
-                for (index, piece) in torrent_process
-                    .torrent_storage
-                    .read()
-                    .unwrap()
-                    .pieces
-                    .iter()
-                    .enumerate()
-                {
-                    let downloaded = piece.lock().unwrap().downloaded;
-                    if downloaded {
-                        continue;
-                    }
-                    let index_byte = index / 8;
-                    let index_bit = 128u8 >> (index % 8);
-
-                    info!(
-                        "Piece {} is not downloaded, checking presence in bitfield ({}:{})",
-                        index, index_byte, index_bit
-                    );
-
-                    if let Some(v) = bitfield_pieces.get(index_byte).map(|&v| v & index_bit) {
-                        if v == index_bit {
-                            info!("Found piece to download from peer");
-                            need_to_download = true;
-                            break;
-                        }
-                    }
-                }
-
-                if let TorrentPeerState::Connected {
-                    ref mut pieces,
-                    chocked,
-                    ref sender,
-                    ..
-                } = *torrent_peer.state.lock().unwrap()
-                {
-                    pieces.clear();
-                    pieces.append(&mut bitfield_pieces);
-
-                    if chocked && need_to_download {
-                        debug!("Peer {}: sending message Interested", torrent_peer.addr);
-                        let conntx = sender.clone();
-                        tokio::spawn(conntx.send(Message::Interested).map(|_| ()).map_err(|_| ()));
-                    }
-                }
+            Message::Bitfield(bitfield_pieces) => {
+                message_bitfield(torrent_process, torrent_peer, bitfield_pieces)?;
             }
             _ => warn!("Unsupported message {:?}", message),
         }

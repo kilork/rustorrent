@@ -1,5 +1,6 @@
 pub mod app;
 mod errors;
+mod messages;
 mod parser;
 pub mod types;
 
