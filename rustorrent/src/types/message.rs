@@ -1,6 +1,4 @@
-use super::*;
 use crate::parser::parser_message;
-// use crate::parser::parse_message;
 
 use bytes::{BufMut, BytesMut};
 use failure::Fail;
