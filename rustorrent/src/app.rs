@@ -101,7 +101,11 @@ impl From<&Peer> for TorrentPeer {
 enum TorrentPeerState {
     Idle,
     Connecting,
-    Connected { chocked: bool, interested: bool },
+    Connected {
+        chocked: bool,
+        interested: bool,
+        sender: Sender<Message>,
+    },
     Finished,
 }
 
@@ -136,6 +140,7 @@ pub enum AnnounceState {
 }
 
 enum RustorrentCommand {
+    PeerMessage(Arc<TorrentProcess>, Arc<TorrentPeer>, Message),
     ConnectToPeer(Arc<TorrentProcess>, Arc<TorrentPeer>),
     ProcessAnnounce(Arc<TorrentProcess>, TrackerAnnounce),
     ProcessAnnounceError(Arc<TorrentProcess>, Arc<RustorrentError>),
@@ -330,6 +335,17 @@ impl Inner {
         Ok(())
     }
 
+    fn command_peer_message(
+        self: Arc<Self>,
+        torrent_process: Arc<TorrentProcess>,
+        torrent_peer: Arc<TorrentPeer>,
+        message: Message,
+    ) -> Result<(), RustorrentError> {
+        info!("Handle message: {:?}", message);
+
+        Ok(())
+    }
+
     fn command_connect_to_peer(
         self: Arc<Self>,
         torrent_process: Arc<TorrentProcess>,
@@ -354,6 +370,7 @@ impl Inner {
 
         let torrent_process_handshake = torrent_process.clone();
         let torrent_peer_handshake_done = torrent_peer.clone();
+        let conntx_state = tx.clone();
         let tcp_stream = TcpStream::connect(&addr)
             .and_then(move |stream| {
                 let mut buf = vec![];
@@ -399,6 +416,7 @@ impl Inner {
                 *torrent_peer_handshake_done.state.lock().unwrap() = TorrentPeerState::Connected {
                     chocked: true,
                     interested: false,
+                    sender: conntx_state.clone(),
                 };
 
                 let conn = reader
@@ -411,7 +429,14 @@ impl Inner {
                                     conntx.send(Message::KeepAlive).map(|_| ()).map_err(|_| ()),
                                 );
                             }
-                            _ => (),
+                            message => {
+                                let peer_message = RustorrentCommand::PeerMessage(
+                                    torrent_process.clone(),
+                                    torrent_peer_handshake_done.clone(),
+                                    message,
+                                );
+                                self.clone().send_command(peer_message).unwrap();
+                            }
                         }
                         Ok(())
                     })
@@ -600,6 +625,9 @@ impl RustorrentApp {
                     }
                     RustorrentCommand::ConnectToPeer(torrent_process, torrent_peer) => {
                         this.command_connect_to_peer(torrent_process, torrent_peer)?;
+                    }
+                    RustorrentCommand::PeerMessage(torrent_process, torrent_peer, message) => {
+                        this.command_peer_message(torrent_process, torrent_peer, message)?;
                     }
                 }
                 Ok(())
