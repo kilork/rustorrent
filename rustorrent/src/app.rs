@@ -38,6 +38,8 @@ use crate::types::torrent::{Torrent, TrackerAnnounce};
 use crate::types::Settings;
 use crate::SHA1_SIZE;
 
+const TWO_MINUTES: Duration = Duration::from_secs(120);
+
 pub struct RustorrentApp {
     inner: Arc<Inner>,
 }
@@ -96,19 +98,16 @@ impl From<&Peer> for TorrentPeer {
 }
 
 #[derive(Debug)]
-struct TorrentPeerState {
-    connected: bool,
-    chocked: bool,
-    interested: bool,
+enum TorrentPeerState {
+    Idle,
+    Connecting,
+    Connected { chocked: bool, interested: bool },
+    Finished,
 }
 
 impl Default for TorrentPeerState {
     fn default() -> Self {
-        Self {
-            connected: false,
-            chocked: true,
-            interested: false,
-        }
+        TorrentPeerState::Idle
     }
 }
 
@@ -338,10 +337,13 @@ impl Inner {
     ) -> Result<(), RustorrentError> {
         let (tx, rx) = channel(10);
 
+        *torrent_peer.state.lock().unwrap() = TorrentPeerState::Connecting;
+
         let conntx = tx.clone();
         let addr = torrent_peer.addr;
-        let task_keepalive = Interval::new(Instant::now(), Duration::from_secs(10))
+        let task_keepalive = Interval::new(Instant::now(), TWO_MINUTES)
             .for_each(move |_| {
+                debug!("Peer {}: sending message KeepAlive", addr);
                 let conntx = conntx.clone();
                 conntx
                     .send(Message::KeepAlive)
@@ -351,6 +353,7 @@ impl Inner {
             .map_err(move |e| error!("Peer {}: interval errored; err={:?}", addr, e));
 
         let torrent_process_handshake = torrent_process.clone();
+        let torrent_peer_handshake_done = torrent_peer.clone();
         let tcp_stream = TcpStream::connect(&addr)
             .and_then(move |stream| {
                 let mut buf = vec![];
@@ -393,6 +396,11 @@ impl Inner {
                 });
                 tokio::spawn(sink.map(|_| ()));
 
+                *torrent_peer_handshake_done.state.lock().unwrap() = TorrentPeerState::Connected {
+                    chocked: true,
+                    interested: false,
+                };
+
                 let conn = reader
                     .for_each(move |frame| {
                         debug!("Peer {}: received message {:?}", addr, frame);
@@ -413,7 +421,15 @@ impl Inner {
 
                 Ok(())
             });
-        tokio::spawn(tcp_stream.join(task_keepalive).map(|_| ()));
+
+        tokio::spawn(tcp_stream.join(task_keepalive).map(|_| ()).then(move |_| {
+            info!("Peer {} is done", addr);
+
+            *torrent_peer.state.lock().unwrap() = TorrentPeerState::Idle;
+
+            Ok(())
+        }));
+
         Ok(())
     }
 
@@ -446,7 +462,6 @@ impl Inner {
 
         let mut torrent_storage = torrent_process.torrent_storage.write().unwrap();
         for peer in &tracker_announce.peers {
-            info!("Adding peer: {:?}", peer);
             let addr = SocketAddr::new(IpAddr::V4(peer.ip), peer.port);
             if let Some(existing_peer) = torrent_storage
                 .peers
@@ -454,6 +469,7 @@ impl Inner {
                 .filter(|x| x.addr == addr)
                 .next()
             {
+                info!("Checking peer: {:?}", peer);
                 let announcement_count = existing_peer
                     .announcement_count
                     .fetch_add(1, Ordering::SeqCst);
@@ -462,7 +478,20 @@ impl Inner {
                     peer,
                     announcement_count + 1
                 );
+                match *existing_peer.state.lock().unwrap() {
+                    TorrentPeerState::Idle => {
+                        info!("Reconnecting to peer: {:?}", peer);
+
+                        let connect_to_peer = RustorrentCommand::ConnectToPeer(
+                            torrent_process.clone(),
+                            existing_peer.clone(),
+                        );
+                        self.clone().send_command(connect_to_peer)?;
+                    }
+                    _ => (),
+                }
             } else {
+                info!("Adding peer: {:?}", peer);
                 let peer: Arc<TorrentPeer> = Arc::new(peer.into());
                 torrent_storage.peers.push(peer.clone());
                 let connect_to_peer =
@@ -475,7 +504,7 @@ impl Inner {
     }
 
     fn start_info_update_loop(self: Arc<Self>, is_running: Arc<AtomicBool>) {
-        let interval = Interval::new(Instant::now(), Duration::from_secs(1));
+        let interval = Interval::new(Instant::now(), Duration::from_secs(10));
 
         let is_running_clone = is_running.clone();
         let interval_task = interval
