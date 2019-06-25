@@ -1,5 +1,6 @@
-use super::*;
 use crate::types::message::Message;
+use nom::number::streaming::*;
+use nom::*;
 
 named!(
     pub parser_message<Message>,
@@ -14,19 +15,19 @@ named!(
                     3 => value!(Message::NotInterested)
                 ) >> (m)) |
                 _ => do_parse!(id: be_u8 >> m: switch!(value!(id),
-                    4 => cond_reduce!(len == 5, map!(be_u32, |x| Message::Have { piece_index: x})) |
-                    5 => map!(take!(len - 1), |x| Message::Bitfield(x.into())) |
-                    6 => cond_reduce!(len == 13, do_parse!(index: be_u32 >> begin: be_u32 >> length: be_u32 >> (Message::Request {
+                    4 => cond!(len == 5, map!(be_u32, |x| Message::Have { piece_index: x})) |
+                    5 => map!(take!(len - 1), |x| Some(Message::Bitfield(x.into()))) |
+                    6 => cond!(len == 13, do_parse!(index: be_u32 >> begin: be_u32 >> length: be_u32 >> (Message::Request {
                         index, begin, length
                     }))) |
-                    7 => cond_reduce!(len >= 9, do_parse!(index: be_u32 >> begin: be_u32 >> block: take!(len - 9) >> (Message::Piece {
+                    7 => cond!(len >= 9, do_parse!(index: be_u32 >> begin: be_u32 >> block: take!(len - 9) >> (Message::Piece {
                         index, begin, block: block.into()
                     }))) |
-                    8 => cond_reduce!(len == 13, do_parse!(index: be_u32 >> begin: be_u32 >> length: be_u32 >> (Message::Cancel {
+                    8 => cond!(len == 13, do_parse!(index: be_u32 >> begin: be_u32 >> length: be_u32 >> (Message::Cancel {
                         index, begin, length
                     }))) |
-                    9 => cond_reduce!(len == 3, map!(be_u16, |x| Message::Port(x)))
-                ) >> (m))
+                    9 => cond!(len == 3, map!(be_u16, |x| Message::Port(x)))
+                ) >> (m.unwrap()))
             )
             >> (m)
     )

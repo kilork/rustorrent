@@ -1,5 +1,7 @@
 use super::*;
 use crate::types::{BencodeBlob, BencodeValue};
+use nom::character::complete::digit1;
+use nom::*;
 
 macro_rules! recognize_map (
     ($i:expr, $submac:ident!( $($args:tt)* ), $g:expr) => (
@@ -19,7 +21,7 @@ macro_rules! recognize_map (
 
 named!(
     integer_literal,
-    recognize!(do_parse!(opt!(tag!("-")) >> digit >> ()))
+    recognize!(do_parse!(opt!(tag!("-")) >> digit1 >> ()))
 );
 
 named!(

@@ -62,8 +62,15 @@ from_rustorrent_error!(
 );
 
 impl<'a> From<nom::Err<&'a [u8]>> for RustorrentError {
-    fn from(_value: nom::Err<&'a [u8]>) -> Self {
-        error!("{}", _value);
+    fn from(value: nom::Err<&'a [u8]>) -> Self {
+        error!("{:?}", value);
+        RustorrentError::Parser
+    }
+}
+
+impl<'a> From<nom::Err<(&'a [u8], nom::error::ErrorKind)>> for RustorrentError {
+    fn from(value: nom::Err<(&'a [u8], nom::error::ErrorKind)>) -> Self {
+        error!("{:?}", value);
         RustorrentError::Parser
     }
 }

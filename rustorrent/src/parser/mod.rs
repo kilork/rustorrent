@@ -1,7 +1,5 @@
 use crate::errors::RustorrentError;
 
-use nom::*;
-
 mod bencode;
 mod message;
 mod peer;
