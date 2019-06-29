@@ -39,7 +39,7 @@ use crate::types::torrent::{Torrent, TrackerAnnounce};
 use crate::types::Settings;
 use crate::SHA1_SIZE;
 
-const TWO_MINUTES: Duration = Duration::from_secs(120);
+const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(110);
 
 pub struct RustorrentApp {
     inner: Arc<Inner>,
@@ -317,7 +317,7 @@ impl Inner {
                     RustorrentCommand::ProcessAnnounceError(torrent_process_err, err);
                 this_err
                     .send_command(process_announce)
-                    .map_err(|err| error!("{}", err))
+                    .map_err(|err| error!("Cannot send process announce error: {}", err))
                     .unwrap();
             });
         tokio::spawn(process);
@@ -337,7 +337,7 @@ impl Inner {
                 self.command_start_announce_process(torrent_process)?;
                 Ok(())
             })
-            .map_err(|_| ());
+            .map_err(|err| error!("Delayed task failed: {}", err));
         tokio::spawn(task);
         Ok(())
     }
@@ -371,16 +371,17 @@ impl Inner {
 
         let conntx = tx.clone();
         let addr = torrent_peer.addr;
-        let task_keepalive = Interval::new(Instant::now(), TWO_MINUTES)
-            .for_each(move |_| {
-                debug!("Peer {}: sending message KeepAlive", addr);
-                let conntx = conntx.clone();
-                conntx
-                    .send(Message::KeepAlive)
-                    .map(|_| ())
-                    .map_err(|_| tokio::timer::Error::shutdown())
-            })
-            .map_err(move |e| error!("Peer {}: interval errored; err={:?}", addr, e));
+        let task_keepalive =
+            Interval::new(Instant::now() + KEEP_ALIVE_INTERVAL, KEEP_ALIVE_INTERVAL)
+                .for_each(move |_| {
+                    debug!("Peer {}: sending message KeepAlive", addr);
+                    let conntx = conntx.clone();
+                    conntx.send(Message::KeepAlive).map(|_| ()).map_err(|err| {
+                        error!("Error in KeepAlive send, return shutdown: {}", err);
+                        tokio::timer::Error::shutdown()
+                    })
+                })
+                .map_err(move |e| error!("Peer {}: interval errored; err={:?}", addr, e));
 
         let torrent_process_handshake = torrent_process.clone();
         let torrent_peer_handshake_done = torrent_peer.clone();
@@ -420,7 +421,7 @@ impl Inner {
 
                 let (writer, reader) = stream.framed(MessageCodec::default()).split();
 
-                let writer = writer.sink_map_err(|err| error!("{}", err));
+                let writer = writer.sink_map_err(|err| error!("Error in sink channel: {}", err));
 
                 let sink = rx.forward(writer).inspect(move |(_a, _sink)| {
                     debug!("Peer {}: updated", addr);
@@ -440,9 +441,14 @@ impl Inner {
                         match frame {
                             Message::KeepAlive => {
                                 let conntx = tx.clone();
-                                tokio::spawn(
-                                    conntx.send(Message::KeepAlive).map(|_| ()).map_err(|_| ()),
-                                );
+                                tokio::spawn(conntx.send(Message::KeepAlive).map(|_| ()).map_err(
+                                    move |e| {
+                                        error!(
+                                            "Peer {}: Cannot send KeepAlive message: {:?}",
+                                            addr, e
+                                        )
+                                    },
+                                ));
                             }
                             message => {
                                 let peer_message = RustorrentCommand::PeerMessage(
@@ -562,7 +568,7 @@ impl Inner {
                 }
                 Ok(())
             })
-            .map_err(|_| ());
+            .map_err(|err| error!("Info update loop failure: {}", err));
         tokio::spawn(interval_task);
     }
 }
@@ -648,7 +654,7 @@ impl RustorrentApp {
                 Ok(())
             })
             .select2(close_receiver)
-            .map_err(|_| ())
+            .map_err(|_err| error!("Error in run loop"))
             .then(|_| Ok(()))
     }
 }
