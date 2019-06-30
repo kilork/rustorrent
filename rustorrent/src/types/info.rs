@@ -2,12 +2,15 @@ use super::*;
 
 use std::path::PathBuf;
 
-use crate::SHA1_SIZE;
+use crate::{BLOCK_SIZE, SHA1_SIZE};
 
 /// Normalized info from torrent.
 #[derive(Debug, PartialEq)]
 pub struct TorrentInfo {
     pub piece_length: usize,
+    pub default_blocks_count: usize,
+    pub last_piece_length: usize,
+    pub last_piece_blocks_count: usize,
     pub pieces: Vec<Piece>,
     pub mapping: Vec<PieceToFiles>,
     pub length: usize,
@@ -54,10 +57,28 @@ impl From<TorrentInfoRaw> for TorrentInfo {
 
         let piece_length = raw.piece_length as usize;
 
+        let default_blocks_count =
+            piece_length / BLOCK_SIZE + if piece_length % BLOCK_SIZE != 0 { 1 } else { 0 };
+
+        let mut last_piece_length = length % piece_length;
+        if last_piece_length == 0 {
+            last_piece_length = piece_length;
+        }
+
+        let last_piece_blocks_count = last_piece_length / BLOCK_SIZE
+            + if last_piece_length % BLOCK_SIZE != 0 {
+                1
+            } else {
+                0
+            };
+
         let mapping = map_pieces_to_files(piece_length, &files);
 
         Self {
             piece_length,
+            default_blocks_count,
+            last_piece_length,
+            last_piece_blocks_count,
             pieces,
             mapping,
             length,
