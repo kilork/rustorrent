@@ -9,6 +9,23 @@ impl Inner {
     ) -> Result<(), RustorrentError> {
         info!("Received command to download block: {:?}", &block);
 
+        let mut blocks_downloading = torrent_process.blocks_downloading.lock().unwrap();
+
+        if let Some(another_torrent_peer) = blocks_downloading.get(&block) {
+            if let TorrentPeerState::Connected { downloading, .. } =
+                *another_torrent_peer.state.lock().unwrap()
+            {
+                if downloading {
+                    debug!(
+                        "Another peer {} downloading same {:?}",
+                        another_torrent_peer.addr, &block
+                    );
+
+                    return Ok(());
+                }
+            }
+        }
+
         if let TorrentPeerState::Connected {
             chocked,
             ref mut downloading,
@@ -19,14 +36,13 @@ impl Inner {
             if !chocked && !*downloading {
                 debug!("Peer {}: sending message Request", torrent_peer.addr);
                 *downloading = true;
-                crate::messages::send_message_to_peer(
-                    sender,
-                    Message::Request {
-                        index: block.piece,
-                        begin: block.begin,
-                        length: block.length,
-                    },
-                );
+                let request = Message::Request {
+                    index: block.piece,
+                    begin: block.begin,
+                    length: block.length,
+                };
+                blocks_downloading.insert(block, torrent_peer.clone());
+                crate::messages::send_message_to_peer(sender, request);
             }
         }
 

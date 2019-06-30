@@ -1,4 +1,5 @@
 use crate::PEER_ID;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::mem;
 use std::mem::drop;
@@ -63,6 +64,7 @@ pub struct TorrentProcess {
     pub(crate) hash_id: [u8; SHA1_SIZE],
     pub(crate) torrent_state: Arc<Mutex<TorrentProcessState>>,
     pub(crate) announce_state: Arc<Mutex<AnnounceState>>,
+    pub(crate) blocks_downloading: Arc<Mutex<HashMap<Block, Arc<TorrentPeer>>>>,
     pub(crate) stats: Arc<Mutex<TorrentProcessStats>>,
     pub(crate) torrent_storage: RwLock<TorrentStorage>,
 }
@@ -142,7 +144,7 @@ pub(crate) enum AnnounceState {
     Error(Arc<RustorrentError>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Hash, Eq)]
 pub(crate) struct Block {
     pub piece: u32,
     pub begin: u32,

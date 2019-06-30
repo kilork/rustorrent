@@ -35,6 +35,7 @@ impl Inner {
                 uploaded: 0,
                 left,
             })),
+            blocks_downloading: Arc::new(Mutex::new(HashMap::new())),
             torrent_storage: RwLock::new(TorrentStorage {
                 pieces: vec![Arc::new(Mutex::new(Default::default())); pieces_count],
                 peers: vec![],
