@@ -4,7 +4,7 @@ pub(crate) fn message_bitfield(
     torrent_process: Arc<TorrentProcess>,
     torrent_peer: Arc<TorrentPeer>,
     mut bitfield_pieces: Vec<u8>,
-) -> Result<(), RustorrentError> {
+) -> Result<Option<RustorrentCommand>, RustorrentError> {
     let mut need_to_download = false;
     for (index, piece) in torrent_process
         .torrent_storage
@@ -46,9 +46,11 @@ pub(crate) fn message_bitfield(
 
         if chocked && need_to_download {
             debug!("Peer {}: sending message Interested", torrent_peer.addr);
+            // TODO: according to design idea message should be send only from commands
+            // so we should refactor this later
             send_message_to_peer(sender, Message::Interested);
         }
     }
 
-    Ok(())
+    Ok(None)
 }

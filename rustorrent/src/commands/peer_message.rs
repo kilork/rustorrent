@@ -10,14 +10,17 @@ impl Inner {
     ) -> Result<(), RustorrentError> {
         info!("Handle message: {:?}", message);
 
-        match message {
+        if let Some(command) = match message {
             Message::Bitfield(bitfield_pieces) => {
-                message_bitfield(torrent_process, torrent_peer, bitfield_pieces)?;
+                message_bitfield(torrent_process, torrent_peer, bitfield_pieces)?
             }
-            Message::Unchoke => {
-                message_unchoke(torrent_process, torrent_peer)?;
+            Message::Unchoke => message_unchoke(torrent_process, torrent_peer)?,
+            _ => {
+                warn!("Unsupported message {:?}", message);
+                None
             }
-            _ => warn!("Unsupported message {:?}", message),
+        } {
+            self.clone().send_command(command)?;
         }
 
         Ok(())

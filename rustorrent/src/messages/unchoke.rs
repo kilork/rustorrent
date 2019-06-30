@@ -3,8 +3,9 @@ use super::*;
 pub(crate) fn message_unchoke(
     torrent_process: Arc<TorrentProcess>,
     torrent_peer: Arc<TorrentPeer>,
-) -> Result<(), RustorrentError> {
-    match *torrent_peer.state.lock().unwrap() {
+) -> Result<Option<RustorrentCommand>, RustorrentError> {
+    let mut state = torrent_peer.state.lock().unwrap();
+    match *state {
         TorrentPeerState::Connected {
             ref mut chocked,
             ref interested,
@@ -25,37 +26,48 @@ pub(crate) fn message_unchoke(
                     continue;
                 }
 
-                let (index_byte, index_bit) = index_in_bitarray(index);
+                if let Some((index_byte, index_bit)) = bit_by_index(index, &pieces) {
+                    info!("Found piece to download from peer! And we can request, yahoo!");
 
-                info!(
-                    "Piece {} is not downloaded, checking presence in bitfield ({}:{})",
-                    index, index_byte, index_bit
-                );
+                    let is_last_piece = index != torrent_pieces.len() - 1;
 
-                if let Some(v) = pieces.get(index_byte).map(|&v| v & index_bit) {
-                    if v == index_bit {
-                        info!("Found piece to download from peer! And we can request, yahoo!");
+                    let info = &torrent_process.info;
 
-                        let is_last_piece = index != torrent_pieces.len() - 1;
-                        let info = &torrent_process.info;
-                        // find block to request from peer
-                        if piece_state.data.is_empty() {
-                            let (piece_length, blocks_count) = if is_last_piece {
-                                (info.piece_length, info.default_blocks_count)
-                            } else {
-                                (info.last_piece_length, info.last_piece_blocks_count)
-                            };
-                            piece_state.data = vec![0; piece_length];
-                            piece_state.blocks = vec![0; blocks_count];
-                        }
+                    let (piece_length, blocks_count) = if is_last_piece {
+                        (info.piece_length, info.default_blocks_count)
+                    } else {
+                        (info.last_piece_length, info.last_piece_blocks_count)
+                    };
 
-                        break;
+                    // find block to request from peer
+                    if piece_state.data.is_empty() {
+                        piece_state.data = vec![0; piece_length];
+                        piece_state.blocks = vec![0; blocks_count];
                     }
+
+                    for block_index in 0..blocks_count {
+                        if bit_by_index(block_index, &piece_state.blocks).is_none() {
+                            let block = Block {
+                                piece: index as u32,
+                                begin: block_index as u32 * BLOCK_SIZE as u32,
+                                length: BLOCK_SIZE as u32, // TODO: should be properly calculated for corner cases
+                            };
+
+                            let download_piece = RustorrentCommand::DownloadBlock(
+                                torrent_process.clone(),
+                                torrent_peer.clone(),
+                                block,
+                            );
+
+                            return Ok(Some(download_piece));
+                        }
+                    }
+                    break;
                 }
             }
         }
-        _ => (),
+        _ => warn!("Peer {} is in wrong state: {:?}", torrent_peer.addr, state),
     }
 
-    Ok(())
+    Ok(None)
 }

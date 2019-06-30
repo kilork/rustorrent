@@ -141,9 +141,17 @@ pub(crate) enum AnnounceState {
     Error(Arc<RustorrentError>),
 }
 
+#[derive(Debug)]
+pub(crate) struct Block {
+    pub piece: u32,
+    pub begin: u32,
+    pub length: u32,
+}
+
 pub(crate) enum RustorrentCommand {
     PeerMessage(Arc<TorrentProcess>, Arc<TorrentPeer>, Message),
     ConnectToPeer(Arc<TorrentProcess>, Arc<TorrentPeer>),
+    DownloadBlock(Arc<TorrentProcess>, Arc<TorrentPeer>, Block),
     ProcessAnnounce(Arc<TorrentProcess>, TrackerAnnounce),
     ProcessAnnounceError(Arc<TorrentProcess>, Arc<RustorrentError>),
     AddTorrent(PathBuf),
@@ -299,6 +307,9 @@ impl RustorrentApp {
                     }
                     RustorrentCommand::PeerMessage(torrent_process, torrent_peer, message) => {
                         this.command_peer_message(torrent_process, torrent_peer, message)?;
+                    }
+                    RustorrentCommand::DownloadBlock(torrent_process, torrent_peer, block) => {
+                        this.command_download_block(torrent_process, torrent_peer, block)?;
                     }
                 }
 

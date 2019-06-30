@@ -1,7 +1,4 @@
-use crate::app::{
-    AnnounceState, Inner, RustorrentCommand, TorrentPeer, TorrentPeerState, TorrentProcess,
-    TorrentProcessState, TorrentProcessStats, TorrentStorage,
-};
+use crate::app::*;
 use crate::errors::RustorrentError;
 use crate::types::message::{Message, MessageCodec, MessageCodecError};
 use crate::types::torrent::parse_torrent;
@@ -37,6 +34,7 @@ use tokio::timer::{Delay, Interval};
 
 mod add_torrent;
 mod connect_to_peer;
+mod download_block;
 mod peer_message;
 mod process_announce;
 mod start_announce_process;
