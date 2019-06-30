@@ -82,7 +82,7 @@ impl Inner {
 
                 let conn = reader
                     .for_each(move |frame| {
-                        debug!("Peer {}: received message {:?}", addr, frame);
+                        debug!("Peer {}: received message {}", addr, frame);
                         match frame {
                             Message::KeepAlive => {
                                 let conntx = tx.clone();

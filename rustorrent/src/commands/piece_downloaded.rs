@@ -7,6 +7,9 @@ impl Inner {
         piece: usize,
     ) -> Result<(), RustorrentError> {
         info!("Piece {} downloaded, checking SHA1", piece);
-        Ok(())
+        unimplemented!();
+        // TODO: 1. check overall progress and update
+        // TODO: 2. select next block to download
+        // TODO: 3. send Have message
     }
 }

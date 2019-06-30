@@ -25,7 +25,7 @@ fn index_in_bitarray(index: usize) -> (usize, u8) {
 }
 
 #[inline]
-fn bit_by_index(index: usize, data: &[u8]) -> Option<(usize, u8)> {
+pub(crate) fn bit_by_index(index: usize, data: &[u8]) -> Option<(usize, u8)> {
     let (index_byte, index_bit) = index_in_bitarray(index);
     data.get(index_byte).and_then(|&v| {
         if v & index_bit == index_bit {

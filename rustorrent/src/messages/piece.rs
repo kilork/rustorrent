@@ -54,12 +54,13 @@ pub(crate) fn message_piece(
     }
 
     let storage = torrent_process.torrent_storage.read().unwrap();
-    if let Some(piece) = storage.pieces.get(piece_index as usize) {
-        let block_index = begin as usize / BLOCK_SIZE;
+    let piece_index = piece_index as usize;
+    if let Some(piece) = storage.pieces.get(piece_index) {
+        let begin = begin as usize;
+        let block_index = begin / BLOCK_SIZE;
         let (block_index_byte, block_index_bit) = index_in_bitarray(block_index);
 
         let mut piece = piece.lock().unwrap();
-        let begin = begin as usize;
         let to = &mut piece.data[begin..begin + data.len()];
         to.copy_from_slice(&data);
         if let Some(v) = piece.blocks.get_mut(block_index_byte) {
@@ -68,18 +69,21 @@ pub(crate) fn message_piece(
 
         piece.blocks_to_download -= 1;
         if piece.blocks_to_download == 0 {
+            debug!("Downloaded all blocks for piece {}", piece_index);
             piece.downloaded = true;
 
             let piece_downloaded =
-                RustorrentCommand::PieceDownloaded(torrent_process.clone(), piece_index as usize);
+                RustorrentCommand::PieceDownloaded(torrent_process.clone(), piece_index);
             return Ok(Some(piece_downloaded));
         }
+
+        let download_next_block =
+            RustorrentCommand::DownloadNextBlock(torrent_process.clone(), torrent_peer.clone());
+        return Ok(Some(download_next_block));
     } else {
         panic!(
             "Cannot find piece with index {} to update with block data",
             piece_index
         );
     }
-
-    Ok(None)
 }

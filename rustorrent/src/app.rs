@@ -159,6 +159,7 @@ pub(crate) enum RustorrentCommand {
     ProcessAnnounce(Arc<TorrentProcess>, TrackerAnnounce),
     ProcessAnnounceError(Arc<TorrentProcess>, Arc<RustorrentError>),
     PieceDownloaded(Arc<TorrentProcess>, usize),
+    DownloadNextBlock(Arc<TorrentProcess>, Arc<TorrentPeer>),
     AddTorrent(PathBuf),
     Quit,
 }
@@ -318,6 +319,9 @@ impl RustorrentApp {
                     }
                     RustorrentCommand::PieceDownloaded(torrent_process, piece) => {
                         this.command_piece_downloaded(torrent_process, piece)?;
+                    }
+                    RustorrentCommand::DownloadNextBlock(torrent_process, torrent_peer) => {
+                        this.command_download_next_block(torrent_process, torrent_peer)?;
                     }
                 }
 

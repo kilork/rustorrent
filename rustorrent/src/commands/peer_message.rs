@@ -8,7 +8,7 @@ impl Inner {
         torrent_peer: Arc<TorrentPeer>,
         message: Message,
     ) -> Result<(), RustorrentError> {
-        info!("Handle message: {:?}", message);
+        info!("Handle message {}", message);
 
         if let Some(command) = match message {
             Message::Bitfield(bitfield_pieces) => {

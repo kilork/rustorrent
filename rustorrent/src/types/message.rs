@@ -1,8 +1,8 @@
 use crate::parser::parser_message;
-
 use bytes::{BufMut, BytesMut};
 use failure::Fail;
 use nom::Offset;
+use std::fmt::{Display, Formatter};
 use tokio::codec::{Decoder, Encoder};
 
 /// Messages in the protocol take the form of <length prefix><message ID><payload>. The length prefix is a four byte big-endian value. The message ID is a single decimal byte. The payload is message dependent.
@@ -84,6 +84,19 @@ pub enum Message {
     ///
     /// The port message is sent by newer versions of the Mainline that implements a DHT tracker. The listen port is the port this peer's DHT node is listening on. This peer should be inserted in the local routing table (if DHT tracker is supported).
     Port(u16),
+}
+
+impl Display for Message {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Message::Piece {
+                index,
+                begin,
+                block,
+            } => write!(f, "Piece({}, {}, [{}])", index, begin, block.len()),
+            _ => write!(f, "{:?}", self),
+        }
+    }
 }
 
 #[derive(Fail, Debug)]
