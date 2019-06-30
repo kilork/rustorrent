@@ -18,8 +18,7 @@ pub(crate) fn message_bitfield(
         if downloaded {
             continue;
         }
-        let index_byte = index / 8;
-        let index_bit = 128u8 >> (index % 8);
+        let (index_byte, index_bit) = index_in_bitarray(index);
 
         info!(
             "Piece {} is not downloaded, checking presence in bitfield ({}:{})",
@@ -47,8 +46,7 @@ pub(crate) fn message_bitfield(
 
         if chocked && need_to_download {
             debug!("Peer {}: sending message Interested", torrent_peer.addr);
-            let conntx = sender.clone();
-            tokio::spawn(conntx.send(Message::Interested).map(|_| ()).map_err(|_| ()));
+            send_message_to_peer(sender, Message::Interested);
         }
     }
 
