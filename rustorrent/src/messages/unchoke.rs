@@ -11,6 +11,7 @@ pub(crate) fn message_unchoke(
             ref interested,
             ref sender,
             ref pieces,
+            ..
         } => {
             if !*chocked {
                 warn!("Peer {}: already unchocked!", torrent_peer.addr);

@@ -34,7 +34,7 @@ fn bit_by_index(index: usize, data: &[u8]) -> Option<(usize, u8)> {
     })
 }
 
-fn send_message_to_peer(sender: &Sender<Message>, message: Message) {
+pub(crate) fn send_message_to_peer(sender: &Sender<Message>, message: Message) {
     let conntx = sender.clone();
     tokio::spawn(
         conntx

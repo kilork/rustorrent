@@ -75,6 +75,7 @@ impl Inner {
                 *torrent_peer_handshake_done.state.lock().unwrap() = TorrentPeerState::Connected {
                     chocked: true,
                     interested: false,
+                    downloading: false,
                     sender: conntx_state.clone(),
                     pieces: vec![],
                 };

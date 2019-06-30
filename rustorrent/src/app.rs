@@ -105,6 +105,7 @@ pub(crate) enum TorrentPeerState {
     Connected {
         chocked: bool,
         interested: bool,
+        downloading: bool,
         sender: Sender<Message>,
         pieces: Vec<u8>,
     },
