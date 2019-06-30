@@ -80,6 +80,7 @@ pub(crate) struct TorrentPiece {
     pub(crate) downloaded: bool,
     pub(crate) data: Vec<u8>,
     pub(crate) blocks: Vec<u8>,
+    pub(crate) blocks_to_download: usize,
 }
 
 #[derive(Debug)]
@@ -157,6 +158,7 @@ pub(crate) enum RustorrentCommand {
     DownloadBlock(Arc<TorrentProcess>, Arc<TorrentPeer>, Block),
     ProcessAnnounce(Arc<TorrentProcess>, TrackerAnnounce),
     ProcessAnnounceError(Arc<TorrentProcess>, Arc<RustorrentError>),
+    PieceDownloaded(Arc<TorrentProcess>, usize),
     AddTorrent(PathBuf),
     Quit,
 }
@@ -313,6 +315,9 @@ impl RustorrentApp {
                     }
                     RustorrentCommand::DownloadBlock(torrent_process, torrent_peer, block) => {
                         this.command_download_block(torrent_process, torrent_peer, block)?;
+                    }
+                    RustorrentCommand::PieceDownloaded(torrent_process, piece) => {
+                        this.command_piece_downloaded(torrent_process, piece)?;
                     }
                 }
 

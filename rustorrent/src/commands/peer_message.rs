@@ -15,6 +15,11 @@ impl Inner {
                 message_bitfield(torrent_process, torrent_peer, bitfield_pieces)?
             }
             Message::Unchoke => message_unchoke(torrent_process, torrent_peer)?,
+            Message::Piece {
+                index,
+                begin,
+                block,
+            } => message_piece(torrent_process, torrent_peer, index, begin, block)?,
             _ => {
                 warn!("Unsupported message {:?}", message);
                 None

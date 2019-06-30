@@ -43,7 +43,8 @@ pub(crate) fn message_unchoke(
                     // find block to request from peer
                     if piece_state.data.is_empty() {
                         piece_state.data = vec![0; piece_length];
-                        piece_state.blocks = vec![0; blocks_count];
+                        piece_state.blocks = vec![0; (blocks_count / 8) + 1];
+                        piece_state.blocks_to_download = blocks_count;
                     }
 
                     for block_index in 0..blocks_count {

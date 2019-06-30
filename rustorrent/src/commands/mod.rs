@@ -37,6 +37,7 @@ mod add_torrent;
 mod connect_to_peer;
 mod download_block;
 mod peer_message;
+mod piece_downloaded;
 mod process_announce;
 mod start_announce_process;
 

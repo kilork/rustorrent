@@ -12,9 +12,11 @@ use crate::errors::{RustorrentError, TryFromBencode};
 use crate::types::message::Message;
 
 mod bitfield;
+mod piece;
 mod unchoke;
 
 pub(crate) use bitfield::message_bitfield;
+pub(crate) use piece::message_piece;
 pub(crate) use unchoke::message_unchoke;
 
 #[inline]
