@@ -83,6 +83,19 @@ pub(crate) struct TorrentPiece {
     pub(crate) blocks_to_download: usize,
 }
 
+impl TorrentPiece {
+    pub(crate) fn init(&mut self, piece_length: usize, blocks_count: usize) {
+        self.data = vec![0; piece_length];
+        self.blocks = vec![0; (blocks_count / 8) + 1];
+        self.blocks_to_download = blocks_count;
+    }
+
+    pub(crate) fn init_from_info(&mut self, info: &TorrentInfo, index: usize) {
+        let (piece_length, blocks_count) = info.sizes(index);
+        self.init(piece_length, blocks_count);
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct TorrentPeer {
     pub(crate) addr: SocketAddr,
@@ -158,7 +171,7 @@ pub(crate) enum RustorrentCommand {
     DownloadBlock(Arc<TorrentProcess>, Arc<TorrentPeer>, Block),
     ProcessAnnounce(Arc<TorrentProcess>, TrackerAnnounce),
     ProcessAnnounceError(Arc<TorrentProcess>, Arc<RustorrentError>),
-    PieceDownloaded(Arc<TorrentProcess>, usize),
+    PieceDownloaded(Arc<TorrentProcess>, Arc<TorrentPeer>, usize),
     DownloadNextBlock(Arc<TorrentProcess>, Arc<TorrentPeer>),
     AddTorrent(PathBuf),
     Quit,
@@ -317,8 +330,8 @@ impl RustorrentApp {
                     RustorrentCommand::DownloadBlock(torrent_process, torrent_peer, block) => {
                         this.command_download_block(torrent_process, torrent_peer, block)?;
                     }
-                    RustorrentCommand::PieceDownloaded(torrent_process, piece) => {
-                        this.command_piece_downloaded(torrent_process, piece)?;
+                    RustorrentCommand::PieceDownloaded(torrent_process, torrent_peer, piece) => {
+                        this.command_piece_downloaded(torrent_process, torrent_peer, piece)?;
                     }
                     RustorrentCommand::DownloadNextBlock(torrent_process, torrent_peer) => {
                         this.command_download_next_block(torrent_process, torrent_peer)?;

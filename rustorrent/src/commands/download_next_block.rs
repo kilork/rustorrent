@@ -64,6 +64,7 @@ impl Inner {
                                         block,
                                     );
                                     self.clone().send_command(download_piece)?;
+
                                     return Ok(());
                                 }
                             }
@@ -73,6 +74,8 @@ impl Inner {
                 }
             }
         }
+
+        debug!("No next block to download found.");
 
         Ok(())
     }

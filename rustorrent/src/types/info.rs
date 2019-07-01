@@ -25,6 +25,18 @@ impl TorrentInfo {
     pub fn len(&self) -> usize {
         self.length
     }
+
+    /// Returns piece length and blocks count from piece index.
+    /// For last piece information can differ, for that reason we need piece index.
+    pub fn sizes(&self, index: usize) -> (usize, usize) {
+        let is_last_piece = index != self.pieces.len() - 1;
+
+        if is_last_piece {
+            (self.piece_length, self.default_blocks_count)
+        } else {
+            (self.last_piece_length, self.last_piece_blocks_count)
+        }
+    }
 }
 
 impl From<TorrentInfoRaw> for TorrentInfo {
@@ -140,6 +152,14 @@ pub struct TorrentInfoFile {
 
 #[derive(Debug, PartialEq)]
 pub struct Piece([u8; SHA1_SIZE]);
+
+impl TryFrom<&[u8]> for Piece {
+    type Error = std::array::TryFromSliceError;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        Ok(Piece(value.try_into()?))
+    }
+}
 
 #[derive(Debug, PartialEq)]
 pub struct PieceToFiles(Vec<FileBlock>);

@@ -72,8 +72,11 @@ pub(crate) fn message_piece(
             debug!("Downloaded all blocks for piece {}", piece_index);
             piece.downloaded = true;
 
-            let piece_downloaded =
-                RustorrentCommand::PieceDownloaded(torrent_process.clone(), piece_index);
+            let piece_downloaded = RustorrentCommand::PieceDownloaded(
+                torrent_process.clone(),
+                torrent_peer.clone(),
+                piece_index,
+            );
             return Ok(Some(piece_downloaded));
         }
 
