@@ -23,6 +23,9 @@ impl Inner {
         let info = torrent.info()?;
         let left = info.len();
         let pieces_count = info.pieces.len();
+        let pieces = (0..pieces_count)
+            .map(|_| Arc::new(Mutex::new(Default::default())))
+            .collect();
         let process = Arc::new(TorrentProcess {
             path,
             torrent,
@@ -37,7 +40,7 @@ impl Inner {
             })),
             blocks_downloading: Arc::new(Mutex::new(HashMap::new())),
             torrent_storage: RwLock::new(TorrentStorage {
-                pieces: vec![Arc::new(Mutex::new(Default::default())); pieces_count],
+                pieces,
                 peers: vec![],
             }),
         });

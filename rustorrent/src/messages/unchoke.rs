@@ -30,30 +30,19 @@ pub(crate) fn message_unchoke(
                 if let Some((index_byte, index_bit)) = bit_by_index(index, &pieces) {
                     info!("Found piece to download from peer! And we can request, yahoo!");
 
-                    let is_last_piece = index != torrent_pieces.len() - 1;
-
                     let info = &torrent_process.info;
 
-                    let (piece_length, blocks_count) = if is_last_piece {
-                        (info.piece_length, info.default_blocks_count)
-                    } else {
-                        (info.last_piece_length, info.last_piece_blocks_count)
-                    };
+                    let (piece_length, blocks_count) = info.sizes(index);
 
                     // find block to request from peer
                     if piece_state.data.is_empty() {
-                        piece_state.data = vec![0; piece_length];
-                        piece_state.blocks = vec![0; (blocks_count / 8) + 1];
-                        piece_state.blocks_to_download = blocks_count;
+                        piece_state.init(piece_length, blocks_count);
                     }
 
                     for block_index in 0..blocks_count {
                         if bit_by_index(block_index, &piece_state.blocks).is_none() {
-                            let block = Block {
-                                piece: index as u32,
-                                begin: block_index as u32 * BLOCK_SIZE as u32,
-                                length: BLOCK_SIZE as u32, // TODO: should be properly calculated for corner cases
-                            };
+                            let block =
+                                block_from_piece(index, piece_length, block_index, blocks_count);
 
                             let download_piece = RustorrentCommand::DownloadBlock(
                                 torrent_process.clone(),

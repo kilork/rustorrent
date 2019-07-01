@@ -14,6 +14,7 @@ impl Inner {
         let info = &torrent_process.info;
 
         for (piece_index, piece) in torrent_pieces.iter().enumerate() {
+            debug!("Checking piece {}", piece_index);
             let mut piece_state = piece.lock().unwrap();
 
             let downloaded = piece_state.downloaded;
@@ -21,18 +22,15 @@ impl Inner {
                 continue;
             }
 
-            let is_last_piece = piece_index != torrent_pieces.len() - 1;
+            let (piece_length, blocks_count) = info.sizes(piece_index);
 
-            let (piece_length, blocks_count) = if is_last_piece {
-                (info.piece_length, info.default_blocks_count)
-            } else {
-                (info.last_piece_length, info.last_piece_blocks_count)
-            };
+            debug!(
+                "Piece {} is not downdloaded, piece length: {}, blocks count: {}",
+                piece_index, piece_length, blocks_count
+            );
 
             if piece_state.data.is_empty() {
-                piece_state.data = vec![0; piece_length];
-                piece_state.blocks = vec![0; (blocks_count / 8) + 1];
-                piece_state.blocks_to_download = blocks_count;
+                piece_state.init(piece_length, blocks_count);
             }
 
             for peer in torrent_peers {
@@ -52,11 +50,12 @@ impl Inner {
                                 if crate::messages::bit_by_index(block_index, &piece_state.blocks)
                                     .is_none()
                                 {
-                                    let block = Block {
-                                        piece: piece_index as u32,
-                                        begin: block_index as u32 * BLOCK_SIZE as u32,
-                                        length: BLOCK_SIZE as u32, // TODO: should be properly calculated for corner cases
-                                    };
+                                    let block = crate::messages::block_from_piece(
+                                        piece_index,
+                                        piece_length,
+                                        block_index,
+                                        blocks_count,
+                                    );
 
                                     let download_piece = RustorrentCommand::DownloadBlock(
                                         torrent_process.clone(),
