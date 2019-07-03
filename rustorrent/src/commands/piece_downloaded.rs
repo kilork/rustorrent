@@ -54,7 +54,6 @@ impl Inner {
                         RustorrentCommand::DownloadNextBlock(torrent_process.clone(), torrent_peer);
                     self.send_command(download_next_block)?;
                 } else {
-                    // TODO: download finished - need to change state
                     debug!("Download finished.");
                     *torrent_process.torrent_state.lock().unwrap() = TorrentProcessState::Upload;
                 }

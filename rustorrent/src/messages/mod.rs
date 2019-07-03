@@ -11,10 +11,12 @@ use crate::errors::RustorrentError;
 use crate::types::message::Message;
 
 mod bitfield;
+mod choke;
 mod piece;
 mod unchoke;
 
 pub(crate) use bitfield::message_bitfield;
+pub(crate) use choke::message_choke;
 pub(crate) use piece::message_piece;
 pub(crate) use unchoke::message_unchoke;
 
