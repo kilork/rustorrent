@@ -1,14 +1,13 @@
 use super::*;
 
 use std::sync::Arc;
-use std::sync::Mutex;
 
 use futures::prelude::*;
-use futures::sync::mpsc::{channel, Receiver, Sender};
+use futures::sync::mpsc::Sender;
 use log::{debug, error, info, warn};
 
 use crate::app::*;
-use crate::errors::{RustorrentError, TryFromBencode};
+use crate::errors::RustorrentError;
 use crate::types::message::Message;
 
 mod bitfield;

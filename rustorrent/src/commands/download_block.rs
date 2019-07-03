@@ -9,6 +9,16 @@ impl Inner {
     ) -> Result<(), RustorrentError> {
         info!("Received command to download block: {:?}", &block);
 
+        {
+            let mut torrent_process_state = torrent_process.torrent_state.lock().unwrap();
+            *torrent_process_state = match *torrent_process_state {
+                TorrentProcessState::Init => TorrentProcessState::Download,
+                TorrentProcessState::Download => TorrentProcessState::Download,
+                TorrentProcessState::DownloadUpload => TorrentProcessState::DownloadUpload,
+                TorrentProcessState::Upload => TorrentProcessState::DownloadUpload,
+                TorrentProcessState::Finished => TorrentProcessState::DownloadUpload,
+            };
+        }
         let mut blocks_downloading = torrent_process.blocks_downloading.lock().unwrap();
 
         if let Some(another_torrent_peer) = blocks_downloading.get(&block) {

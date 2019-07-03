@@ -141,13 +141,12 @@ pub(crate) struct TorrentProcessStats {
     pub(crate) left: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TorrentProcessState {
     Init,
     Download,
     DownloadUpload,
     Upload,
-    Checksum,
     Finished,
 }
 
