@@ -1,11 +1,11 @@
 use super::*;
 use crate::parser::parse_handshake;
 
-use std::net::Ipv4Addr;
+use std::net::{IpAddr, Ipv4Addr};
 
 #[derive(Debug, PartialEq)]
 pub struct Peer {
-    pub ip: Ipv4Addr,
+    pub ip: IpAddr,
     pub peer_id: Option<String>,
     pub port: u16,
 }
@@ -28,7 +28,7 @@ impl TryFrom<BencodeBlob> for Vec<Peer> {
             BencodeValue::String(s) => Ok(s
                 .chunks_exact(6)
                 .map(|peer| Peer {
-                    ip: Ipv4Addr::new(peer[0], peer[1], peer[2], peer[3]),
+                    ip: IpAddr::V4(Ipv4Addr::new(peer[0], peer[1], peer[2], peer[3])),
                     port: u16::from(peer[4]) * 256u16 + u16::from(peer[5]),
                     peer_id: None,
                 })

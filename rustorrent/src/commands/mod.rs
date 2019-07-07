@@ -12,7 +12,6 @@ use futures::prelude::*;
 use futures::sync::mpsc::{channel, Receiver, Sender};
 use log::{debug, error, info, warn};
 use percent_encoding::{percent_encode, percent_encode_byte, SIMPLE_ENCODE_SET};
-use reqwest::r#async::{Client, Decoder as ReqwestDecoder};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::mem;

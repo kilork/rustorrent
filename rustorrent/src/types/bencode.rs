@@ -1,7 +1,7 @@
 use super::*;
 use crate::parser::parse_bencode;
 use std::convert::TryInto;
-use std::net::Ipv4Addr;
+use std::net::IpAddr;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct BencodeBlob {
@@ -129,7 +129,7 @@ impl TryFrom<BencodeValue> for Vec<Vec<String>> {
 }
 blanket_blob_value!(Vec<Vec<String>>);
 
-impl TryFrom<BencodeValue> for Ipv4Addr {
+impl TryFrom<BencodeValue> for IpAddr {
     type Error = TryFromBencode;
 
     fn try_from(value: BencodeValue) -> Result<Self, Self::Error> {
@@ -138,7 +138,7 @@ impl TryFrom<BencodeValue> for Ipv4Addr {
             .and_then(|s: String| s.parse().map_err(TryFromBencode::from))
     }
 }
-blanket_blob_value!(Ipv4Addr);
+blanket_blob_value!(IpAddr);
 
 impl From<BencodeBlob> for BencodeValue {
     fn from(blob: BencodeBlob) -> Self {

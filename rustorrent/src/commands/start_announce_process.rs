@@ -1,5 +1,7 @@
 use super::*;
 
+use hyper::{Client, Uri};
+
 impl Inner {
     pub(crate) fn command_start_announce_process(
         self: Arc<Self>,
@@ -51,14 +53,13 @@ impl Inner {
         let torrent_process_response = torrent_process.clone();
         let torrent_process_err = torrent_process.clone();
 
+        let uri = url.parse().unwrap();
         let process = client
-            .get(&url)
-            .send()
-            .and_then(|mut res| {
+            .get(uri)
+            .and_then(|res| {
                 debug!("Result code: {}", res.status());
 
-                let body = mem::replace(res.body_mut(), ReqwestDecoder::empty());
-                body.concat2()
+                res.into_body().concat2()
             })
             .and_then(|body| {
                 let mut buf = vec![];

@@ -30,7 +30,7 @@ impl Inner {
 
         let mut torrent_storage = torrent_process.torrent_storage.write().unwrap();
         for peer in &tracker_announce.peers {
-            let addr = SocketAddr::new(IpAddr::V4(peer.ip), peer.port);
+            let addr = SocketAddr::new(peer.ip, peer.port);
             if let Some(existing_peer) = torrent_storage
                 .peers
                 .iter()

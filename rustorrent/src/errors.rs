@@ -28,7 +28,7 @@ pub enum RustorrentError {
     #[fail(display = "convert from slice {}", _0)]
     ConvertFromSlice(core::array::TryFromSliceError),
     #[fail(display = "HTTP client {}", _0)]
-    HTTPClient(reqwest::Error),
+    HTTPClient(hyper::Error),
     #[fail(display = "parser fail")]
     Parser,
     #[fail(display = "tokio unbounded receiver {}", _0)]
@@ -50,7 +50,7 @@ macro_rules! from_rustorrent_error {
     };
 }
 
-from_rustorrent_error!(reqwest::Error, HTTPClient);
+from_rustorrent_error!(hyper::Error, HTTPClient);
 from_rustorrent_error!(TryFromBencode, TryFromBencode);
 from_rustorrent_error!(std::io::Error, IO);
 from_rustorrent_error!(std::convert::Infallible, Convert);

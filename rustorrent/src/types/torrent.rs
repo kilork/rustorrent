@@ -73,7 +73,7 @@ pub fn parse_torrent(filename: impl AsRef<Path>) -> Result<Torrent, RustorrentEr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::Ipv4Addr;
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     #[test]
     fn parse_torrent() {
@@ -88,7 +88,7 @@ mod tests {
         assert_eq!(
             peer,
             Peer {
-                ip: Ipv4Addr::new(127, 0, 0, 1),
+                ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                 port: 6970,
                 peer_id: Some("rustorrent          ".into())
             }
@@ -106,12 +106,12 @@ mod tests {
                 interval: 600,
                 peers: vec![
                     Peer {
-                        ip: Ipv4Addr::new(127, 0, 0, 1),
+                        ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                         port: 62437,
                         peer_id: Some("-TR2940-pm2sh9i76t4d".into())
                     },
                     Peer {
-                        ip: Ipv4Addr::new(127, 0, 0, 1),
+                        ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                         port: 6970,
                         peer_id: Some("rustorrent          ".into())
                     }
@@ -131,12 +131,12 @@ mod tests {
                 interval: 600,
                 peers: vec![
                     Peer {
-                        ip: Ipv4Addr::new(127, 0, 0, 1),
+                        ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                         port: 6970,
                         peer_id: None
                     },
                     Peer {
-                        ip: Ipv4Addr::new(127, 0, 0, 1),
+                        ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                         port: 62437,
                         peer_id: None
                     }
@@ -157,5 +157,23 @@ mod tests {
             ),
             res => panic!("Unexpected result: {:?}", res),
         }
+    }
+
+    #[test]
+    fn parse_announce_with_ipv6() {
+        let tracker_response = b"d8:completei0e10:incompletei1e8:intervali600e5:peersld2:ip3:::17:peer id20:-rs0001-zzzzxxxxyyyy4:porti6881eeee";
+        let tracker_announce_response: TrackerAnnounce =
+            tracker_response.to_vec().try_into().unwrap();
+        assert_eq!(
+            tracker_announce_response,
+            TrackerAnnounce {
+                interval: 600,
+                peers: vec![Peer {
+                    ip: IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
+                    port: 6881,
+                    peer_id: Some("-rs0001-zzzzxxxxyyyy".into()),
+                },],
+            }
+        );
     }
 }

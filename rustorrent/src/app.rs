@@ -21,7 +21,6 @@ use futures::prelude::*;
 use futures::sync::mpsc::{channel, Receiver, Sender};
 use log::{debug, error, info, warn};
 use percent_encoding::{percent_encode, percent_encode_byte, SIMPLE_ENCODE_SET};
-use reqwest::r#async::{Client, Decoder as ReqwestDecoder};
 use tokio::codec::Decoder;
 use tokio::io;
 use tokio::net::{TcpListener, TcpStream};
@@ -105,7 +104,7 @@ pub(crate) struct TorrentPeer {
 
 impl From<&Peer> for TorrentPeer {
     fn from(value: &Peer) -> Self {
-        let addr = SocketAddr::new(IpAddr::V4(value.ip), value.port);
+        let addr = SocketAddr::new(value.ip, value.port);
         Self {
             addr,
             announcement_count: AtomicUsize::new(0),
@@ -288,25 +287,19 @@ impl RustorrentApp {
                     }
                     RustorrentCommand::ProcessAnnounceError(torrent_process, err) => match *err {
                         RustorrentError::HTTPClient(ref err) => {
-                            if err.is_http() {
-                                if let Some(err) =
-                                    err.get_ref().and_then(|e| e.downcast_ref::<hyper::Error>())
-                                {
-                                    if err.is_connect() {
-                                        error!("connection refused!");
-                                        if can_try_count.fetch_sub(1, Ordering::SeqCst) == 0 {
-                                            error!("Cannot connect to announce server, giving up");
-                                            this.clone().command_quit()?;
-                                        }
-
-                                        *torrent_process.announce_state.lock().unwrap() =
-                                            AnnounceState::Idle;
-                                        this.spawn_delayed_announce(
-                                            torrent_process,
-                                            Duration::from_secs(5),
-                                        )?;
-                                    }
+                            if err.is_connect() {
+                                error!("connection refused!");
+                                if can_try_count.fetch_sub(1, Ordering::SeqCst) == 0 {
+                                    error!("Cannot connect to announce server, giving up");
+                                    this.clone().command_quit()?;
                                 }
+
+                                *torrent_process.announce_state.lock().unwrap() =
+                                    AnnounceState::Idle;
+                                this.spawn_delayed_announce(
+                                    torrent_process,
+                                    Duration::from_secs(5),
+                                )?;
                             }
                         }
                         ref other => error!("Process announce error: {}", other),

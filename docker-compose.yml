@@ -1,0 +1,15 @@
+version: "3.7"
+services:
+  bttracker:
+    image: henkel/bittorrent-tracker
+  transmission:
+    build: docker/transmission
+    volumes:
+      - "data:/data"
+  bittorrent-file:
+    build: docker/bittorent-file
+    volumes:
+      - "data:/data"
+
+volumes:
+  data:
