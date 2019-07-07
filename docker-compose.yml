@@ -10,6 +10,11 @@ services:
     build: docker/bittorent-file
     volumes:
       - "data:/data"
+  app:
+    build: .
+    volumes:
+      - "data:/data"
+      - "./target/x86_64-unknown-linux-musl/debug/:/app"
 
 volumes:
   data:
