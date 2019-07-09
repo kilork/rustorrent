@@ -9,7 +9,7 @@ impl Inner {
         torrent_process: Arc<TorrentProcess>,
         torrent_peer: Arc<TorrentPeer>,
     ) -> Result<(), RustorrentError> {
-        let (tx, rx) = channel(10);
+        let (tx, rx) = channel(20);
 
         *torrent_peer.state.lock().unwrap() = TorrentPeerState::Connecting;
 
@@ -20,10 +20,14 @@ impl Inner {
                 .for_each(move |_| {
                     debug!("Peer {}: sending message KeepAlive", addr);
                     let conntx = conntx.clone();
-                    conntx.send(Message::KeepAlive).map(|_| ()).map_err(|err| {
-                        error!("Error in KeepAlive send, return shutdown: {}", err);
-                        tokio::timer::Error::shutdown()
-                    })
+                    conntx
+                        .send(Message::KeepAlive)
+                        .and_then(Sink::flush)
+                        .map(|_| ())
+                        .map_err(|err| {
+                            error!("Error in KeepAlive send, return shutdown: {}", err);
+                            tokio::timer::Error::shutdown()
+                        })
                 })
                 .map_err(move |e| error!("Peer {}: interval errored; err={:?}", addr, e));
 
@@ -67,9 +71,7 @@ impl Inner {
 
                 let writer = writer.sink_map_err(|err| error!("Error in sink channel: {}", err));
 
-                let sink = rx.forward(writer).inspect(move |(_a, _sink)| {
-                    debug!("Peer {}: updated", addr);
-                });
+                let sink = rx.fold(writer, |out_, p| out_.send(p).and_then(Sink::flush));
                 tokio::spawn(sink.map(|_| ()));
 
                 *torrent_peer_handshake_done.state.lock().unwrap() = TorrentPeerState::Connected {
@@ -86,14 +88,18 @@ impl Inner {
                         match frame {
                             Message::KeepAlive => {
                                 let conntx = tx.clone();
-                                tokio::spawn(conntx.send(Message::KeepAlive).map(|_| ()).map_err(
-                                    move |e| {
-                                        error!(
-                                            "Peer {}: Cannot send KeepAlive message: {:?}",
-                                            addr, e
-                                        )
-                                    },
-                                ));
+                                tokio::spawn(
+                                    conntx
+                                        .send(Message::KeepAlive)
+                                        .and_then(Sink::flush)
+                                        .map(|_| ())
+                                        .map_err(move |e| {
+                                            error!(
+                                                "Peer {}: Cannot send KeepAlive message: {:?}",
+                                                addr, e
+                                            )
+                                        }),
+                                );
                             }
                             message => {
                                 let peer_message = RustorrentCommand::PeerMessage(

@@ -14,7 +14,6 @@ impl Inner {
         let info = &torrent_process.info;
 
         for (piece_index, piece) in torrent_pieces.iter().enumerate() {
-            debug!("Checking piece {}", piece_index);
             let mut piece_state = piece.lock().unwrap();
 
             let downloaded = piece_state.downloaded;

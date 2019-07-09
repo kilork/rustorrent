@@ -8,15 +8,29 @@ pub(crate) fn message_unchoke(
     match *state {
         TorrentPeerState::Connected {
             ref mut chocked,
-            ref interested,
             ref sender,
-            ref pieces,
+            ref mut pieces,
             ..
         } => {
             if !*chocked {
                 warn!("Peer {}: already unchocked!", torrent_peer.addr);
             }
             *chocked = false;
+
+            if pieces.is_empty() {
+                debug!("Unchoke without Bitfield - init all pieces as present");
+                let len = &torrent_process.info.len();
+                let piece_length = count_parts(*len, 8);
+                *pieces = vec![255; piece_length];
+                debug!("Peer {}: sending message Interested", torrent_peer.addr);
+                // TODO: according to design idea message should be send only from commands
+                // so we should refactor this later
+                send_message_to_peer(sender, Message::Interested);
+                return Ok(Some(RustorrentCommand::DownloadNextBlock(
+                    torrent_process.clone(),
+                    torrent_peer.clone(),
+                )));
+            }
 
             let torrent_pieces = &torrent_process.torrent_storage.read().unwrap().pieces;
             for (index, piece) in torrent_pieces.iter().enumerate() {

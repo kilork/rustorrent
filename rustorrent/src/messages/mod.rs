@@ -42,6 +42,7 @@ pub(crate) fn send_message_to_peer(sender: &Sender<Message>, message: Message) {
     tokio::spawn(
         conntx
             .send(message)
+            .and_then(Sink::flush)
             .map(|_| ())
             .map_err(|err| error!("Cannot send message: {}", err)),
     );

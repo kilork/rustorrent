@@ -197,6 +197,7 @@ impl Inner {
             self.command_sender
                 .clone()
                 .send(command)
+                .and_then(Sink::flush)
                 .map(|_| ())
                 .map_err(|err| error!("send failed: {}", err)),
         );

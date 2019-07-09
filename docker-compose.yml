@@ -3,14 +3,17 @@ services:
   bttracker:
     image: henkel/bittorrent-tracker
   transmission:
+    image: kilork/rustorrent-transmission
     build: docker/transmission
     volumes:
       - "data:/data"
   bittorrent-file:
+    image: kilork/rustorrent-bittorent-file
     build: docker/bittorent-file
     volumes:
       - "data:/data"
   app:
+    image: kilork/rustorrent-app
     build: .
     volumes:
       - "data:/data"

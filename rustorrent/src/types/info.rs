@@ -1,4 +1,5 @@
 use super::*;
+use crate::count_parts;
 
 use std::path::PathBuf;
 
@@ -69,20 +70,14 @@ impl From<TorrentInfoRaw> for TorrentInfo {
 
         let piece_length = raw.piece_length as usize;
 
-        let default_blocks_count =
-            piece_length / BLOCK_SIZE + if piece_length % BLOCK_SIZE != 0 { 1 } else { 0 };
+        let default_blocks_count = count_parts(piece_length, BLOCK_SIZE);
 
         let mut last_piece_length = length % piece_length;
         if last_piece_length == 0 {
             last_piece_length = piece_length;
         }
 
-        let last_piece_blocks_count = last_piece_length / BLOCK_SIZE
-            + if last_piece_length % BLOCK_SIZE != 0 {
-                1
-            } else {
-                0
-            };
+        let last_piece_blocks_count = count_parts(last_piece_length, BLOCK_SIZE);
 
         let mapping = map_pieces_to_files(piece_length, &files);
 
