@@ -101,6 +101,8 @@ impl Display for Message {
 
 #[derive(Fail, Debug)]
 pub enum MessageCodecError {
+    #[fail(display = "Channel Error: {}", _0)]
+    ChannelError(tokio::sync::mpsc::error::UnboundedRecvError),
     #[fail(display = "IO Error: {}", _0)]
     IoError(std::io::Error),
     #[fail(display = "Couldn't parse incoming frame: {}", _0)]
@@ -110,6 +112,12 @@ pub enum MessageCodecError {
 impl From<std::io::Error> for MessageCodecError {
     fn from(err: std::io::Error) -> Self {
         MessageCodecError::IoError(err)
+    }
+}
+
+impl From<tokio::sync::mpsc::error::UnboundedRecvError> for MessageCodecError {
+    fn from(err: tokio::sync::mpsc::error::UnboundedRecvError) -> Self {
+        MessageCodecError::ChannelError(err)
     }
 }
 

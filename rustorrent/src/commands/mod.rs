@@ -9,7 +9,6 @@ use failure::{Context, ResultExt};
 use futures::future::join_all;
 use futures::lazy;
 use futures::prelude::*;
-use futures::sync::mpsc::{channel, Receiver, Sender};
 use log::{debug, error, info, warn};
 use percent_encoding::{percent_encode, percent_encode_byte, SIMPLE_ENCODE_SET};
 use std::collections::HashMap;
@@ -29,7 +28,7 @@ use tokio::codec::Decoder;
 use tokio::io;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender,Receiver};
 use tokio::timer::{Delay, Interval};
 
 mod add_torrent;

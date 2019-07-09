@@ -35,7 +35,7 @@ use crate::types::peer::Handshake;
 use crate::types::peer::Peer;
 use crate::types::torrent::{Torrent, TrackerAnnounce};
 use crate::types::Settings;
-use crate::SHA1_SIZE;
+use crate::{SHA1_SIZE, count_parts};
 
 pub struct RustorrentApp {
     inner: Arc<Inner>,
@@ -85,7 +85,7 @@ pub(crate) struct TorrentPiece {
 impl TorrentPiece {
     pub(crate) fn init(&mut self, piece_length: usize, blocks_count: usize) {
         self.data = vec![0; piece_length];
-        self.blocks = vec![0; (blocks_count / 8) + 1];
+        self.blocks = vec![0; count_parts(blocks_count, 8)];
         self.blocks_to_download = blocks_count;
     }
 
@@ -121,7 +121,7 @@ pub(crate) enum TorrentPeerState {
         chocked: bool,
         interested: bool,
         downloading: bool,
-        sender: Sender<Message>,
+        sender: UnboundedSender<Message>,
         pieces: Vec<u8>,
     },
     Finished,

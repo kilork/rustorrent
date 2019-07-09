@@ -9,7 +9,7 @@ impl Inner {
         torrent_process: Arc<TorrentProcess>,
         torrent_peer: Arc<TorrentPeer>,
     ) -> Result<(), RustorrentError> {
-        let (tx, rx) = channel(20);
+        let (tx, rx) = unbounded_channel();
 
         *torrent_peer.state.lock().unwrap() = TorrentPeerState::Connecting;
 
@@ -67,12 +67,17 @@ impl Inner {
                     return Err(());
                 }
 
-                let (writer, reader) = stream.framed(MessageCodec::default()).split();
+                let codec = MessageCodec::default();
+                let (writer, reader) = codec.framed(stream).map_err(|_| ()).split();
 
-                let writer = writer.sink_map_err(|err| error!("Error in sink channel: {}", err));
+                let writer = writer.sink_map_err(|err| {
+                    error!("Error in sink channel: {}", err);
+                    err
+                });
 
-                let sink = rx.fold(writer, |out_, p| out_.send(p).and_then(Sink::flush));
-                tokio::spawn(sink.map(|_| ()));
+                let send_all = writer.send_all(rx);
+
+                tokio::spawn(send_all.map_err(|_| ()).map(|_| ()));
 
                 *torrent_peer_handshake_done.state.lock().unwrap() = TorrentPeerState::Connected {
                     chocked: true,
@@ -112,7 +117,7 @@ impl Inner {
                         }
                         Ok(())
                     })
-                    .map_err(move |err| error!("Peer {}: message codec error: {}", addr, err));
+                    .map_err(move |err| error!("Peer {}: message codec error", addr));
 
                 tokio::spawn(conn);
 

@@ -3,7 +3,7 @@ use super::*;
 use std::sync::Arc;
 
 use futures::prelude::*;
-use futures::sync::mpsc::Sender;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender,Receiver};
 use log::{debug, error, info, warn};
 
 use crate::app::*;
@@ -37,7 +37,7 @@ pub(crate) fn bit_by_index(index: usize, data: &[u8]) -> Option<(usize, u8)> {
     })
 }
 
-pub(crate) fn send_message_to_peer(sender: &Sender<Message>, message: Message) {
+pub(crate) fn send_message_to_peer(sender: &UnboundedSender<Message>, message: Message) {
     let conntx = sender.clone();
     tokio::spawn(
         conntx
