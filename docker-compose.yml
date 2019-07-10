@@ -7,6 +7,14 @@ services:
     build: docker/transmission
     volumes:
       - "data:/data"
+  qbittorrent:
+    image: kilork/rustorrent-qbittorrent
+    build: docker/qbittorrent
+    volumes:
+      # - "config:/config"
+      - "data:/downloads"
+    ports:
+      - 8080:8080
   bittorrent-file:
     image: kilork/rustorrent-bittorent-file
     build: docker/bittorent-file
@@ -21,3 +29,4 @@ services:
 
 volumes:
   data:
+  # config:
