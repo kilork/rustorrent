@@ -35,7 +35,7 @@ use crate::types::peer::Handshake;
 use crate::types::peer::Peer;
 use crate::types::torrent::{Torrent, TrackerAnnounce};
 use crate::types::Settings;
-use crate::{SHA1_SIZE, count_parts};
+use crate::{count_parts, SHA1_SIZE};
 
 pub struct RustorrentApp {
     inner: Arc<Inner>,

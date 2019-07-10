@@ -3,8 +3,8 @@ use super::*;
 use std::sync::Arc;
 
 use futures::prelude::*;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender,Receiver};
 use log::{debug, error, info, warn};
+use tokio::sync::mpsc::{unbounded_channel, Receiver, UnboundedReceiver, UnboundedSender};
 
 use crate::app::*;
 use crate::errors::RustorrentError;

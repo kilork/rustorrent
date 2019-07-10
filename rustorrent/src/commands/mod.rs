@@ -28,7 +28,7 @@ use tokio::codec::Decoder;
 use tokio::io;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender,Receiver};
+use tokio::sync::mpsc::{unbounded_channel, Receiver, UnboundedReceiver, UnboundedSender};
 use tokio::timer::{Delay, Interval};
 
 mod add_torrent;
