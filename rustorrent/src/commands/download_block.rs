@@ -22,16 +22,18 @@ impl Inner {
         let mut blocks_downloading = torrent_process.blocks_downloading.lock().unwrap();
 
         if let Some(another_torrent_peer) = blocks_downloading.get(&block) {
-            if let TorrentPeerState::Connected { downloading, .. } =
-                *another_torrent_peer.state.lock().unwrap()
+            if let TorrentPeerState::Connected {
+                ref mut downloading,
+                ..
+            } = *another_torrent_peer.state.lock().unwrap()
             {
-                if downloading {
+                if *downloading {
                     debug!(
                         "Another peer {} downloading same {:?}",
                         another_torrent_peer.addr, &block
                     );
 
-                    return Ok(());
+                    *downloading = false;
                 }
             }
         }
