@@ -22,3 +22,13 @@ digraph Peer {
     Connected -> Disconnected -> Connected
 }
 ```
+
+## Processes
+
+### Downloader
+
+This process is a loop to react on download events, select new blocks for download and update counters.
+
+### Peer
+
+Each peer is running its own processing stream.

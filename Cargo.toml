@@ -4,6 +4,7 @@ members = [
     "flat-storage-mmap",
     "flat-storage",
     "rustorrent",
+    "rustorrent-web",
 ]
 
 [profile.release]
