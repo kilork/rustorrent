@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+    "actix-web-static-files",
     "flat-storage-mmap",
     "flat-storage",
     "rustorrent",

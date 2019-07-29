@@ -7,9 +7,11 @@ extern crate serde_json;
 use actix_files;
 use actix_web::web;
 use actix_web::{App, HttpResponse, HttpServer};
+use actix_web_static_files;
 use exitfailure::ExitFailure;
 use failure::ResultExt;
 use handlebars::Handlebars;
+use std::collections::HashMap;
 use std::io;
 
 #[get("/")]
@@ -30,11 +32,14 @@ fn main() -> Result<(), ExitFailure> {
     let handlebars_ref = web::Data::new(handlebars);
 
     HttpServer::new(move || {
+        let data = vec![("qqq1".into(), "qqq2".into())].into_iter().collect();
         App::new()
             .register_data(handlebars_ref.clone())
             .service(index)
+            .service(actix_web_static_files::ResourceFiles::new("/hello", data))
             .service(actix_files::Files::new("/files", "./static/files").show_files_listing())
             .service(actix_files::Files::new("/css", "./static/css").show_files_listing())
+            .service(actix_files::Files::new("/script", "./static/script").show_files_listing())
     })
     .bind("127.0.0.1:8080")?
     .run()
