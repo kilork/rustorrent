@@ -10,9 +10,8 @@
     <link rel="stylesheet" href="/css/style.css">
     <script defer src="/files/@fortawesome/fontawesome-free/js/all.min.js"></script>
     <script src="/files/sockjs-client/dist/sockjs.min.js"></script>
-    <script type="module">
-        import Vue from '/files/vue/dist/vue.esm.browser.min.js'
-    </script>
+    <script src="/files/vue/dist/vue.min.js"></script>
+    <script src="/files/vue-intl/dist/vue-intl.prod.min.js"></script>
     <title>Rustorrent</title>
 </head>
 
@@ -99,9 +98,7 @@
         </div>
     </footer>
 
-    <script src="/files/jquery/dist/jquery.slim.min.js"
-        integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo"
-        crossorigin="anonymous"></script>
+    <script src="/files/jquery/dist/jquery.slim.min.js"></script>
     <script src="/files/popper.js/dist/umd/popper.min.js"
         integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1"
         crossorigin="anonymous"></script>
@@ -110,6 +107,8 @@
         crossorigin="anonymous"></script>
 
     <script>
+        Vue.use(VueIntl);
+
         var sock = new SockJS('/sock');
 
         sock.onopen = function () {
