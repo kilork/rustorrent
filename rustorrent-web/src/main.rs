@@ -10,7 +10,6 @@ use exitfailure::ExitFailure;
 use failure::ResultExt;
 use rustorrent_web_resources::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::io;
 use std::sync::RwLock;
 
