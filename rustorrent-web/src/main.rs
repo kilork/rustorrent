@@ -4,42 +4,54 @@ extern crate actix_web;
 #[macro_use]
 extern crate serde_json;
 
-use actix_files;
-use actix_web::web;
-use actix_web::{App, HttpResponse, HttpServer};
+use actix_web::{web, App, HttpResponse, HttpServer};
 use actix_web_static_files;
 use exitfailure::ExitFailure;
 use failure::ResultExt;
-use handlebars::Handlebars;
+use rustorrent_web_resources::*;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io;
+use std::sync::RwLock;
+
+#[derive(Serialize, Deserialize)]
+struct TorrentInfo {
+    name: String,
+    len: usize,
+}
+struct AppState {
+    torrents: RwLock<Vec<TorrentInfo>>,
+}
+
+const INDEX: &str = include_str!("../static/templates/index.html");
 
 #[get("/")]
-fn index(hb: web::Data<Handlebars>) -> HttpResponse {
-    let data = json!({
-        "name": env!("CARGO_PKG_NAME"),
-        "version": env!("CARGO_PKG_VERSION")
-    });
-
-    let body = hb.render("index", &data).unwrap();
-    HttpResponse::Ok().body(body)
+fn index() -> HttpResponse {
+    HttpResponse::Ok().body(INDEX)
 }
 
 fn main() -> Result<(), ExitFailure> {
-    let mut handlebars = Handlebars::new();
-    handlebars.register_templates_directory(".html", "./static/templates")?;
-
-    let handlebars_ref = web::Data::new(handlebars);
+    let app_state = web::Data::new(AppState {
+        torrents: RwLock::new(vec![TorrentInfo {
+            name: "ferris2.gif".into(),
+            len: 308189,
+        }]),
+    });
 
     HttpServer::new(move || {
-        let data = vec![("qqq1".into(), "qqq2".into())].into_iter().collect();
+        let generated_files = generate_files();
+        let generated_css = generate_css();
         App::new()
-            .register_data(handlebars_ref.clone())
+            .register_data(app_state.clone())
             .service(index)
-            .service(actix_web_static_files::ResourceFiles::new("/hello", data))
-            .service(actix_files::Files::new("/files", "./static/files").show_files_listing())
-            .service(actix_files::Files::new("/css", "./static/css").show_files_listing())
-            .service(actix_files::Files::new("/script", "./static/script").show_files_listing())
+            .service(actix_web_static_files::ResourceFiles::new(
+                "/files",
+                generated_files,
+            ))
+            .service(actix_web_static_files::ResourceFiles::new(
+                "/css",
+                generated_css,
+            ))
     })
     .bind("127.0.0.1:8080")?
     .run()

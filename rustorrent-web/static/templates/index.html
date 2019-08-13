@@ -4,11 +4,12 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+    <link rel="stylesheet" href="/files/bootstrap/dist/css/bootstrap.min.css"
         integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
-    <link rel="stylesheet" href="/files/node_modules/@fortawesome/fontawesome-free/css/all.css">
+    <link rel="stylesheet" href="/files/@fortawesome/fontawesome-free/css/all.css">
     <link rel="stylesheet" href="/css/style.css">
-    <script defer src="/files/node_modules/@fortawesome/fontawesome-free/js/all.js"></script>
+    <script defer src="/files/@fortawesome/fontawesome-free/js/all.js"></script>
+    <script src="/files/sockjs-client/dist/sockjs.min.js"></script>
     <title>Rustorrent {{version}}</title>
 </head>
 
@@ -80,6 +81,20 @@
                     <a href="#" class="card-link">Info</a>
                 </div>
             </div>
+            {{#each torrents}}
+            <div class="card col-sm-12 col-lg-12">
+                <div class="card-body">
+                    <h5 class="card-title">{{name}}</h5>
+                    <h6 class="card-subtitle mb-2 text-muted">...</h6>
+                    <p class="card-text">{{len}} bytes.</p>
+                    <div class="progress">
+                        <div class="progress-bar" role="progressbar" style="width: 100%" aria-valuenow="100"
+                            aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <a href="#" class="card-link">Info</a>
+                </div>
+            </div>
+            {{/each}}
         </div>
     </div>
 
@@ -104,6 +119,25 @@
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"
         integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM"
         crossorigin="anonymous"></script>
+
+    <script>
+        var sock = new SockJS('/sock');
+
+        sock.onopen = function () {
+            console.log('open');
+            sock.send('test');
+        };
+
+        sock.onmessage = function (e) {
+            console.log('message', e.data);
+            sock.close();
+        };
+
+        sock.onclose = function () {
+            console.log('close');
+        };
+
+    </script>
 </body>
 
 </html>

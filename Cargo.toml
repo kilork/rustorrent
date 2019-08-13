@@ -1,11 +1,11 @@
 [workspace]
 
 members = [
-    "actix-web-static-files",
     "flat-storage-mmap",
     "flat-storage",
     "rustorrent",
     "rustorrent-web",
+    "rustorrent-web-resources",
 ]
 
 [profile.release]

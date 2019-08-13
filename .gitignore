@@ -2,5 +2,5 @@
 **/*.rs.bk
 Cargo.lock
 .ENV.md
-rustorrent-web/static/files/node_modules
-rustorrent-web/static/files/package-lock.json
+rustorrent-web-resources/static/files/node_modules
+rustorrent-web-resources/static/files/package-lock.json
