@@ -9,7 +9,6 @@
     <link rel="stylesheet" href="/files/@fortawesome/fontawesome-free/css/all.min.css">
     <link rel="stylesheet" href="/css/style.css">
     <script defer src="/files/@fortawesome/fontawesome-free/js/all.min.js"></script>
-    <script src="/files/sockjs-client/dist/sockjs.min.js"></script>
     <script src="/files/vue/dist/vue.min.js"></script>
     <script src="/files/vue-intl/dist/vue-intl.prod.min.js"></script>
     <title>Rustorrent</title>
@@ -109,22 +108,13 @@
     <script>
         Vue.use(VueIntl);
 
-        var sock = new SockJS('/sock');
-
-        sock.onopen = function () {
-            console.log('open');
-            sock.send('test');
+        var evtSource = new EventSource("/stream");
+        evtSource.onmessage = function(e) {
+            console.log("data:" + e.data);
         };
-
-        sock.onmessage = function (e) {
-            console.log('message', e.data);
-            sock.close();
-        };
-
-        sock.onclose = function () {
-            console.log('close');
-        };
-
+        evtSource.onerror = function(e) {
+            console.log("error:" + e);
+        }
     </script>
 </body>
 
