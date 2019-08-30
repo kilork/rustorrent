@@ -4,11 +4,11 @@ extern crate actix_web;
 #[macro_use]
 extern crate serde_json;
 
-use actix_web::{web, App, Error, HttpResponse, HttpServer};
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use actix_web_static_files;
 use bytes::Bytes;
 use exitfailure::ExitFailure;
-use failure::ResultExt;
+use failure::{Error, ResultExt};
 use futures::{Async, Poll, Stream};
 use rustorrent_web_resources::*;
 use serde::{Deserialize, Serialize};
@@ -29,36 +29,20 @@ struct AppState {
 const INDEX: &str = include_str!("../static/templates/index.html");
 
 #[get("/")]
-fn index() -> HttpResponse {
+fn index() -> impl Responder {
     HttpResponse::Ok().body(INDEX)
 }
 
 #[get("/stream")]
-fn stream() -> HttpResponse {
+fn stream() -> impl Responder {
     HttpResponse::Ok()
         .content_type("text/event-stream")
-        .no_chunking()
-        .force_close()
-        .streaming(Sse {
-            interval: Interval::new(Instant::now(), Duration::from_millis(5000)),
-        })
-}
-
-struct Sse {
-    interval: Interval,
-}
-
-impl Stream for Sse {
-    type Item = Bytes;
-    type Error = Error;
-
-    fn poll(&mut self) -> Poll<Option<Bytes>, Error> {
-        match self.interval.poll() {
-            Ok(Async::Ready(_)) => Ok(Async::Ready(Some(Bytes::from(&b"data: ping\n\n"[..])))),
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Err(_) => Ok(Async::Ready(None)),
-        }
-    }
+        .keep_alive()
+        .streaming(
+            Interval::new(Instant::now(), Duration::from_millis(5000))
+                .map(|_| Bytes::from(&b"data: ping\n\n"[..]))
+                .map_err(|_| ()),
+        )
 }
 
 fn main() -> Result<(), ExitFailure> {
