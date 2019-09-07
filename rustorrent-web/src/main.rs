@@ -18,7 +18,7 @@ use std::sync::RwLock;
 use std::time::{Duration, Instant};
 use tokio::timer::Interval;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 struct TorrentInfo {
     name: String,
     len: usize,
@@ -35,7 +35,10 @@ fn index() -> impl Responder {
     HttpResponse::Ok().body(INDEX)
 }
 
-fn torrent_list() -> impl Responder {}
+#[get("/torrents")]
+fn torrent_list(app_state: web::Data<AppState>) -> impl Responder {
+    web::Json(app_state.torrents.clone())
+}
 
 #[get("/stream")]
 fn stream() -> impl Responder {
@@ -65,6 +68,7 @@ fn main() -> Result<(), ExitFailure> {
             .register_data(app_state.clone())
             .service(index)
             .service(stream)
+            .service(torrent_list)
             .service(actix_web_static_files::ResourceFiles::new(
                 "/files",
                 generated_files,

@@ -2,3 +2,7 @@
     background-color: #343a40;
     color: #ffffff;
 }
+
+[v-cloak] {
+    display: none;
+}
