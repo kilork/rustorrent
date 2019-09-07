@@ -1,5 +1,7 @@
 # torrent-rs - BitTorrent protocol client
 
+## WORK IN PROGRESS
+
 ## Legal
 
 Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org/).

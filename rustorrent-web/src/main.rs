@@ -4,6 +4,7 @@ extern crate actix_web;
 #[macro_use]
 extern crate serde_json;
 
+use actix::prelude::*;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use actix_web_static_files;
 use bytes::Bytes;
@@ -22,8 +23,9 @@ struct TorrentInfo {
     name: String,
     len: usize,
 }
+
 struct AppState {
-    torrents: RwLock<Vec<TorrentInfo>>,
+    torrents: Vec<TorrentInfo>,
 }
 
 const INDEX: &str = include_str!("../static/templates/index.html");
@@ -32,6 +34,8 @@ const INDEX: &str = include_str!("../static/templates/index.html");
 fn index() -> impl Responder {
     HttpResponse::Ok().body(INDEX)
 }
+
+fn torrent_list() -> impl Responder {}
 
 #[get("/stream")]
 fn stream() -> impl Responder {
@@ -46,11 +50,12 @@ fn stream() -> impl Responder {
 }
 
 fn main() -> Result<(), ExitFailure> {
+    let system = System::new(env!("CARGO_PKG_NAME"));
     let app_state = web::Data::new(AppState {
-        torrents: RwLock::new(vec![TorrentInfo {
+        torrents: vec![TorrentInfo {
             name: "ferris2.gif".into(),
-            len: 308189,
-        }]),
+            len: 308_189,
+        }],
     });
 
     HttpServer::new(move || {
@@ -70,6 +75,7 @@ fn main() -> Result<(), ExitFailure> {
             ))
     })
     .bind("127.0.0.1:8080")?
-    .run()
-    .map_err(|x| x.into())
+    .start();
+
+    system.run().map_err(|x| x.into())
 }
