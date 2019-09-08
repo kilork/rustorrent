@@ -21,7 +21,10 @@ use tokio::timer::Interval;
 #[derive(Serialize, Deserialize, Clone)]
 struct TorrentInfo {
     name: String,
-    len: usize,
+    total: usize,
+    downloaded: usize,
+    uploaded: usize,
+    active: bool,
 }
 
 struct AppState {
@@ -57,7 +60,10 @@ fn main() -> Result<(), ExitFailure> {
     let app_state = web::Data::new(AppState {
         torrents: vec![TorrentInfo {
             name: "ferris2.gif".into(),
-            len: 308_189,
+            total: 308_189,
+            downloaded: 100_100,
+            uploaded: 55_020,
+            active: true,
         }],
     });
 
