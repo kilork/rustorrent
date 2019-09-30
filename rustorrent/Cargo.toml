@@ -14,11 +14,11 @@ failure = "0.1"
 exitfailure = "0.5"
 clap-verbosity-flag = "0.2.0"
 log = "0.4"
-env_logger = "0.6"
+env_logger = "0.7"
 
 hyper = "0.12"
 sha-1 = "0.8"
-percent-encoding = "1.0"
+percent-encoding = "2"
 
 tokio = "0.1"
 tokio-signal = "0.2"

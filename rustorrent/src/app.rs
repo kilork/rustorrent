@@ -20,7 +20,6 @@ use futures::lazy;
 use futures::prelude::*;
 use futures::sync::mpsc::{channel, Receiver, Sender};
 use log::{debug, error, info, warn};
-use percent_encoding::{percent_encode, percent_encode_byte, SIMPLE_ENCODE_SET};
 use tokio::codec::Decoder;
 use tokio::io;
 use tokio::net::{TcpListener, TcpStream};

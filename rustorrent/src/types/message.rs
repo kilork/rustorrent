@@ -327,5 +327,4 @@ mod tests {
     fn encode_port() {
         encode_message(&[0, 0, 0, 3, 9, 0, 101], Message::Port(101));
     }
-
 }

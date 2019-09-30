@@ -71,7 +71,7 @@ impl Inner {
             .and_then(move |response| {
                 debug!(
                     "Tracker response (url encoded): {}",
-                    percent_encode(&response, SIMPLE_ENCODE_SET).to_string()
+                    percent_encode(&response, NON_ALPHANUMERIC).to_string()
                 );
                 let tracker_announce: TrackerAnnounce = response.try_into()?;
                 debug!("Tracker response parsed: {:#?}", tracker_announce);

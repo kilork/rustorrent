@@ -46,7 +46,7 @@ impl Inner {
                 debug!(
                     "Handshake sent to {} (url encoded): {} (len: {})",
                     addr,
-                    percent_encode(&buf, SIMPLE_ENCODE_SET).to_string(),
+                    percent_encode(&buf, NON_ALPHANUMERIC).to_string(),
                     buf.len()
                 );
                 tokio::io::read_exact(stream, vec![0; 68])
@@ -56,7 +56,7 @@ impl Inner {
                 debug!(
                     "Handshake reply from {} (url encoded): {} (len: {})",
                     addr,
-                    percent_encode(&buf, SIMPLE_ENCODE_SET).to_string(),
+                    percent_encode(&buf, NON_ALPHANUMERIC).to_string(),
                     buf.len()
                 );
 

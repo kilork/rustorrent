@@ -10,7 +10,7 @@ use futures::future::join_all;
 use futures::lazy;
 use futures::prelude::*;
 use log::{debug, error, info, warn};
-use percent_encoding::{percent_encode, percent_encode_byte, SIMPLE_ENCODE_SET};
+use percent_encoding::{percent_encode, percent_encode_byte, NON_ALPHANUMERIC};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::mem;
