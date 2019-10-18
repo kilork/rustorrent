@@ -1,7 +1,8 @@
+use env_logger::Builder as LoggerBuilder;
 use exitfailure::ExitFailure;
 use failure::ResultExt;
 use futures::Future;
-use log::{debug, info};
+use log::{debug, info, Level};
 use rustorrent::app::RustorrentApp;
 use rustorrent::types::Settings;
 use tokio::prelude::future::lazy;
@@ -17,7 +18,15 @@ const PEER_PORT_MAX: u16 = 6889;
 fn main() -> Result<(), ExitFailure> {
     let cli = cli::from_args();
 
-    cli.verbose.setup_env_logger(env!("CARGO_PKG_NAME"))?;
+    if let Some(level_filter) = cli.verbose.log_level().map(|x| x.to_level_filter()) {
+        LoggerBuilder::new()
+            .filter(
+                Some(&env!("CARGO_PKG_NAME").replace("-", "_")),
+                level_filter,
+            )
+            .filter(None, Level::Warn.to_level_filter())
+            .try_init()?;
+    }
 
     info!("starting torrent client");
 

@@ -6,13 +6,13 @@ edition = "2018"
 
 [dependencies]
 nom = "5.0"
-structopt = "0.2"
+structopt = "0.3"
 console = "0.9"
 indicatif = "0.12"
 dialoguer = "0.4"
 failure = "0.1"
 exitfailure = "0.5"
-clap-verbosity-flag = "0.2.0"
+clap-verbosity-flag = "0.3"
 log = "0.4"
 env_logger = "0.7"
 

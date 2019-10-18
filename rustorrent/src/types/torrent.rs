@@ -161,9 +161,8 @@ mod tests {
 
     #[test]
     fn parse_announce_with_ipv6() {
-        let tracker_response = b"d8:completei0e10:incompletei1e8:intervali600e5:peersld2:ip3:::17:peer id20:-rs0001-zzzzxxxxyyyy4:porti6881eeee";
-        let tracker_announce_response: TrackerAnnounce =
-            tracker_response.to_vec().try_into().unwrap();
+        let tracker_response = b"d8:completei0e10:incompletei1e8:intervali600e5:peersld2:ip3:::17:peer id20:-rs0001-zzzzxxxxyyyy4:porti6881eeee".to_vec();
+        let tracker_announce_response: TrackerAnnounce = tracker_response.try_into().unwrap();
         assert_eq!(
             tracker_announce_response,
             TrackerAnnounce {

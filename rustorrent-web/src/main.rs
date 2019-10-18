@@ -13,13 +13,14 @@ use bytes::Bytes;
 use exitfailure::ExitFailure;
 use failure::ResultExt;
 use futures::{Async, Poll, Stream};
+use rand::prelude::*;
 use rustorrent_web_resources::*;
 use serde::{Deserialize, Serialize};
 use std::io;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tokio::timer::Interval;
+use tokio::timer::{Delay, Interval};
 
 #[derive(Serialize, Deserialize, Clone)]
 struct TorrentInfo {
@@ -73,7 +74,10 @@ fn main() -> Result<(), ExitFailure> {
     });
 
     let broadcaster = web::Data::new(RwLock::new(Broadcaster::new()));
+
     let me = broadcaster.clone();
+    let broadcaster_delay = broadcaster.clone();
+    let task_app_state = app_state.clone();
 
     HttpServer::new(move || {
         let generated_files = generate_files();
@@ -100,6 +104,7 @@ fn main() -> Result<(), ExitFailure> {
         .for_each(move |_| {
             eprintln!("timer event");
             let mut me = me.write().unwrap();
+            let app_state = task_app_state.clone();
             if let Err(ok_clients) = me.message("data: ping\n\n") {
                 eprintln!("refresh client list");
                 me.clients = ok_clients;
@@ -109,7 +114,29 @@ fn main() -> Result<(), ExitFailure> {
         .map_err(|_| ());
     Arbiter::spawn(task);
 
+    test_incoming_rand_size_chunk(broadcaster_delay);
+
     system.run().map_err(|x| x.into())
+}
+
+fn test_incoming_rand_size_chunk(broadcaster: web::Data<RwLock<Broadcaster>>) {
+    let mut rng = thread_rng();
+    let millis = rng.gen_range(500u64, 1500u64);
+    let task = Delay::new(Instant::now() + Duration::from_millis(millis))
+        .and_then(move |_| {
+            eprintln!("delayed task triggered after {}", millis);
+            {
+                let mut sender = broadcaster.write().unwrap();
+                if let Err(ok_clients) = sender.message("data: pong\n\n") {
+                    eprintln!("refresh client list");
+                    sender.clients = ok_clients;
+                }
+            }
+            test_incoming_rand_size_chunk(broadcaster);
+            Ok(())
+        })
+        .map_err(|e| panic!("delay errored: {:?}", e));
+    Arbiter::spawn(task);
 }
 
 struct Broadcaster {
