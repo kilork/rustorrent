@@ -17,23 +17,11 @@ use rand::prelude::*;
 use rustorrent_web_resources::*;
 use serde::{Deserialize, Serialize};
 use std::io;
-use std::sync::RwLock;
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::timer::{Delay, Interval};
-
-#[derive(Serialize, Deserialize, Clone)]
-struct TorrentInfo {
-    name: String,
-    total: usize,
-    downloaded: usize,
-    uploaded: usize,
-    active: bool,
-}
-
-struct AppState {
-    torrents: Vec<TorrentInfo>,
-}
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 const INDEX: &str = include_str!("../static/templates/index.html");
 
@@ -45,13 +33,12 @@ fn index() -> impl Responder {
 }
 
 #[get("/torrents")]
-fn torrent_list(app_state: web::Data<AppState>) -> impl Responder {
-    web::Json(app_state.torrents.clone())
+fn torrent_list() -> impl Responder {
+    web::Json("")
 }
 
 #[get("/stream")]
 fn stream(
-    app_state: web::Data<AppState>,
     broadcaster: web::Data<RwLock<Broadcaster>>,
 ) -> impl Responder {
     let rx = broadcaster.write().unwrap().new_client();
@@ -63,27 +50,15 @@ fn stream(
 
 fn main() -> Result<(), ExitFailure> {
     let system = System::new(env!("CARGO_PKG_NAME"));
-    let app_state = web::Data::new(AppState {
-        torrents: vec![TorrentInfo {
-            name: "ferris2.gif".into(),
-            total: 308_189,
-            downloaded: 100_100,
-            uploaded: 55_020,
-            active: true,
-        }],
-    });
 
     let broadcaster = web::Data::new(RwLock::new(Broadcaster::new()));
 
-    let me = broadcaster.clone();
-    let broadcaster_delay = broadcaster.clone();
-    let task_app_state = app_state.clone();
+    let broadcaster_timer = broadcaster.clone();
 
     HttpServer::new(move || {
         let generated_files = generate_files();
         let generated_css = generate_css();
         App::new()
-            .register_data(app_state.clone())
             .register_data(broadcaster.clone())
             .service(index)
             .service(stream)
@@ -103,8 +78,7 @@ fn main() -> Result<(), ExitFailure> {
     let task = Interval::new(Instant::now(), Duration::from_secs(10))
         .for_each(move |_| {
             eprintln!("timer event");
-            let mut me = me.write().unwrap();
-            let app_state = task_app_state.clone();
+            let mut me = broadcaster_timer.write().unwrap();
             if let Err(ok_clients) = me.message("data: ping\n\n") {
                 eprintln!("refresh client list");
                 me.clients = ok_clients;
@@ -114,29 +88,7 @@ fn main() -> Result<(), ExitFailure> {
         .map_err(|_| ());
     Arbiter::spawn(task);
 
-    test_incoming_rand_size_chunk(broadcaster_delay);
-
     system.run().map_err(|x| x.into())
-}
-
-fn test_incoming_rand_size_chunk(broadcaster: web::Data<RwLock<Broadcaster>>) {
-    let mut rng = thread_rng();
-    let millis = rng.gen_range(500u64, 1500u64);
-    let task = Delay::new(Instant::now() + Duration::from_millis(millis))
-        .and_then(move |_| {
-            eprintln!("delayed task triggered after {}", millis);
-            {
-                let mut sender = broadcaster.write().unwrap();
-                if let Err(ok_clients) = sender.message("data: pong\n\n") {
-                    eprintln!("refresh client list");
-                    sender.clients = ok_clients;
-                }
-            }
-            test_incoming_rand_size_chunk(broadcaster);
-            Ok(())
-        })
-        .map_err(|e| panic!("delay errored: {:?}", e));
-    Arbiter::spawn(task);
 }
 
 struct Broadcaster {

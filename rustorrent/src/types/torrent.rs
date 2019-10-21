@@ -147,9 +147,9 @@ mod tests {
 
     #[test]
     fn parse_announce_with_failure() {
-        let tracker_response = b"d14:failure reason63:Requested download is not authorized for use with this tracker.e";
+        let tracker_response = b"d14:failure reason63:Requested download is not authorized for use with this tracker.e".to_vec();
         let tracker_announce_response: Result<TrackerAnnounce, RustorrentError> =
-            tracker_response.to_vec().try_into();
+            tracker_response.try_into();
         match tracker_announce_response {
             Err(RustorrentError::FailureReason(failure_reason)) => assert_eq!(
                 failure_reason,
