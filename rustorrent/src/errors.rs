@@ -27,16 +27,18 @@ pub enum RustorrentError {
     Convert(std::convert::Infallible),
     #[fail(display = "convert from slice {}", _0)]
     ConvertFromSlice(core::array::TryFromSliceError),
-    #[fail(display = "HTTP client {}", _0)]
-    HTTPClient(hyper::Error),
+    // #[fail(display = "HTTP client {}", _0)]
+    // HTTPClient(hyper::Error),
     #[fail(display = "parser fail")]
     Parser,
-    #[fail(display = "tokio unbounded receiver {}", _0)]
-    TokioMpscUnboundedRecvError(tokio::sync::mpsc::error::UnboundedRecvError),
+    // #[fail(display = "tokio unbounded receiver {}", _0)]
+    // TokioMpscUnboundedRecvError(tokio::sync::mpsc::error::UnboundedRecvError),
     #[fail(display = "failure because of: {}", _0)]
     FailureReason(String),
     #[fail(display = "timer failure: {}", _0)]
-    TimerFailure(tokio::timer::Error),
+    TimerFailure(tokio::time::Error),
+    #[fail(display = "wrong config")]
+    WrongConfig,
 }
 
 macro_rules! from_rustorrent_error {
@@ -50,16 +52,16 @@ macro_rules! from_rustorrent_error {
     };
 }
 
-from_rustorrent_error!(hyper::Error, HTTPClient);
+// from_rustorrent_error!(hyper::Error, HTTPClient);
 from_rustorrent_error!(TryFromBencode, TryFromBencode);
 from_rustorrent_error!(std::io::Error, IO);
 from_rustorrent_error!(std::convert::Infallible, Convert);
 from_rustorrent_error!(core::array::TryFromSliceError, ConvertFromSlice);
-from_rustorrent_error!(tokio::timer::Error, TimerFailure);
-from_rustorrent_error!(
-    tokio::sync::mpsc::error::UnboundedRecvError,
-    TokioMpscUnboundedRecvError
-);
+from_rustorrent_error!(tokio::time::Error, TimerFailure);
+// from_rustorrent_error!(
+//     tokio::sync::mpsc::error::UnboundedRecvError,
+//     TokioMpscUnboundedRecvError
+// );
 
 impl<'a> From<nom::Err<&'a [u8]>> for RustorrentError {
     fn from(value: nom::Err<&'a [u8]>) -> Self {

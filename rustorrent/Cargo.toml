@@ -8,24 +8,25 @@ edition = "2018"
 nom = "5.0"
 structopt = "0.3"
 console = "0.9"
-indicatif = "0.12"
-dialoguer = "0.4"
+indicatif = "0.13"
+dialoguer = "0.5"
 failure = "0.1"
 exitfailure = "0.5"
 clap-verbosity-flag = "0.3"
 log = "0.4"
 env_logger = "0.7"
 
-hyper = "0.12"
 sha-1 = "0.8"
 percent-encoding = "2"
 
-tokio = "0.1"
-tokio-signal = "0.2"
-futures = "0.1"
+# hyper = "0.13.0-alpha.4"
+tokio = { version = "0.2", features = ["full"] }
+tokio-util = { version = "0.2", features = ["full"] }
+# tokio-signal = "0.3.0-alpha.1"
+futures = { version = "0.3", features = ["compat"] }
 confy = "0.3"
-bytes = "0.4"
+bytes = "0.5"
 
 serde = { version = "1.0", features = ["derive"] }
 
-flat-storage = { path = "../flat-storage" }
+# flat-storage = { path = "../flat-storage" }

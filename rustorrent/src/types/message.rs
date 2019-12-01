@@ -3,7 +3,7 @@ use bytes::{BufMut, BytesMut};
 use failure::Fail;
 use nom::Offset;
 use std::fmt::{Display, Formatter};
-use tokio::codec::{Decoder, Encoder};
+use tokio_util::codec::{Decoder, Encoder};
 
 /// Messages in the protocol take the form of <length prefix><message ID><payload>. The length prefix is a four byte big-endian value. The message ID is a single decimal byte. The payload is message dependent.
 #[derive(Debug, PartialEq)]
@@ -101,8 +101,8 @@ impl Display for Message {
 
 #[derive(Fail, Debug)]
 pub enum MessageCodecError {
-    #[fail(display = "Channel Error: {}", _0)]
-    ChannelError(tokio::sync::mpsc::error::UnboundedRecvError),
+    // #[fail(display = "Channel Error: {}", _0)]
+    // ChannelError(tokio::sync::mpsc::error::UnboundedRecvError),
     #[fail(display = "IO Error: {}", _0)]
     IoError(std::io::Error),
     #[fail(display = "Couldn't parse incoming frame: {}", _0)]
@@ -115,11 +115,11 @@ impl From<std::io::Error> for MessageCodecError {
     }
 }
 
-impl From<tokio::sync::mpsc::error::UnboundedRecvError> for MessageCodecError {
-    fn from(err: tokio::sync::mpsc::error::UnboundedRecvError) -> Self {
-        MessageCodecError::ChannelError(err)
-    }
-}
+// impl From<tokio::sync::mpsc::error::UnboundedRecvError> for MessageCodecError {
+//     fn from(err: tokio::sync::mpsc::error::UnboundedRecvError) -> Self {
+//         MessageCodecError::ChannelError(err)
+//     }
+// }
 
 #[derive(Default)]
 pub struct MessageCodec {}
@@ -154,37 +154,37 @@ impl Encoder for MessageCodec {
         match frame {
             Message::KeepAlive => {
                 buf.reserve(4);
-                buf.put_u32_be(0);
+                buf.put_u32(0);
             }
             Message::Choke => {
                 buf.reserve(5);
-                buf.put_u32_be(1);
+                buf.put_u32(1);
                 buf.put_u8(0);
             }
             Message::Unchoke => {
                 buf.reserve(5);
-                buf.put_u32_be(1);
+                buf.put_u32(1);
                 buf.put_u8(1);
             }
             Message::Interested => {
                 buf.reserve(5);
-                buf.put_u32_be(1);
+                buf.put_u32(1);
                 buf.put_u8(2);
             }
             Message::NotInterested => {
                 buf.reserve(5);
-                buf.put_u32_be(1);
+                buf.put_u32(1);
                 buf.put_u8(3);
             }
             Message::Have { piece_index } => {
                 buf.reserve(9);
-                buf.put_u32_be(5);
+                buf.put_u32(5);
                 buf.put_u8(4);
-                buf.put_u32_be(piece_index);
+                buf.put_u32(piece_index);
             }
             Message::Bitfield(bitfield) => {
                 buf.reserve(5 + bitfield.len());
-                buf.put_u32_be(1 + bitfield.len() as u32);
+                buf.put_u32(1 + bitfield.len() as u32);
                 buf.put_u8(5);
                 buf.put_slice(&bitfield);
             }
@@ -194,11 +194,11 @@ impl Encoder for MessageCodec {
                 length,
             } => {
                 buf.reserve(17);
-                buf.put_u32_be(13);
+                buf.put_u32(13);
                 buf.put_u8(6);
-                buf.put_u32_be(index);
-                buf.put_u32_be(begin);
-                buf.put_u32_be(length);
+                buf.put_u32(index);
+                buf.put_u32(begin);
+                buf.put_u32(length);
             }
             Message::Piece {
                 index,
@@ -206,10 +206,10 @@ impl Encoder for MessageCodec {
                 block,
             } => {
                 buf.reserve(13 + block.len());
-                buf.put_u32_be(9 + block.len() as u32);
+                buf.put_u32(9 + block.len() as u32);
                 buf.put_u8(7);
-                buf.put_u32_be(index);
-                buf.put_u32_be(begin);
+                buf.put_u32(index);
+                buf.put_u32(begin);
                 buf.put_slice(&block);
             }
             Message::Cancel {
@@ -218,17 +218,17 @@ impl Encoder for MessageCodec {
                 length,
             } => {
                 buf.reserve(17);
-                buf.put_u32_be(13);
+                buf.put_u32(13);
                 buf.put_u8(8);
-                buf.put_u32_be(index);
-                buf.put_u32_be(begin);
-                buf.put_u32_be(length);
+                buf.put_u32(index);
+                buf.put_u32(begin);
+                buf.put_u32(length);
             }
             Message::Port(port) => {
                 buf.reserve(7);
-                buf.put_u32_be(3);
+                buf.put_u32(3);
                 buf.put_u8(9);
-                buf.put_u16_be(port);
+                buf.put_u16(port);
             }
         }
         Ok(())

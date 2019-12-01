@@ -1,11 +1,11 @@
 use env_logger::Builder as LoggerBuilder;
 use exitfailure::ExitFailure;
 use failure::ResultExt;
-use futures::Future;
+use futures::future::lazy;
+use futures::prelude::*;
 use log::{debug, info, Level};
 use rustorrent::app::RustorrentApp;
 use rustorrent::types::Settings;
-use tokio::prelude::future::lazy;
 
 mod cli;
 
@@ -15,7 +15,8 @@ mod cli;
 const PEER_PORT: u16 = 6881;
 const PEER_PORT_MAX: u16 = 6889;
 
-fn main() -> Result<(), ExitFailure> {
+#[tokio::main]
+async fn main() -> Result<(), ExitFailure> {
     let cli = cli::from_args();
 
     if let Some(level_filter) = cli.verbose.log_level().map(|x| x.to_level_filter()) {
@@ -51,17 +52,9 @@ fn main() -> Result<(), ExitFailure> {
 
     debug!("calculated settings {:#?}", settings);
 
-    let mut rt = tokio::runtime::Runtime::new()?;
+    let app = RustorrentApp::new(settings);
 
-    rt.block_on(lazy(move || -> Result<(), ExitFailure> {
-        let mut app = RustorrentApp::new(settings);
-
-        app.clone()
-            .add_torrent_from_file(&cli.torrent)
-            .with_context(|_| format!("Could not add torrent {:?}", cli.torrent))?;
-
-        Ok(app.run().wait()?)
-    }))?;
+    app.download(cli.torrent).await?;
 
     Ok(())
 }

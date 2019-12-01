@@ -6,8 +6,7 @@ use crate::types::torrent::TrackerAnnounce;
 use crate::{BLOCK_SIZE, PEER_ID};
 use exitfailure::ExitFailure;
 use failure::{Context, ResultExt};
-use futures::future::join_all;
-use futures::lazy;
+use futures::future::{join_all, lazy};
 use futures::prelude::*;
 use log::{debug, error, info, warn};
 use percent_encoding::{percent_encode, percent_encode_byte, NON_ALPHANUMERIC};
@@ -24,23 +23,23 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
-use tokio::codec::Decoder;
+use tokio_util::codec::Decoder;
 use tokio::io;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
 use tokio::sync::mpsc::{unbounded_channel, Receiver, UnboundedReceiver, UnboundedSender};
-use tokio::timer::{Delay, Interval};
+use tokio::time::{Delay, Interval};
 
-mod add_torrent;
-mod connect_to_peer;
-mod download_block;
-mod download_next_block;
-mod peer_message;
-mod piece_downloaded;
-mod process_announce;
-mod start_announce_process;
+// mod add_torrent;
+// mod connect_to_peer;
+// mod download_block;
+// mod download_next_block;
+// mod peer_message;
+// mod piece_downloaded;
+// mod process_announce;
+// mod start_announce_process;
 
-fn url_encode(data: &[u8]) -> String {
+pub(crate) fn url_encode(data: &[u8]) -> String {
     data.iter()
         .map(|&x| percent_encode_byte(x))
         .collect::<String>()

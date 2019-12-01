@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use futures::prelude::*;
 use log::{debug, error, info, warn};
-use tokio::sync::mpsc::{unbounded_channel, Receiver, UnboundedReceiver, UnboundedSender};
+use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::app::*;
 use crate::errors::RustorrentError;
@@ -38,14 +38,12 @@ pub(crate) fn bit_by_index(index: usize, data: &[u8]) -> Option<(usize, u8)> {
 }
 
 pub(crate) fn send_message_to_peer(sender: &UnboundedSender<Message>, message: Message) {
-    let conntx = sender.clone();
-    tokio::spawn(
-        conntx
-            .send(message)
-            .and_then(Sink::flush)
-            .map(|_| ())
-            .map_err(|err| error!("Cannot send message: {}", err)),
-    );
+    let mut conntx = sender.clone();
+    tokio::spawn(async move {
+        if let Err(err) = conntx.send(message).await {
+            error!("Cannot send message: {}", err);
+        }
+    });
 }
 
 pub(crate) fn block_from_piece(
