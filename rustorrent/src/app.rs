@@ -20,6 +20,7 @@ use exitfailure::ExitFailure;
 use failure::{Context, ResultExt};
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use futures::compat::Future01CompatExt;
+use futures::compat::Stream01CompatExt;
 use futures::future::try_join;
 use futures::future::{join_all, lazy};
 use futures::prelude::*;
@@ -510,6 +511,15 @@ async fn download_torrent(
             let res = client.get(uri).compat().await?;
 
             debug!("Get tracker announce from: {} {:?}", url, res);
+
+            let announce_data = res.into_body().compat().try_concat().await?;
+
+            debug!("Data: {:?}", announce_data);
+
+            let tracker_announce: TrackerAnnounce = announce_data.to_vec().try_into()?;
+
+            debug!("Tracker announce: {:?}", tracker_announce);
+
             interval.tick().await;
 
             broker_sender.send(DownloadTorrentEvent::Announce).await?;
