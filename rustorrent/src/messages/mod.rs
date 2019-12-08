@@ -2,23 +2,23 @@ use super::*;
 
 use std::sync::Arc;
 
+use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::prelude::*;
 use log::{debug, error, info, warn};
-use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use crate::app::*;
 use crate::errors::RustorrentError;
 use crate::types::message::Message;
 
-mod bitfield;
-mod choke;
-mod piece;
-mod unchoke;
+// mod bitfield;
+// mod choke;
+// mod piece;
+// mod unchoke;
 
-pub(crate) use bitfield::message_bitfield;
-pub(crate) use choke::message_choke;
-pub(crate) use piece::message_piece;
-pub(crate) use unchoke::message_unchoke;
+// pub(crate) use bitfield::message_bitfield;
+// pub(crate) use choke::message_choke;
+// pub(crate) use piece::message_piece;
+// pub(crate) use unchoke::message_unchoke;
 
 #[inline]
 fn index_in_bitarray(index: usize) -> (usize, u8) {

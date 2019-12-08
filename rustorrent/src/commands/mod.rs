@@ -23,12 +23,12 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
-use tokio_util::codec::Decoder;
 use tokio::io;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
 use tokio::sync::mpsc::{unbounded_channel, Receiver, UnboundedReceiver, UnboundedSender};
 use tokio::time::{Delay, Interval};
+use tokio_util::codec::Decoder;
 
 // mod add_torrent;
 // mod connect_to_peer;

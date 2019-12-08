@@ -19,11 +19,15 @@ use {
 use exitfailure::ExitFailure;
 use failure::{Context, ResultExt};
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use futures::compat::Future01CompatExt;
 use futures::future::try_join;
 use futures::future::{join_all, lazy};
 use futures::prelude::*;
+use futures::task::{FutureObj, Spawn, SpawnError, SpawnExt};
 use log::{debug, error, info, warn};
 // use tokio::codec::Decoder;
+use hyper::{Client, Uri};
+
 use tokio::io;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
@@ -35,23 +39,23 @@ use crate::types::peer::Handshake;
 use crate::types::peer::Peer;
 use crate::types::torrent::{Torrent, TrackerAnnounce};
 use crate::types::Settings;
-use crate::{count_parts, SHA1_SIZE};
+use crate::{commands::url_encode, count_parts, SHA1_SIZE};
 
 pub struct RustorrentApp {
-    pub settings: Settings,
+    pub settings: Arc<Settings>,
 }
 
 #[derive(Debug)]
 pub struct TorrentProcess {
-    pub(crate) path: PathBuf,
+    // pub(crate) path: PathBuf,
     pub(crate) torrent: Torrent,
     pub(crate) info: TorrentInfo,
     pub(crate) hash_id: [u8; SHA1_SIZE],
-    pub(crate) torrent_state: Arc<Mutex<TorrentProcessState>>,
-    pub(crate) announce_state: Arc<Mutex<AnnounceState>>,
-    pub(crate) blocks_downloading: Arc<Mutex<HashMap<Block, Arc<TorrentPeer>>>>,
-    pub(crate) stats: Arc<Mutex<TorrentProcessStats>>,
-    pub(crate) torrent_storage: RwLock<TorrentStorage>,
+    // pub(crate) torrent_state: Arc<Mutex<TorrentProcessState>>,
+    // pub(crate) announce_state: Arc<Mutex<AnnounceState>>,
+    // pub(crate) blocks_downloading: Arc<Mutex<HashMap<Block, Arc<TorrentPeer>>>>,
+    // pub(crate) stats: Arc<Mutex<TorrentProcessStats>>,
+    // pub(crate) torrent_storage: RwLock<TorrentStorage>,
 }
 
 #[derive(Debug)]
@@ -238,66 +242,65 @@ fn start_info_update_loop(self: Arc<Self>, is_running: Arc<AtomicBool>) {
 
 impl RustorrentApp {
     pub fn new(settings: Settings) -> Self {
-        Self {
-            settings,
-        }
+        let settings = Arc::new(settings);
+        Self { settings }
     }
-/*
-    pub fn add_torrent_from_file(
-        &self,
-        filename: impl AsRef<Path>,
-    ) -> Result<Arc<TorrentProcess>, RustorrentError> {
-        info!("Adding torrent from file: {:?}", filename.as_ref());
-        let torrent = parse_torrent(&filename)?;
-        let hash_id = torrent.info_sha1_hash();
+    /*
+        pub fn add_torrent_from_file(
+            &self,
+            filename: impl AsRef<Path>,
+        ) -> Result<Arc<TorrentProcess>, RustorrentError> {
+            info!("Adding torrent from file: {:?}", filename.as_ref());
+            let torrent = parse_torrent(&filename)?;
+            let hash_id = torrent.info_sha1_hash();
 
-        if let Some(process) = match self.processes.read() {
-            Ok(processes) => processes,
-            Err(poisoned) => poisoned.into_inner(),
+            if let Some(process) = match self.processes.read() {
+                Ok(processes) => processes,
+                Err(poisoned) => poisoned.into_inner(),
+            }
+            .iter()
+            .filter(|x| x.hash_id == hash_id)
+            .cloned()
+            .next()
+            {
+                warn!(
+                    "Torrent already in the list: {}",
+                    crate::commands::url_encode(&hash_id)
+                );
+                return Ok(process);
+            }
+
+            let info = torrent.info()?;
+            let left = info.len();
+            let pieces_count = info.pieces.len();
+            let pieces = (0..pieces_count)
+                .map(|_| Arc::new(Mutex::new(Default::default())))
+                .collect();
+
+            let process = Arc::new(TorrentProcess {
+                path: filename.as_ref().into(),
+                torrent,
+                info,
+                hash_id,
+                torrent_state: Arc::new(Mutex::new(TorrentProcessState::Init)),
+                announce_state: Arc::new(Mutex::new(AnnounceState::Idle)),
+                stats: Arc::new(Mutex::new(TorrentProcessStats {
+                    downloaded: 0,
+                    uploaded: 0,
+                    left,
+                })),
+                blocks_downloading: Arc::new(Mutex::new(HashMap::new())),
+                torrent_storage: RwLock::new(TorrentStorage {
+                    pieces,
+                    peers: vec![],
+                }),
+            });
+
+            processes.push(process.clone());
+
+            Ok(process)
         }
-        .iter()
-        .filter(|x| x.hash_id == hash_id)
-        .cloned()
-        .next()
-        {
-            warn!(
-                "Torrent already in the list: {}",
-                crate::commands::url_encode(&hash_id)
-            );
-            return Ok(process);
-        }
-
-        let info = torrent.info()?;
-        let left = info.len();
-        let pieces_count = info.pieces.len();
-        let pieces = (0..pieces_count)
-            .map(|_| Arc::new(Mutex::new(Default::default())))
-            .collect();
-
-        let process = Arc::new(TorrentProcess {
-            path: filename.as_ref().into(),
-            torrent,
-            info,
-            hash_id,
-            torrent_state: Arc::new(Mutex::new(TorrentProcessState::Init)),
-            announce_state: Arc::new(Mutex::new(AnnounceState::Idle)),
-            stats: Arc::new(Mutex::new(TorrentProcessStats {
-                downloaded: 0,
-                uploaded: 0,
-                left,
-            })),
-            blocks_downloading: Arc::new(Mutex::new(HashMap::new())),
-            torrent_storage: RwLock::new(TorrentStorage {
-                pieces,
-                peers: vec![],
-            }),
-        });
-
-        processes.push(process.clone());
-
-        Ok(process)
-    }
-*/
+    */
 
     pub async fn download<P: AsRef<Path>>(&self, torrent_file: P) -> Result<(), RustorrentError> {
         let config = &self.settings.config;
@@ -307,17 +310,18 @@ impl RustorrentApp {
             _ => return Err(RustorrentError::WrongConfig),
         };
 
-        let (broker_sender, broker_receiver) = mpsc::unbounded();
+        let (mut broker_sender, broker_receiver) = mpsc::unbounded();
 
-        let _broker_handle = tokio::spawn(async {
-            broker_loop(broker_receiver).await;
-        });
+        let broker_handle = broker_loop(self.settings.clone(), broker_receiver);
 
+        broker_sender
+            .send(RustorrentEvent::AddTorrent(torrent_file.as_ref().into()))
+            .await?;
 
         let accept_incoming_connections = async move {
             eprintln!("listening on: {}", &addr);
             let mut listener = TcpListener::bind(addr).await?;
-            
+
             loop {
                 let (mut socket, _) = listener.accept().await?;
                 let _ = tokio::spawn(async {
@@ -327,6 +331,11 @@ impl RustorrentApp {
             }
             Ok::<(), RustorrentError>(())
         };
+
+        if let Err(err) = try_join(accept_incoming_connections, broker_handle).await {
+            return Err(err);
+        }
+
         Ok(())
     }
 
@@ -409,6 +418,108 @@ impl RustorrentApp {
     */
 }
 
-async fn broker_loop(mut events: mpsc::UnboundedReceiver<RustorrentEvent>) -> Result<(), RustorrentError> {
+async fn broker_loop(
+    settings: Arc<Settings>,
+    mut events: mpsc::UnboundedReceiver<RustorrentEvent>,
+) -> Result<(), RustorrentError> {
+    let mut torrents = vec![];
+
+    while let Some(event) = events.next().await {
+        match event {
+            RustorrentEvent::AddTorrent(filename) => {
+                eprintln!("we need to download {:?}", filename);
+                let torrent = parse_torrent(&filename)?;
+                let hash_id = torrent.info_sha1_hash();
+                let info = torrent.info()?;
+                let torrent_process = Arc::new(TorrentProcess {
+                    info,
+                    hash_id,
+                    torrent,
+                });
+                let _ = tokio::spawn(download_torrent(settings.clone(), torrent_process.clone()));
+                torrents.push(torrent_process);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+enum DownloadTorrentEvent {
+    Announce,
+}
+
+#[deprecated]
+struct Future01Executor;
+
+impl Spawn for Future01Executor {
+    fn spawn_obj(&self, future: FutureObj<'static, ()>) -> Result<(), SpawnError> {
+        let _ = tokio::spawn(future);
+        Ok(())
+    }
+}
+
+async fn download_torrent(
+    settings: Arc<Settings>,
+    torrent_process: Arc<TorrentProcess>,
+) -> Result<(), RustorrentError> {
+    /*    let start = tokio::time::Instant::now() + Duration::from_millis(50);
+        let mut interval = tokio::time::interval_at(start, Duration::from_millis(1000));
+        loop {
+            interval.tick().await;
+            eprintln!("hello from timer process");
+        }
+    */
+    let start = tokio::time::Instant::now() + Duration::from_millis(50);
+    let mut interval = tokio::time::interval_at(start, Duration::from_millis(1000));
+    let (mut broker_sender, mut broker_receiver) = mpsc::unbounded();
+
+    let _ = tokio::spawn(async move {
+        loop {
+            let announce_url = &torrent_process.torrent.announce_url;
+
+            let my_executor = Future01Executor {};
+
+            let client: Client<_> = Client::builder()
+                .keep_alive(false)
+                .executor(my_executor.compat())
+                .build_http();
+
+            let left = torrent_process.info.len();
+            let mut url = {
+                format!(
+                    "{}?info_hash={}&peer_id={}&left={}",
+                    announce_url,
+                    url_encode(&torrent_process.hash_id[..]),
+                    url_encode(&PEER_ID[..]),
+                    left
+                )
+            };
+
+            let config = &settings.config;
+
+            if let Some(port) = config.port {
+                url += format!("&port={}", port).as_str();
+            }
+
+            if let Some(compact) = config.compact {
+                url += format!("&compact={}", if compact { 1 } else { 0 }).as_str();
+            }
+
+            let uri = url.parse()?;
+            let res = client.get(uri).compat().await?;
+
+            debug!("Get tracker announce from: {} {:?}", url, res);
+            interval.tick().await;
+
+            broker_sender.send(DownloadTorrentEvent::Announce).await?;
+        }
+        Ok::<(), RustorrentError>(())
+    });
+
+    while let Some(event) = broker_receiver.next().await {
+        debug!("received event");
+    }
+
     Ok(())
 }

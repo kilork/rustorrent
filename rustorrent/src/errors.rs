@@ -27,8 +27,8 @@ pub enum RustorrentError {
     Convert(std::convert::Infallible),
     #[fail(display = "convert from slice {}", _0)]
     ConvertFromSlice(core::array::TryFromSliceError),
-    // #[fail(display = "HTTP client {}", _0)]
-    // HTTPClient(hyper::Error),
+    #[fail(display = "HTTP client {}", _0)]
+    HTTPClient(hyper::Error),
     #[fail(display = "parser fail")]
     Parser,
     // #[fail(display = "tokio unbounded receiver {}", _0)]
@@ -39,6 +39,10 @@ pub enum RustorrentError {
     TimerFailure(tokio::time::Error),
     #[fail(display = "wrong config")]
     WrongConfig,
+    #[fail(display = "send error {}", _0)]
+    SendError(futures::channel::mpsc::SendError),
+    #[fail(display = "cannot parse uri {}", _0)]
+    InvalidUri(http::uri::InvalidUri),
 }
 
 macro_rules! from_rustorrent_error {
@@ -52,12 +56,15 @@ macro_rules! from_rustorrent_error {
     };
 }
 
-// from_rustorrent_error!(hyper::Error, HTTPClient);
+from_rustorrent_error!(hyper::Error, HTTPClient);
 from_rustorrent_error!(TryFromBencode, TryFromBencode);
 from_rustorrent_error!(std::io::Error, IO);
 from_rustorrent_error!(std::convert::Infallible, Convert);
 from_rustorrent_error!(core::array::TryFromSliceError, ConvertFromSlice);
 from_rustorrent_error!(tokio::time::Error, TimerFailure);
+from_rustorrent_error!(futures::channel::mpsc::SendError, SendError);
+from_rustorrent_error!(http::uri::InvalidUri, InvalidUri);
+
 // from_rustorrent_error!(
 //     tokio::sync::mpsc::error::UnboundedRecvError,
 //     TokioMpscUnboundedRecvError
