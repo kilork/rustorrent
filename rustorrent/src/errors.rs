@@ -25,6 +25,8 @@ pub enum RustorrentError {
     TryFromBencode(TryFromBencode),
     #[fail(display = "convert {}", _0)]
     Convert(std::convert::Infallible),
+    #[fail(display = "convert integer {}", _0)]
+    ConvertInt(std::num::TryFromIntError),
     #[fail(display = "convert from slice {}", _0)]
     ConvertFromSlice(core::array::TryFromSliceError),
     #[fail(display = "HTTP client {}", _0)]
@@ -60,6 +62,7 @@ from_rustorrent_error!(hyper::Error, HTTPClient);
 from_rustorrent_error!(TryFromBencode, TryFromBencode);
 from_rustorrent_error!(std::io::Error, IO);
 from_rustorrent_error!(std::convert::Infallible, Convert);
+from_rustorrent_error!(std::num::TryFromIntError, ConvertInt);
 from_rustorrent_error!(core::array::TryFromSliceError, ConvertFromSlice);
 from_rustorrent_error!(tokio::time::Error, TimerFailure);
 from_rustorrent_error!(futures::channel::mpsc::SendError, SendError);

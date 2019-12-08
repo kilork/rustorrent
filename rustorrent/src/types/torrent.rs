@@ -21,6 +21,7 @@ pub struct Torrent {
 
 #[derive(Debug, PartialEq)]
 pub struct TrackerAnnounce {
+    /// Interval to reannounce in seconds
     pub interval: i64,
     pub peers: Vec<Peer>,
 }
