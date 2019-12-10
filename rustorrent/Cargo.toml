@@ -19,12 +19,13 @@ env_logger = "0.7"
 sha-1 = "0.8"
 percent-encoding = "2"
 
-http = "0.1"
-hyper = "0.12"
+http = "0.2"
+http-body = "0.3"
+hyper = "0.13"
 tokio = { version = "0.2", features = ["full"] }
 tokio-util = { version = "0.2", features = ["full"] }
 # tokio-signal = "0.3.0-alpha.1"
-futures = { version = "0.3", features = ["compat"] }
+futures = "0.3"
 #futures_01 = { version = "0.1", package = "futures" }
 confy = "0.3"
 bytes = "0.5"

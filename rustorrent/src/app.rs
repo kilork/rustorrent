@@ -19,14 +19,13 @@ use {
 use exitfailure::ExitFailure;
 use failure::{Context, ResultExt};
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use futures::compat::Future01CompatExt;
-use futures::compat::Stream01CompatExt;
 use futures::future::try_join;
 use futures::future::{join_all, lazy};
 use futures::prelude::*;
 use futures::task::{FutureObj, Spawn, SpawnError, SpawnExt};
 use log::{debug, error, info, warn};
 // use tokio::codec::Decoder;
+use http_body::Body;
 use hyper::{Client, Uri};
 
 use tokio::io;
@@ -470,10 +469,7 @@ async fn download_torrent(
         loop {
             let announce_url = &torrent_process.torrent.announce_url;
 
-            let client: Client<_> = Client::builder()
-                .keep_alive(false)
-                .executor(Future01Executor.compat())
-                .build_http();
+            let client: Client<_> = Client::new();
 
             let left = torrent_process.info.len();
             let mut url = {
@@ -497,7 +493,7 @@ async fn download_torrent(
             }
 
             let uri = url.parse()?;
-            let res = client.get(uri).compat().await;
+            let res = client.get(uri).await;
 
             debug!("Got tracker announce from: {}", url);
 
@@ -518,11 +514,17 @@ async fn download_torrent(
                 }
             };
 
-            let announce_data = result.into_body().compat().try_concat().await?;
+            let mut announce_data = result.into_body();
 
             debug!("Data: {:?}", announce_data);
 
-            let tracker_announce: Result<TrackerAnnounce, _> = announce_data.to_vec().try_into();
+            let mut announce_bytes = vec![];
+
+            while let Some(chunk) = announce_data.data().await {
+                announce_bytes.append(&mut chunk?.to_vec());
+            }
+
+            let tracker_announce: Result<TrackerAnnounce, _> = announce_bytes.try_into();
 
             let interval_to_query_tracker = match tracker_announce {
                 Ok(tracker_announce) => {
