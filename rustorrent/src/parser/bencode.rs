@@ -21,7 +21,7 @@ macro_rules! recognize_map (
 
 named!(
     integer_literal,
-    recognize!(do_parse!(opt!(tag!("-")) >> digit1 >> ()))
+    recognize!(do_parse!(opt!(char!('-')) >> digit1 >> ()))
 );
 
 named!(
@@ -113,6 +113,10 @@ mod tests {
         assert_eq!(
             bencode_integer(b"i3e"),
             Ok((&vec![][..], BencodeValue::Integer(3)))
+        );
+        assert_eq!(
+            bencode_integer(b"i-3e"),
+            Ok((&vec![][..], BencodeValue::Integer(-3)))
         );
     }
 

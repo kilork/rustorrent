@@ -33,22 +33,7 @@ async fn main() -> Result<(), ExitFailure> {
 
     let settings = load_settings()?;
 
-    let mut settings = settings.override_with(&cli.config);
-    let mut config = &mut settings.config;
-
-    if config.port.is_none() {
-        config.port = Some(PEER_PORT);
-        if config.port_max.is_none() {
-            config.port_max = Some(PEER_PORT_MAX);
-        }
-    } else if config.port_max.is_none() {
-        config.port_max = config.port;
-    }
-
-    assert!(
-        config.port <= config.port_max,
-        "Max port must be greater than starting port"
-    );
+    let mut settings = settings.override_with(cli.config);
 
     debug!("calculated settings {:#?}", settings);
 

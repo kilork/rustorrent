@@ -1,10 +1,13 @@
 use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
 
-use std::net::Ipv4Addr;
+use std::net::IpAddr;
+
+const PEER_PORT: &str = "6881";
+const PEER_PORT_MAX: &str = "6889";
 
 /// Data to be both passed as arguments and in form of config file
-#[derive(StructOpt, Serialize, Deserialize, Debug)]
+#[derive(Default, StructOpt, Serialize, Deserialize, Debug)]
 pub struct Config {
     /// Forces compact parameter behavior for announce request
     ///
@@ -12,45 +15,33 @@ pub struct Config {
     /// To force compact=1 use true value. To force compact=0 use false value.
     #[structopt(long)]
     pub compact: Option<bool>,
-    /// IPv4 address to listen to
+    /// address to listen to
     #[structopt(long)]
-    pub ipv4: Option<Ipv4Addr>,
-    /// IPv4 port to listen on
-    #[structopt(long)]
-    pub port: Option<u16>,
-    /// IPv4 max port
+    pub listen: Option<IpAddr>,
+    /// port to listen on
+    #[structopt(long, env = "RUSTORRENT_PEER_PORT", default_value = PEER_PORT)]
+    pub port: u16,
+    /// max port
     ///
     /// If there is no free port between port and port-max - client will exit with exception.
-    #[structopt(long = "port-max")]
-    pub port_max: Option<u16>,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            compact: None,
-            ipv4: None,
-            port: None,
-            port_max: None,
-        }
-    }
+    #[structopt(long, env = "RUSTORRENT_PEER_PORT_MAX", default_value = PEER_PORT_MAX)]
+    pub port_max: u16,
 }
 
 /// Global application settings
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Default, Serialize, Deserialize, Debug)]
 pub struct Settings {
     pub config: Config,
+    pub peers: Peers,
 }
 
+#[derive(Default, Serialize, Deserialize, Debug)]
+pub struct Peers {}
+
 impl Settings {
-    pub fn override_with(&self, config: &Config) -> Self {
-        Self {
-            config: Config {
-                compact: config.compact.or(self.config.compact),
-                ipv4: config.ipv4.or(self.config.ipv4),
-                port: config.port.or(self.config.port),
-                port_max: config.port_max.or(self.config.port_max),
-            },
-        }
+    pub fn override_with(self, config: Config) -> Self {
+        Self { config, ..self }
     }
 }
+
+// impl Default for

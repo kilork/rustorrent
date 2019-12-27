@@ -1,5 +1,5 @@
 use crate::parser::parser_message;
-use bytes::{BufMut, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use failure::Fail;
 use nom::Offset;
 use std::fmt::{Display, Formatter};
@@ -140,7 +140,7 @@ impl Decoder for MessageCodec {
             Ok((i, frame)) => (buf.offset(i), frame),
         };
 
-        buf.split_to(consumed);
+        buf.advance(consumed);
 
         Ok(Some(f))
     }

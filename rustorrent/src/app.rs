@@ -1,45 +1,18 @@
-use std::ops::Deref;
+use super::*;
+use crate::{errors::RustorrentError, types::torrent::parse_torrent, PEER_ID};
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::RwLock;
-use std::time::{Duration, Instant};
-use {
-    crate::{errors::RustorrentError, types::torrent::parse_torrent, PEER_ID},
-    std::{
-        collections::HashMap,
-        convert::TryInto,
-        mem::{self, drop},
-        net::{IpAddr, Ipv4Addr, SocketAddr},
-        path::{Path, PathBuf},
-    },
-};
-
-use exitfailure::ExitFailure;
-use failure::{Context, ResultExt};
-use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use futures::future::try_join;
-use futures::future::{join_all, lazy};
-use futures::prelude::*;
-use futures::task::{FutureObj, Spawn, SpawnError, SpawnExt};
-use log::{debug, error, info, warn};
 // use tokio::codec::Decoder;
-use http_body::Body;
-use hyper::{Client, Uri};
 
-use tokio::io;
-use tokio::net::{TcpListener, TcpStream};
-use tokio::prelude::*;
-use tokio::time::{delay_for, Interval};
-
-use crate::types::info::TorrentInfo;
-use crate::types::message::{Message, MessageCodec, MessageCodecError};
-use crate::types::peer::Handshake;
-use crate::types::peer::Peer;
-use crate::types::torrent::{Torrent, TrackerAnnounce};
-use crate::types::Settings;
-use crate::{commands::url_encode, count_parts, SHA1_SIZE};
+use crate::{
+    types::{
+        info::TorrentInfo,
+        message::{Message, MessageCodec, MessageCodecError},
+        peer::{Handshake, Peer},
+        torrent::{Torrent, TrackerAnnounce},
+        Settings,
+    },
+    {commands::url_encode, count_parts, SHA1_SIZE},
+};
 
 pub struct RustorrentApp {
     pub settings: Arc<Settings>,
@@ -304,35 +277,29 @@ impl RustorrentApp {
 
     pub async fn download<P: AsRef<Path>>(&self, torrent_file: P) -> Result<(), RustorrentError> {
         let config = &self.settings.config;
-        let ipv4 = config.ipv4.or_else(|| Some(Ipv4Addr::new(0, 0, 0, 0)));
-        let addr = match (ipv4, config.port) {
-            (Some(ipv4), Some(port)) => SocketAddr::new(ipv4.into(), port),
-            _ => return Err(RustorrentError::WrongConfig),
-        };
 
-        let (mut broker_sender, broker_receiver) = mpsc::unbounded();
+        let listen = config
+            .listen
+            .unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
 
-        let broker_handle = broker_loop(self.settings.clone(), broker_receiver);
+        let addr = SocketAddr::new(listen.into(), config.port);
 
-        broker_sender
+        let (mut download_events_sender, download_events_receiver) = mpsc::unbounded();
+
+        let download_events = download_events_loop(
+            self.settings.clone(),
+            download_events_sender.clone(),
+            download_events_receiver,
+        );
+
+        download_events_sender
             .send(RustorrentEvent::AddTorrent(torrent_file.as_ref().into()))
             .await?;
 
-        let accept_incoming_connections = async move {
-            eprintln!("listening on: {}", &addr);
-            let mut listener = TcpListener::bind(addr).await?;
+        let accept_incoming_connections =
+            accept_connections_loop(self.settings.clone(), addr, download_events_sender.clone());
 
-            loop {
-                let (mut socket, _) = listener.accept().await?;
-                let _ = tokio::spawn(async {
-                    let mut buf = [0; 1024];
-                    eprintln!("yahoo");
-                });
-            }
-            Ok::<(), RustorrentError>(())
-        };
-
-        if let Err(err) = try_join(accept_incoming_connections, broker_handle).await {
+        if let Err(err) = try_join(accept_incoming_connections, download_events).await {
             return Err(err);
         }
 
@@ -418,9 +385,29 @@ impl RustorrentApp {
     */
 }
 
-async fn broker_loop(
+async fn accept_connections_loop(
     settings: Arc<Settings>,
-    mut events: mpsc::UnboundedReceiver<RustorrentEvent>,
+    addr: SocketAddr,
+    mut sender: UnboundedSender<RustorrentEvent>,
+) -> Result<(), RustorrentError> {
+    eprintln!("listening on: {}", &addr);
+    let mut listener = TcpListener::bind(addr).await?;
+
+    loop {
+        let (mut socket, _) = listener.accept().await?;
+        let _ = tokio::spawn(async {
+            let mut buf = [0; 1024];
+            eprintln!("yahoo");
+        });
+    }
+
+    Ok(())
+}
+
+async fn download_events_loop(
+    settings: Arc<Settings>,
+    mut sender: UnboundedSender<RustorrentEvent>,
+    mut events: UnboundedReceiver<RustorrentEvent>,
 ) -> Result<(), RustorrentError> {
     let mut torrents = vec![];
 
@@ -449,16 +436,6 @@ enum DownloadTorrentEvent {
     Announce(TrackerAnnounce),
 }
 
-#[deprecated]
-struct Future01Executor;
-
-impl Spawn for Future01Executor {
-    fn spawn_obj(&self, future: FutureObj<'static, ()>) -> Result<(), SpawnError> {
-        let _ = tokio::spawn(future);
-        Ok(())
-    }
-}
-
 async fn download_torrent(
     settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,
@@ -472,24 +449,20 @@ async fn download_torrent(
             let client: Client<_> = Client::new();
 
             let left = torrent_process.info.len();
+            let config = &settings.config;
             let mut url = {
                 format!(
-                    "{}?info_hash={}&peer_id={}&left={}",
+                    "{}?info_hash={}&peer_id={}&left={}&port={}",
                     announce_url,
                     url_encode(&torrent_process.hash_id[..]),
                     url_encode(&PEER_ID[..]),
-                    left
+                    left,
+                    config.port,
                 )
             };
 
-            let config = &settings.config;
-
-            if let Some(port) = config.port {
-                url += format!("&port={}", port).as_str();
-            }
-
             if let Some(compact) = config.compact {
-                url += format!("&compact={}", if compact { 1 } else { 0 }).as_str();
+                url += &format!("&compact={}", if compact { 1 } else { 0 });
             }
 
             let uri = url.parse()?;
@@ -561,3 +534,24 @@ async fn download_torrent(
 
     Ok(())
 }
+
+/*
+enum ProcessPeerEvent {}
+
+async fn process_peer(
+    settings: Arc<Settings>,
+    torrent_process: Arc<TorrentProcess>,
+    download_torrent_broker_sender: UnboundedSender<DownloadTorrentEvent>, // peer:
+) -> Result<(), RustorrentError> {
+    let (mut broker_sender, mut broker_receiver) = mpsc::unbounded();
+
+    let _ = tokio::spawn(async move {});
+
+    while let Some(event) = broker_receiver.next().await {
+        debug!("received event");
+    }
+
+    Ok(())
+}
+
+*/
