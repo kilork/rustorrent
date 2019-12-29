@@ -31,9 +31,7 @@ async fn main() -> Result<(), ExitFailure> {
 
     info!("starting torrent client");
 
-    let settings = load_settings()?;
-
-    let mut settings = settings.override_with(cli.config);
+    let settings = load_settings()?.override_with(cli.config);
 
     debug!("calculated settings {:#?}", settings);
 

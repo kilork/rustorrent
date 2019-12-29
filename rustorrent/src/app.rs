@@ -489,8 +489,6 @@ async fn download_torrent(
 
             let mut announce_data = result.into_body();
 
-            debug!("Data: {:?}", announce_data);
-
             let mut announce_bytes = vec![];
 
             while let Some(chunk) = announce_data.data().await {
