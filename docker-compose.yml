@@ -1,7 +1,10 @@
 version: "3.7"
 services:
   bttracker:
-    image: henkel/bittorrent-tracker
+    # image: henkel/bittorrent-tracker
+    image: lednerb/opentracker-docker
+    ports:
+      - 6969:6969
   transmission:
     image: kilork/rustorrent-transmission
     build: docker/transmission
