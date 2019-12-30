@@ -45,6 +45,8 @@ pub enum RustorrentError {
     SendError(futures::channel::mpsc::SendError),
     #[fail(display = "cannot parse uri {}", _0)]
     InvalidUri(http::uri::InvalidUri),
+    #[fail(display = "aborted")]
+    Aborted,
 }
 
 macro_rules! from_rustorrent_error {
@@ -67,6 +69,12 @@ from_rustorrent_error!(core::array::TryFromSliceError, ConvertFromSlice);
 from_rustorrent_error!(tokio::time::Error, TimerFailure);
 from_rustorrent_error!(futures::channel::mpsc::SendError, SendError);
 from_rustorrent_error!(http::uri::InvalidUri, InvalidUri);
+
+impl From<futures::future::Aborted> for RustorrentError {
+    fn from(_: futures::future::Aborted) -> Self {
+        RustorrentError::Aborted
+    }
+}
 
 // from_rustorrent_error!(
 //     tokio::sync::mpsc::error::UnboundedRecvError,

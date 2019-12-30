@@ -2,7 +2,7 @@ use exitfailure::ExitFailure;
 use failure::{Context, ResultExt};
 use futures::{
     channel::mpsc::{self, UnboundedReceiver, UnboundedSender},
-    future::{join_all, lazy, try_join},
+    future::{join_all, lazy, try_join, AbortHandle, Abortable, Aborted},
     join,
     prelude::*,
     task::{FutureObj, Spawn, SpawnError, SpawnExt},

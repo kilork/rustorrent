@@ -385,6 +385,17 @@ impl RustorrentApp {
     */
 }
 
+fn spawn_and_log_error<F>(f: F) -> tokio::task::JoinHandle<()>
+where
+    F: Future<Output = Result<(), RustorrentError>> + Send + 'static,
+{
+    tokio::spawn(async move {
+        if let Err(e) = f.await {
+            error!("{}", e)
+        }
+    })
+}
+
 async fn accept_connections_loop(
     settings: Arc<Settings>,
     addr: SocketAddr,
@@ -423,7 +434,10 @@ async fn download_events_loop(
                     hash_id,
                     torrent,
                 });
-                let _ = tokio::spawn(download_torrent(settings.clone(), torrent_process.clone()));
+                let _ = spawn_and_log_error(download_torrent(
+                    settings.clone(),
+                    torrent_process.clone(),
+                ));
                 torrents.push(torrent_process);
             }
         }
@@ -436,98 +450,123 @@ enum DownloadTorrentEvent {
     Announce(TrackerAnnounce),
 }
 
+async fn announce_loop(
+    settings: Arc<Settings>,
+    torrent_process: Arc<TorrentProcess>,
+    mut broker_sender: UnboundedSender<DownloadTorrentEvent>,
+) -> Result<(), RustorrentError> {
+    loop {
+        let announce_url = &torrent_process.torrent.announce_url;
+
+        let client: Client<_> = Client::new();
+
+        let left = torrent_process.info.len();
+        let config = &settings.config;
+        let mut url = {
+            format!(
+                "{}?info_hash={}&peer_id={}&left={}&port={}",
+                announce_url,
+                url_encode(&torrent_process.hash_id[..]),
+                url_encode(&PEER_ID[..]),
+                left,
+                config.port,
+            )
+        };
+
+        if let Some(compact) = config.compact {
+            url += &format!("&compact={}", if compact { 1 } else { 0 });
+        }
+
+        let uri = url.parse()?;
+        let res = client.get(uri).await;
+
+        debug!("Got tracker announce from: {}", url);
+
+        let result = match res {
+            Ok(result) if result.status().is_success() => result,
+            Ok(bad_result) => {
+                error!(
+                    "Bad response from tracker: {:?}, retry in 5 seconds...",
+                    bad_result
+                );
+                delay_for(Duration::from_secs(5)).await;
+                continue;
+            }
+            Err(err) => {
+                error!("Failure {}, retry in 5 seconds", err);
+                delay_for(Duration::from_secs(5)).await;
+                continue;
+            }
+        };
+
+        let mut announce_data = result.into_body();
+
+        let mut announce_bytes = vec![];
+
+        while let Some(chunk) = announce_data.data().await {
+            announce_bytes.append(&mut chunk?.to_vec());
+        }
+
+        let tracker_announce: Result<TrackerAnnounce, _> = announce_bytes.try_into();
+
+        let interval_to_query_tracker = match tracker_announce {
+            Ok(tracker_announce) => {
+                let interval_to_reannounce = tracker_announce.interval.try_into()?;
+
+                debug!("Tracker announce: {:?}", tracker_announce);
+
+                broker_sender
+                    .send(DownloadTorrentEvent::Announce(tracker_announce))
+                    .await?;
+                Duration::from_secs(interval_to_reannounce)
+            }
+
+            Err(err) => {
+                error!("Failure {}, retry in 5 seconds", err);
+                Duration::from_secs(5)
+            }
+        };
+
+        debug!("query tracker in {:?}", interval_to_query_tracker);
+
+        delay_for(interval_to_query_tracker).await;
+    }
+}
+
 async fn download_torrent(
     settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,
 ) -> Result<(), RustorrentError> {
-    let (mut broker_sender, mut broker_receiver) = mpsc::unbounded();
+    let (broker_sender, mut broker_receiver) = mpsc::unbounded();
 
-    let _ = tokio::spawn(async move {
-        loop {
-            let announce_url = &torrent_process.torrent.announce_url;
+    let (abort_handle, abort_registration) = AbortHandle::new_pair();
 
-            let client: Client<_> = Client::new();
+    let announce_loop = Abortable::new(
+        announce_loop(settings, torrent_process, broker_sender),
+        abort_registration,
+    )
+    .map_err(|e| e.into());
 
-            let left = torrent_process.info.len();
-            let config = &settings.config;
-            let mut url = {
-                format!(
-                    "{}?info_hash={}&peer_id={}&left={}&port={}",
-                    announce_url,
-                    url_encode(&torrent_process.hash_id[..]),
-                    url_encode(&PEER_ID[..]),
-                    left,
-                    config.port,
-                )
-            };
-
-            if let Some(compact) = config.compact {
-                url += &format!("&compact={}", if compact { 1 } else { 0 });
+    let download_events_loop = async move {
+        while let Some(event) = broker_receiver.next().await {
+            debug!("received event");
+            match event {
+                DownloadTorrentEvent::Announce(tracker_announce) => {
+                    debug!("we got announce, what now?");
+                }
             }
-
-            let uri = url.parse()?;
-            let res = client.get(uri).await;
-
-            debug!("Got tracker announce from: {}", url);
-
-            let result = match res {
-                Ok(result) if result.status().is_success() => result,
-                Ok(bad_result) => {
-                    error!(
-                        "Bad response from tracker: {:?}, retry in 5 seconds...",
-                        bad_result
-                    );
-                    delay_for(Duration::from_secs(5)).await;
-                    continue;
-                }
-                Err(err) => {
-                    error!("Failure {}, retry in 5 seconds", err);
-                    delay_for(Duration::from_secs(5)).await;
-                    continue;
-                }
-            };
-
-            let mut announce_data = result.into_body();
-
-            let mut announce_bytes = vec![];
-
-            while let Some(chunk) = announce_data.data().await {
-                announce_bytes.append(&mut chunk?.to_vec());
-            }
-
-            let tracker_announce: Result<TrackerAnnounce, _> = announce_bytes.try_into();
-
-            let interval_to_query_tracker = match tracker_announce {
-                Ok(tracker_announce) => {
-                    let interval_to_reannounce = tracker_announce.interval.try_into()?;
-
-                    debug!("Tracker announce: {:?}", tracker_announce);
-
-                    broker_sender
-                        .send(DownloadTorrentEvent::Announce(tracker_announce))
-                        .await?;
-                    Duration::from_secs(interval_to_reannounce)
-                }
-
-                Err(err) => {
-                    error!("Failure {}, retry in 5 seconds", err);
-                    Duration::from_secs(5)
-                }
-            };
-
-            delay_for(interval_to_query_tracker).await;
         }
+
+        abort_handle.abort();
+
+        debug!("download events loop is done");
 
         Ok::<(), RustorrentError>(())
-    });
+    };
 
-    while let Some(event) = broker_receiver.next().await {
-        debug!("received event");
-        match event {
-            DownloadTorrentEvent::Announce(tracker_announce) => {
-                debug!("we got announce, that now?");
-            }
-        }
+    match try_join!(announce_loop, download_events_loop) {
+        Ok(_) | Err(RustorrentError::Aborted) => debug!("download torrent is done"),
+        Err(e) => error!("download torrent finished with failure: {}", e),
     }
 
     Ok(())
