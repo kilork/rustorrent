@@ -33,8 +33,8 @@ pub enum RustorrentError {
     HTTPClient(hyper::Error),
     #[fail(display = "parser fail")]
     Parser,
-    // #[fail(display = "tokio unbounded receiver {}", _0)]
-    // TokioMpscUnboundedRecvError(tokio::sync::mpsc::error::UnboundedRecvError),
+    #[fail(display = "tokio send error")]
+    TokioMpscSendError,
     #[fail(display = "failure because of: {}", _0)]
     FailureReason(String),
     #[fail(display = "timer failure: {}", _0)]
@@ -73,6 +73,12 @@ from_rustorrent_error!(http::uri::InvalidUri, InvalidUri);
 impl From<futures::future::Aborted> for RustorrentError {
     fn from(_: futures::future::Aborted) -> Self {
         RustorrentError::Aborted
+    }
+}
+
+impl<T> From<tokio::sync::mpsc::error::SendError<T>> for RustorrentError {
+    fn from(_: tokio::sync::mpsc::error::SendError<T>) -> Self {
+        RustorrentError::TokioMpscSendError
     }
 }
 

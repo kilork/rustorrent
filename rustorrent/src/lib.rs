@@ -1,7 +1,7 @@
 use exitfailure::ExitFailure;
 use failure::{Context, ResultExt};
 use futures::{
-    channel::mpsc::{self, UnboundedReceiver, UnboundedSender},
+    // channel::mpsc::{self, UnboundedReceiver, UnboundedSender},
     future::{join_all, lazy, try_join, AbortHandle, Abortable, Aborted},
     join,
     prelude::*,
@@ -28,6 +28,7 @@ use tokio::{
     io,
     net::{TcpListener, TcpStream},
     prelude::*,
+    sync::mpsc::{self, Receiver, Sender},
     time::{delay_for, Interval},
 };
 
@@ -45,6 +46,10 @@ pub(crate) const SHA1_SIZE: usize = 20;
 pub(crate) const BLOCK_SIZE: usize = 1 << 14;
 
 pub(crate) const PEER_ID: [u8; 20] = *b"-rs0001-zzzzxxxxyyyy";
+
+pub(crate) const PEER_MAX_CONNECTIONS: usize = 50;
+
+pub(crate) const DEFAULT_CHANNEL_BUFFER: usize = 10;
 
 pub(crate) const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(110);
 

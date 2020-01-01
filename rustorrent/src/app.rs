@@ -84,7 +84,7 @@ pub(crate) enum TorrentPeerState {
         chocked: bool,
         interested: bool,
         downloading: bool,
-        sender: UnboundedSender<Message>,
+        sender: Sender<Message>,
         pieces: Vec<u8>,
     },
     Finished,
@@ -284,7 +284,8 @@ impl RustorrentApp {
 
         let addr = SocketAddr::new(listen.into(), config.port);
 
-        let (mut download_events_sender, download_events_receiver) = mpsc::unbounded();
+        let (mut download_events_sender, download_events_receiver) =
+            mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
         let download_events = download_events_loop(
             self.settings.clone(),
@@ -399,7 +400,7 @@ where
 async fn accept_connections_loop(
     settings: Arc<Settings>,
     addr: SocketAddr,
-    mut sender: UnboundedSender<RustorrentEvent>,
+    mut sender: Sender<RustorrentEvent>,
 ) -> Result<(), RustorrentError> {
     eprintln!("listening on: {}", &addr);
     let mut listener = TcpListener::bind(addr).await?;
@@ -417,8 +418,8 @@ async fn accept_connections_loop(
 
 async fn download_events_loop(
     settings: Arc<Settings>,
-    mut sender: UnboundedSender<RustorrentEvent>,
-    mut events: UnboundedReceiver<RustorrentEvent>,
+    mut sender: Sender<RustorrentEvent>,
+    mut events: Receiver<RustorrentEvent>,
 ) -> Result<(), RustorrentError> {
     let mut torrents = vec![];
 
@@ -447,13 +448,14 @@ async fn download_events_loop(
 }
 
 enum DownloadTorrentEvent {
-    Announce(TrackerAnnounce),
+    Announce(Vec<Peer>),
+    PeerAnnounced(Peer),
 }
 
 async fn announce_loop(
     settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,
-    mut broker_sender: UnboundedSender<DownloadTorrentEvent>,
+    mut broker_sender: Sender<DownloadTorrentEvent>,
 ) -> Result<(), RustorrentError> {
     loop {
         let announce_url = &torrent_process.torrent.announce_url;
@@ -516,7 +518,7 @@ async fn announce_loop(
                 debug!("Tracker announce: {:?}", tracker_announce);
 
                 broker_sender
-                    .send(DownloadTorrentEvent::Announce(tracker_announce))
+                    .send(DownloadTorrentEvent::Announce(tracker_announce.peers))
                     .await?;
                 Duration::from_secs(interval_to_reannounce)
             }
@@ -537,22 +539,47 @@ async fn download_torrent(
     settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,
 ) -> Result<(), RustorrentError> {
-    let (broker_sender, mut broker_receiver) = mpsc::unbounded();
+    let torrent_data: Vec<u8> = vec![0; torrent_process.info.len()];
+
+    let (broker_sender, mut broker_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
     let (abort_handle, abort_registration) = AbortHandle::new_pair();
 
     let announce_loop = Abortable::new(
-        announce_loop(settings, torrent_process, broker_sender),
+        announce_loop(
+            settings.clone(),
+            torrent_process.clone(),
+            broker_sender.clone(),
+        ),
         abort_registration,
     )
     .map_err(|e| e.into());
+
+    let mut peer_states = vec![];
 
     let download_events_loop = async move {
         while let Some(event) = broker_receiver.next().await {
             debug!("received event");
             match event {
-                DownloadTorrentEvent::Announce(tracker_announce) => {
+                DownloadTorrentEvent::Announce(peers) => {
                     debug!("we got announce, what now?");
+                    spawn_and_log_error(process_announce(
+                        settings.clone(),
+                        torrent_process.clone(),
+                        broker_sender.clone(),
+                        peers,
+                    ));
+                }
+                DownloadTorrentEvent::PeerAnnounced(peer) => {
+                    debug!("peer announced: {:?}", peer);
+                    process_peer_announced(
+                        settings.clone(),
+                        torrent_process.clone(),
+                        broker_sender.clone(),
+                        &mut peer_states,
+                        peer,
+                    )
+                    .await?;
                 }
             }
         }
@@ -572,23 +599,35 @@ async fn download_torrent(
     Ok(())
 }
 
-/*
-enum ProcessPeerEvent {}
-
-async fn process_peer(
+async fn process_announce(
     settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,
-    download_torrent_broker_sender: UnboundedSender<DownloadTorrentEvent>, // peer:
+    mut download_torrent_broker_sender: Sender<DownloadTorrentEvent>,
+    peers: Vec<Peer>,
 ) -> Result<(), RustorrentError> {
-    let (mut broker_sender, mut broker_receiver) = mpsc::unbounded();
-
-    let _ = tokio::spawn(async move {});
-
-    while let Some(event) = broker_receiver.next().await {
-        debug!("received event");
+    for peer in peers {
+        download_torrent_broker_sender
+            .send(DownloadTorrentEvent::PeerAnnounced(peer))
+            .await?;
     }
 
     Ok(())
 }
 
-*/
+async fn process_peer_announced(
+    settings: Arc<Settings>,
+    torrent_process: Arc<TorrentProcess>,
+    mut download_torrent_broker_sender: Sender<DownloadTorrentEvent>,
+    peer_states: &mut Vec<PeerState>,
+    peer: Peer,
+) -> Result<(), RustorrentError> {
+    if let Some(existing_peer) = peer_states.iter_mut().find(|x| x.peer == peer) {}
+
+    Ok(())
+}
+
+struct PeerState {
+    peer: Peer,
+    state: TorrentPeerState,
+    announce_count: usize,
+}

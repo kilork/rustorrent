@@ -36,7 +36,10 @@ pub struct Settings {
 }
 
 #[derive(Default, Serialize, Deserialize, Debug)]
-pub struct Peers {}
+pub struct Peers {
+    /// Maximum count of connections with peers
+    max_connections: Option<usize>,
+}
 
 impl Settings {
     pub fn override_with(self, config: Config) -> Self {
