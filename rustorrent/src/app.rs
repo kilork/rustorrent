@@ -79,7 +79,7 @@ impl From<&Peer> for TorrentPeer {
 #[derive(Debug)]
 pub(crate) enum TorrentPeerState {
     Idle,
-    Connecting,
+    Connecting(JoinHandle<()>),
     Connected {
         chocked: bool,
         interested: bool,
@@ -141,6 +141,13 @@ pub(crate) enum RustorrentCommand {
 pub(crate) enum RustorrentEvent {
     AddTorrent(PathBuf),
 }
+
+struct PeerState {
+    peer: Peer,
+    state: TorrentPeerState,
+    announce_count: usize,
+}
+
 /*
 pub fn add_torrent_from_file(
     self: Arc<Self>,
@@ -402,14 +409,14 @@ async fn accept_connections_loop(
     addr: SocketAddr,
     mut sender: Sender<RustorrentEvent>,
 ) -> Result<(), RustorrentError> {
-    eprintln!("listening on: {}", &addr);
+    debug!("listening on: {}", &addr);
     let mut listener = TcpListener::bind(addr).await?;
 
     loop {
         let (mut socket, _) = listener.accept().await?;
         let _ = tokio::spawn(async {
             let mut buf = [0; 1024];
-            eprintln!("yahoo");
+            debug!("yahoo");
         });
     }
 
@@ -426,7 +433,7 @@ async fn download_events_loop(
     while let Some(event) = events.next().await {
         match event {
             RustorrentEvent::AddTorrent(filename) => {
-                eprintln!("we need to download {:?}", filename);
+                debug!("we need to download {:?}", filename);
                 let torrent = parse_torrent(&filename)?;
                 let hash_id = torrent.info_sha1_hash();
                 let info = torrent.info()?;
@@ -450,6 +457,8 @@ async fn download_events_loop(
 enum DownloadTorrentEvent {
     Announce(Vec<Peer>),
     PeerAnnounced(Peer),
+    PeerConnected(Peer, TcpStream),
+    PeerConnectFailed(Peer),
 }
 
 async fn announce_loop(
@@ -539,6 +548,12 @@ async fn download_torrent(
     settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,
 ) -> Result<(), RustorrentError> {
+    let mut handshake = vec![];
+    handshake.extend_from_slice(&crate::types::HANDSHAKE_PREFIX);
+    handshake.extend_from_slice(&torrent_process.hash_id);
+    handshake.extend_from_slice(&PEER_ID);
+    let handshake = Arc::new(handshake);
+
     let torrent_data: Vec<u8> = vec![0; torrent_process.info.len()];
 
     let (broker_sender, mut broker_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
@@ -575,9 +590,28 @@ async fn download_torrent(
                     process_peer_announced(
                         settings.clone(),
                         torrent_process.clone(),
+                        handshake.clone(),
                         broker_sender.clone(),
                         &mut peer_states,
                         peer,
+                    )
+                    .await?;
+                }
+                DownloadTorrentEvent::PeerConnectFailed(peer) => {
+                    if let Some(index) = peer_states.iter().position(|x| x.peer == peer) {
+                        peer_states.remove(index);
+                    }
+                }
+                DownloadTorrentEvent::PeerConnected(peer, stream) => {
+                    debug!("peer connected: {:?}", peer);
+                    process_peer_connected(
+                        settings.clone(),
+                        torrent_process.clone(),
+                        handshake.clone(),
+                        broker_sender.clone(),
+                        &mut peer_states,
+                        peer,
+                        stream,
                     )
                     .await?;
                 }
@@ -617,17 +651,86 @@ async fn process_announce(
 async fn process_peer_announced(
     settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,
+    handshake: Arc<Vec<u8>>,
     mut download_torrent_broker_sender: Sender<DownloadTorrentEvent>,
     peer_states: &mut Vec<PeerState>,
     peer: Peer,
 ) -> Result<(), RustorrentError> {
-    if let Some(existing_peer) = peer_states.iter_mut().find(|x| x.peer == peer) {}
+    let mut peer_states_iter = peer_states.iter_mut();
+    if let Some(existing_peer) = peer_states_iter.find(|x| x.peer == peer) {
+        match existing_peer.state {
+            TorrentPeerState::Idle => {
+                let handler = spawn_and_log_error(connect_to_peer(
+                    settings,
+                    torrent_process,
+                    handshake,
+                    download_torrent_broker_sender,
+                    peer,
+                ));
+                existing_peer.state = TorrentPeerState::Connecting(handler);
+            }
+            TorrentPeerState::Connected { .. } => {
+                existing_peer.announce_count += 1;
+            }
+            _ => (),
+        }
+    } else {
+        peer_states.push(PeerState {
+            peer: peer.clone(),
+            state: TorrentPeerState::Connecting(spawn_and_log_error(connect_to_peer(
+                settings,
+                torrent_process,
+                handshake,
+                download_torrent_broker_sender,
+                peer,
+            ))),
+            announce_count: 0,
+        })
+    };
 
     Ok(())
 }
 
-struct PeerState {
+async fn connect_to_peer(
+    settings: Arc<Settings>,
+    torrent_process: Arc<TorrentProcess>,
+    handshake: Arc<Vec<u8>>,
+    mut download_torrent_broker_sender: Sender<DownloadTorrentEvent>,
     peer: Peer,
-    state: TorrentPeerState,
-    announce_count: usize,
+) -> Result<(), RustorrentError> {
+    let socket_addr = SocketAddr::new(peer.ip, peer.port);
+    let mut stream = TcpStream::connect(socket_addr).await?;
+
+    stream.write_all(&handshake).await?;
+
+    let mut handshake_reply = vec![0u8; 68];
+
+    stream.read_exact(&mut handshake_reply).await?;
+
+    let handshake_reply: Handshake = handshake_reply.try_into()?;
+
+    if handshake_reply.info_hash != torrent_process.hash_id {
+        error!("Peer {:?}: hash is wrong. Disconnect.", peer);
+        download_torrent_broker_sender
+            .send(DownloadTorrentEvent::PeerConnectFailed(peer))
+            .await?;
+        return Ok(());
+    }
+
+    download_torrent_broker_sender
+        .send(DownloadTorrentEvent::PeerConnected(peer, stream))
+        .await?;
+    Ok(())
+}
+
+async fn process_peer_connected(
+    settings: Arc<Settings>,
+    torrent_process: Arc<TorrentProcess>,
+    handshake: Arc<Vec<u8>>,
+    mut download_torrent_broker_sender: Sender<DownloadTorrentEvent>,
+    peer_states: &mut Vec<PeerState>,
+    peer: Peer,
+    stream: TcpStream,
+) -> Result<(), RustorrentError> {
+    Ok(())
 }

@@ -3,7 +3,7 @@ use crate::parser::parse_handshake;
 
 use std::net::{IpAddr, Ipv4Addr};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Peer {
     pub ip: IpAddr,
     pub peer_id: Option<String>,
