@@ -36,7 +36,6 @@ pub struct TorrentProcess {
 #[derive(Debug)]
 pub(crate) struct TorrentStorage {
     pub(crate) pieces: Vec<Arc<Mutex<TorrentPiece>>>,
-    pub(crate) peers: Vec<Arc<TorrentPeer>>,
 }
 
 #[derive(Debug, Default)]
@@ -61,32 +60,14 @@ impl TorrentPiece {
 }
 
 #[derive(Debug)]
-pub(crate) struct TorrentPeer {
-    pub(crate) addr: SocketAddr,
-    pub(crate) announcement_count: AtomicUsize,
-    pub(crate) state: Mutex<TorrentPeerState>,
-}
-
-impl From<&Peer> for TorrentPeer {
-    fn from(value: &Peer) -> Self {
-        let addr = SocketAddr::new(value.ip, value.port);
-        Self {
-            addr,
-            announcement_count: AtomicUsize::new(0),
-            state: Mutex::new(Default::default()),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub(crate) enum TorrentPeerState {
+enum TorrentPeerState {
     Idle,
     Connecting(JoinHandle<()>),
     Connected {
         chocked: bool,
         interested: bool,
-        downloading: bool,
-        sender: Sender<Message>,
+        downloading_piece: Option<usize>,
+        sender: Sender<PeerMessage>,
         pieces: Vec<u8>,
     },
     Finished,
@@ -128,18 +109,6 @@ pub(crate) struct Block {
     pub length: u32,
 }
 
-pub(crate) enum RustorrentCommand {
-    PeerMessage(Arc<TorrentProcess>, Arc<TorrentPeer>, Message),
-    ConnectToPeer(Arc<TorrentProcess>, Arc<TorrentPeer>),
-    DownloadBlock(Arc<TorrentProcess>, Arc<TorrentPeer>, Block),
-    ProcessAnnounce(Arc<TorrentProcess>, TrackerAnnounce),
-    ProcessAnnounceError(Arc<TorrentProcess>, Arc<RustorrentError>),
-    PieceDownloaded(Arc<TorrentProcess>, Arc<TorrentPeer>, usize),
-    DownloadNextBlock(Arc<TorrentProcess>, Arc<TorrentPeer>),
-    AddTorrent(PathBuf),
-    Quit,
-}
-
 pub(crate) enum RustorrentEvent {
     AddTorrent(PathBuf),
     TorrentHandshake {
@@ -152,6 +121,12 @@ struct PeerState {
     peer: Peer,
     state: TorrentPeerState,
     announce_count: usize,
+}
+
+#[derive(Debug)]
+enum PeerMessage {
+    Disconnect,
+    Message(Message),
 }
 
 /*
@@ -467,8 +442,14 @@ async fn peer_connection(
             debug!("received peer message: {}", message);
         }
 
+        debug!("peer connection receive exit");
+
         Ok::<(), RustorrentError>(())
     };
+
+    receive_task.await?;
+
+    debug!("peer connection exit");
 
     Ok(())
 }
@@ -704,6 +685,7 @@ async fn process_announce(
     peers: Vec<Peer>,
 ) -> Result<(), RustorrentError> {
     let mut download_torrent_broker_sender = torrent_process.broker_sender.clone();
+
     for peer in peers {
         download_torrent_broker_sender
             .send(DownloadTorrentEvent::PeerAnnounced(peer))
@@ -777,6 +759,7 @@ async fn connect_to_peer(
         .clone()
         .send(DownloadTorrentEvent::PeerConnected(peer, stream))
         .await?;
+
     Ok(())
 }
 
@@ -789,7 +772,71 @@ async fn process_peer_connected(
 ) -> Result<(), RustorrentError> {
     debug!("peer connection initiated: {:?}", peer);
 
-    let (wtransport, rtransport) = Framed::new(stream, MessageCodec).split();
+    if let Some(existing_peer) = peer_states.iter_mut().find(|x| x.peer == peer) {
+        let (sender, receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
+
+        let _ = spawn_and_log_error(peer_loop(
+            settings,
+            torrent_process,
+            peer,
+            sender.clone(),
+            receiver,
+            stream,
+        ));
+
+        existing_peer.state = TorrentPeerState::Connected {
+            chocked: true,
+            interested: false,
+            downloading_piece: None,
+            pieces: vec![],
+            sender,
+        };
+    }
+
+    Ok(())
+}
+
+async fn peer_loop(
+    settings: Arc<Settings>,
+    torrent_process: Arc<TorrentProcess>,
+    peer: Peer,
+    mut sender: Sender<PeerMessage>,
+    mut receiver: Receiver<PeerMessage>,
+    stream: TcpStream,
+) -> Result<(), RustorrentError> {
+    let (mut wtransport, mut rtransport) = Framed::new(stream, MessageCodec).split();
+
+    let command_loop = async move {
+        while let Some(message) = receiver.next().await {
+            debug!("peer loop received message: {:?}", message);
+            match message {
+                PeerMessage::Disconnect => break,
+                PeerMessage::Message(message) => (),
+            }
+        }
+
+        debug!("peer loop command exit");
+
+        wtransport.close().await?;
+
+        Ok::<(), RustorrentError>(())
+    };
+
+    let receive_loop = async move {
+        while let Some(Ok(message)) = rtransport.next().await {
+            sender.send(PeerMessage::Message(message)).await?;
+        }
+
+        debug!("peer loop receive exit");
+
+        sender.send(PeerMessage::Disconnect).await?;
+
+        Ok::<(), RustorrentError>(())
+    };
+
+    let _ = try_join!(command_loop, receive_loop)?;
+
+    debug!("peer loop exit");
 
     Ok(())
 }

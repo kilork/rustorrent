@@ -1,3 +1,4 @@
+use crate::types::message::MessageCodecError;
 use failure::*;
 use log::error;
 
@@ -49,6 +50,8 @@ pub enum RustorrentError {
     Aborted,
     #[fail(display = "peer handshake failure")]
     PeerHandshakeFailure,
+    #[fail(display = "message codec {}", _0)]
+    MessageCodec(MessageCodecError),
 }
 
 macro_rules! from_rustorrent_error {
@@ -71,6 +74,7 @@ from_rustorrent_error!(core::array::TryFromSliceError, ConvertFromSlice);
 from_rustorrent_error!(tokio::time::Error, TimerFailure);
 from_rustorrent_error!(futures::channel::mpsc::SendError, SendError);
 from_rustorrent_error!(http::uri::InvalidUri, InvalidUri);
+from_rustorrent_error!(MessageCodecError, MessageCodec);
 
 impl From<futures::future::Aborted> for RustorrentError {
     fn from(_: futures::future::Aborted) -> Self {
