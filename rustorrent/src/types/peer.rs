@@ -1,5 +1,6 @@
 use super::*;
 use crate::parser::parse_handshake;
+use crate::SHA1_SIZE;
 
 use std::net::{IpAddr, Ipv4Addr};
 
@@ -43,7 +44,7 @@ impl TryFrom<BencodeBlob> for Vec<Peer> {
 pub struct Handshake {
     pub protocol_prefix: [u8; 20],
     pub reserved: [u8; 8],
-    pub info_hash: [u8; 20],
+    pub info_hash: [u8; SHA1_SIZE],
     pub peer_id: [u8; 20],
 }
 

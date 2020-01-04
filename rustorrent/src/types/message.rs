@@ -122,7 +122,7 @@ impl From<std::io::Error> for MessageCodecError {
 // }
 
 #[derive(Default)]
-pub struct MessageCodec {}
+pub struct MessageCodec;
 
 impl Decoder for MessageCodec {
     type Item = Message;

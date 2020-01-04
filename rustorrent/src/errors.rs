@@ -47,6 +47,8 @@ pub enum RustorrentError {
     InvalidUri(http::uri::InvalidUri),
     #[fail(display = "aborted")]
     Aborted,
+    #[fail(display = "peer handshake failure")]
+    PeerHandshakeFailure,
 }
 
 macro_rules! from_rustorrent_error {
@@ -89,7 +91,6 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for RustorrentError {
 
 impl<'a> From<nom::Err<&'a [u8]>> for RustorrentError {
     fn from(value: nom::Err<&'a [u8]>) -> Self {
-        error!("{:?}", value);
         RustorrentError::Parser
     }
 }
