@@ -1,4 +1,4 @@
-/target
+**/target
 **/*.rs.bk
 .ENV.md
 rustorrent-web-resources/static/files/node_modules
