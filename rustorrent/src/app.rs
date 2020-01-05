@@ -520,6 +520,7 @@ enum DownloadTorrentEvent {
     PeerAnnounced(Peer),
     PeerConnected(Peer, TcpStream),
     PeerConnectFailed(Peer),
+    PeerDisconnect(Peer),
 }
 
 async fn announce_loop(
@@ -644,6 +645,11 @@ async fn download_torrent(
                         peer,
                     )
                     .await?;
+                }
+                DownloadTorrentEvent::PeerDisconnect(peer) => {
+                    if let Some(index) = peer_states.iter().position(|x| x.peer == peer) {
+                        peer_states.remove(index);
+                    }
                 }
                 DownloadTorrentEvent::PeerConnectFailed(peer) => {
                     if let Some(index) = peer_states.iter().position(|x| x.peer == peer) {
@@ -806,6 +812,8 @@ async fn peer_loop(
 ) -> Result<(), RustorrentError> {
     let (mut wtransport, mut rtransport) = Framed::new(stream, MessageCodec).split();
 
+    let mut broker_sender = torrent_process.broker_sender.clone();
+
     let command_loop = async move {
         while let Some(message) = receiver.next().await {
             debug!("peer loop received message: {:?}", message);
@@ -835,6 +843,10 @@ async fn peer_loop(
     };
 
     let _ = try_join!(command_loop, receive_loop)?;
+
+    broker_sender
+        .send(DownloadTorrentEvent::PeerDisconnect(peer))
+        .await?;
 
     debug!("peer loop exit");
 
