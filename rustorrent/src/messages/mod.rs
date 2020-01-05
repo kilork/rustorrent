@@ -1,14 +1,9 @@
 use super::*;
 
-use std::sync::Arc;
-
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
-use futures::prelude::*;
 use log::{debug, error, info, warn};
 
 use crate::app::*;
-use crate::errors::RustorrentError;
-use crate::types::message::Message;
 
 // mod bitfield;
 // mod choke;
@@ -35,15 +30,6 @@ pub(crate) fn bit_by_index(index: usize, data: &[u8]) -> Option<(usize, u8)> {
             None
         }
     })
-}
-
-pub(crate) fn send_message_to_peer(sender: &UnboundedSender<Message>, message: Message) {
-    let mut conntx = sender.clone();
-    tokio::spawn(async move {
-        if let Err(err) = conntx.send(message).await {
-            error!("Cannot send message: {}", err);
-        }
-    });
 }
 
 pub(crate) fn block_from_piece(

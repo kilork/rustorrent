@@ -819,7 +819,10 @@ async fn peer_loop(
             debug!("peer loop received message: {:?}", message);
             match message {
                 PeerMessage::Disconnect => break,
-                PeerMessage::Message(message) => (),
+                PeerMessage::Message(message) => match message {
+                    Message::Bitfield(pieces) => (),
+                    _ => (),
+                },
             }
         }
 

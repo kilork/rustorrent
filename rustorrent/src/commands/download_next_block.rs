@@ -24,7 +24,7 @@ impl Inner {
             let (piece_length, blocks_count) = info.sizes(piece_index);
 
             debug!(
-                "Piece {} is not downdloaded, piece length: {}, blocks count: {}",
+                "Piece {} is not downloaded, piece length: {}, blocks count: {}",
                 piece_index, piece_length, blocks_count
             );
 
