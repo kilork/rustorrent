@@ -36,6 +36,7 @@ use tokio::{
     time::{delay_for, Interval},
 };
 use tokio_util::codec::{Decoder, Encoder, Framed};
+use uuid::Uuid;
 
 pub mod app;
 mod commands;

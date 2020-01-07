@@ -1,8 +1,6 @@
 use super::*;
 use crate::{errors::RustorrentError, types::torrent::parse_torrent, PEER_ID};
 
-// use tokio::codec::Decoder;
-
 use crate::{
     types::{
         info::TorrentInfo,
@@ -95,13 +93,6 @@ pub enum TorrentProcessState {
     Finished,
 }
 
-#[derive(Debug)]
-pub(crate) enum AnnounceState {
-    Idle,
-    Request,
-    Error(Arc<RustorrentError>),
-}
-
 #[derive(Debug, PartialEq, Hash, Eq)]
 pub(crate) struct Block {
     pub piece: u32,
@@ -128,78 +119,6 @@ enum PeerMessage {
     Disconnect,
     Message(Message),
 }
-
-/*
-pub fn add_torrent_from_file(
-    self: Arc<Self>,
-    filename: impl AsRef<Path>,
-) -> Result<(), RustorrentError> {
-    info!("Adding torrent from file: {:?}", filename.as_ref());
-    let command = RustorrentCommand::AddTorrent(filename.as_ref().into());
-    self.send_command(command)
-}
-
-pub(crate) fn command_quit(self: Arc<Self>) -> Result<(), RustorrentError> {
-    self.send_command(RustorrentCommand::Quit)
-}
-
-pub(crate) fn send_command(
-    self: Arc<Self>,
-    command: RustorrentCommand,
-) -> Result<(), RustorrentError> {
-    tokio::spawn(
-        self.command_sender
-            .clone()
-            .send(command)
-            .map(|_| ())
-            .map_err(|err| error!("send failed: {}", err)),
-    );
-
-    Ok(())
-}
-
-pub(crate) fn spawn_delayed_announce(
-    self: Arc<Self>,
-    torrent_process: Arc<TorrentProcess>,
-    after: Duration,
-) -> Result<(), RustorrentError> {
-    let when = Instant::now() + after;
-    let task = delay(when)
-        /*.and_then(|_| {
-            info!("time to reannounce!");
-            self.command_start_announce_process(torrent_process)?;
-            Ok(())
-        })
-        .map_err(|err| error!("Delayed task failed: {}", err));*/
-
-    tokio::spawn(task);
-
-    Ok(())
-}
-
-fn start_info_update_loop(self: Arc<Self>, is_running: Arc<AtomicBool>) {
-    let interval = Interval::new(Instant::now(), Duration::from_secs(10));
-
-    let is_running_clone = is_running.clone();
-    let interval_task = interval
-        .map_err(RustorrentError::from)
-        .take_while(move |_| Ok(is_running_clone.load(Ordering::SeqCst)))
-        .for_each(move |_| {
-            for process in self.processes.read().unwrap().iter() {
-                let announce_state = process.announce_state.lock().unwrap();
-                let torrent_state = process.torrent_state.lock().unwrap();
-                let stats = process.stats.lock().unwrap();
-                info!(
-                    "{:?} {:?} {:?} {:?}",
-                    process.path, announce_state, torrent_state, stats
-                );
-            }
-            Ok(())
-        })
-        .map_err(|err| error!("Info update loop failure: {}", err));
-    tokio::spawn(interval_task);
-}
-*/
 
 impl RustorrentApp {
     pub fn new(settings: Settings) -> Self {
@@ -295,83 +214,6 @@ impl RustorrentApp {
         Ok(())
     }
 
-    /*
-        pub async fn run(&mut self) -> Result<(), RustorrentError> {
-            let is_running = Arc::new(AtomicBool::new(true));
-
-            let can_try_count = Arc::new(AtomicUsize::new(10));
-
-            self.clone().start_info_update_loop(is_running.clone());
-
-            let receiver = self.command_receiver.lock().unwrap().take().unwrap();
-            let (close_sender, close_receiver) = futures::channel::oneshot::channel::<()>();
-            let close_sender = Arc::new(Mutex::new(Some(close_sender)));
-            let this = self.clone();
-            receiver
-                .map_err(RustorrentError::from)
-                .for_each(move |x| {
-                    let this = this.clone();
-                    let can_try_count = can_try_count.clone();
-                    match x {
-                        RustorrentCommand::AddTorrent(filename) => {
-                            let this_announce = this.clone();
-                            this.command_add_torrent(filename)
-                                .and_then(|torrent_process| {
-                                    this_announce.command_start_announce_process(torrent_process)
-                                })?;
-                        }
-                        RustorrentCommand::ProcessAnnounceError(torrent_process, err) => match *err {
-                            RustorrentError::HTTPClient(ref err) => {
-                                if err.is_connect() {
-                                    error!("connection refused!");
-                                    if can_try_count.fetch_sub(1, Ordering::SeqCst) == 0 {
-                                        error!("Cannot connect to announce server, giving up");
-                                        this.clone().command_quit()?;
-                                    }
-
-                                    *torrent_process.announce_state.lock().unwrap() =
-                                        AnnounceState::Idle;
-                                    this.spawn_delayed_announce(
-                                        torrent_process,
-                                        Duration::from_secs(5),
-                                    )?;
-                                }
-                            }
-                            ref other => error!("Process announce error: {}", other),
-                        },
-                        RustorrentCommand::Quit => {
-                            info!("Quit now");
-                            let sender = close_sender.lock().unwrap().take().unwrap();
-                            sender.send(()).unwrap();
-                            is_running.store(false, Ordering::SeqCst);
-                        }
-                        RustorrentCommand::ProcessAnnounce(torrent_process, tracker_announce) => {
-                            this.command_process_announce(torrent_process, tracker_announce)?;
-                        }
-                        RustorrentCommand::ConnectToPeer(torrent_process, torrent_peer) => {
-                            this.command_connect_to_peer(torrent_process, torrent_peer)?;
-                        }
-                        RustorrentCommand::PeerMessage(torrent_process, torrent_peer, message) => {
-                            this.command_peer_message(torrent_process, torrent_peer, message)?;
-                        }
-                        RustorrentCommand::DownloadBlock(torrent_process, torrent_peer, block) => {
-                            this.command_download_block(torrent_process, torrent_peer, block)?;
-                        }
-                        RustorrentCommand::PieceDownloaded(torrent_process, torrent_peer, piece) => {
-                            this.command_piece_downloaded(torrent_process, torrent_peer, piece)?;
-                        }
-                        RustorrentCommand::DownloadNextBlock(torrent_process, torrent_peer) => {
-                            this.command_download_next_block(torrent_process, torrent_peer)?;
-                        }
-                    }
-
-                    Ok(())
-                })
-                .select2(close_receiver)
-                .map_err(|_err| error!("Error in run loop"))
-                .then(|_| Ok(()))
-        }
-    */
 }
 
 fn spawn_and_log_error<F>(f: F) -> tokio::task::JoinHandle<()>

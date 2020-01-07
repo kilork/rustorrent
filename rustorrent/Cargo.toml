@@ -19,6 +19,8 @@ env_logger = "0.7"
 sha-1 = "0.8"
 percent-encoding = "2"
 
+uuid = { version = "0.8", features = ["v4"] }
+
 http = "0.2"
 http-body = "0.3"
 hyper = "0.13"
