@@ -32,19 +32,25 @@ pub struct TorrentProcess {
 }
 
 #[derive(Debug)]
-pub(crate) struct TorrentStorage {
-    pub(crate) pieces: Vec<TorrentPiece>,
+struct TorrentStorage {
+    pieces: Vec<TorrentPiece>,
+    downloaded: Vec<u8>,
+}
+
+#[derive(Debug)]
+enum TorrentPiece {
+    Data(Vec<u8>),
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct TorrentPiece {
+pub(crate) struct TorrentPeerPiece {
     pub(crate) downloaded: bool,
     pub(crate) data: Vec<u8>,
     pub(crate) blocks: Vec<u8>,
     pub(crate) blocks_to_download: usize,
 }
 
-impl TorrentPiece {
+impl TorrentPeerPiece {
     pub(crate) fn init(&mut self, piece_length: usize, blocks_count: usize) {
         self.data = vec![0; piece_length];
         self.blocks = vec![0; count_parts(blocks_count, 8)];
@@ -117,6 +123,7 @@ struct PeerState {
 enum PeerMessage {
     Disconnect,
     Message(Message),
+    Download(usize),
 }
 
 impl RustorrentApp {
@@ -361,6 +368,7 @@ enum DownloadTorrentEvent {
     PeerConnected(Uuid, TcpStream),
     PeerConnectFailed(Uuid),
     PeerDisconnect(Uuid),
+    PeerPieces(Uuid, Vec<u8>),
 }
 
 async fn announce_loop(
@@ -452,7 +460,10 @@ async fn download_torrent(
     torrent_process: Arc<TorrentProcess>,
     mut broker_receiver: Receiver<DownloadTorrentEvent>,
 ) -> Result<(), RustorrentError> {
-    let torrent_data: Vec<u8> = vec![0; torrent_process.info.len()];
+    let mut torrent_storage = TorrentStorage {
+        downloaded: vec![],
+        pieces: vec![],
+    };
 
     let (abort_handle, abort_registration) = AbortHandle::new_pair();
 
@@ -487,23 +498,35 @@ async fn download_torrent(
                     .await?;
                 }
                 DownloadTorrentEvent::PeerDisconnect(peer_id) => {
-                    if let Some(peer_state) = peer_states.remove(&peer_id) {
+                    if let Some(_peer_state) = peer_states.remove(&peer_id) {
                         debug!("removed peer {} due to disconnect", peer_id);
                     }
                 }
                 DownloadTorrentEvent::PeerConnectFailed(peer_id) => {
-                    if let Some(peer_state) = peer_states.remove(&peer_id) {
+                    if let Some(_peer_state) = peer_states.remove(&peer_id) {
                         debug!("removed peer {} due to connection failure", peer_id);
                     }
                 }
                 DownloadTorrentEvent::PeerConnected(peer_id, stream) => {
-                    debug!("peer connected: {:?}", peer_id);
+                    debug!("peer connected: {}", peer_id);
                     process_peer_connected(
                         settings.clone(),
                         torrent_process.clone(),
                         &mut peer_states,
                         peer_id,
                         stream,
+                    )
+                    .await?;
+                }
+                DownloadTorrentEvent::PeerPieces(peer_id, pieces) => {
+                    debug!("peer pieces {}", peer_id);
+                    process_peer_pieces(
+                        settings.clone(),
+                        torrent_process.clone(),
+                        &mut peer_states,
+                        peer_id,
+                        pieces,
+                        &mut torrent_storage,
                     )
                     .await?;
                 }
@@ -665,15 +688,32 @@ async fn peer_loop(
 
     let mut broker_sender = torrent_process.broker_sender.clone();
 
+    let mut command_loop_broker_sender = broker_sender.clone();
+
     let command_loop = async move {
+        let mut message_count = 0;
         while let Some(message) = receiver.next().await {
             debug!("peer loop received message: {:?}", message);
             match message {
+                PeerMessage::Download(piece) => {
+                    info!("we got far, let's download now piece: {}", piece);
+                }
                 PeerMessage::Disconnect => break,
-                PeerMessage::Message(message) => match message {
-                    Message::Bitfield(pieces) => (),
-                    _ => (),
-                },
+                PeerMessage::Message(message) => {
+                    message_count += 1;
+                    match message {
+                        Message::Bitfield(pieces) => {
+                            if message_count != 1 {
+                                error!("wrong message sequence for peer {}: bitfield message must be first message", peer_id);
+                                break;
+                            }
+                            command_loop_broker_sender
+                                .send(DownloadTorrentEvent::PeerPieces(peer_id, pieces))
+                                .await?;
+                        }
+                        _ => (),
+                    }
+                }
             }
         }
 
@@ -691,7 +731,12 @@ async fn peer_loop(
 
         debug!("peer loop receive exit");
 
-        sender.send(PeerMessage::Disconnect).await?;
+        if let Err(err) = sender.send(PeerMessage::Disconnect).await {
+            error!(
+                "cannot send disconnect message to peer {}: {}",
+                peer_id, err
+            );
+        }
 
         Ok::<(), RustorrentError>(())
     };
@@ -705,4 +750,126 @@ async fn peer_loop(
     debug!("peer loop exit");
 
     Ok(())
+}
+
+async fn process_peer_pieces(
+    settings: Arc<Settings>,
+    torrent_process: Arc<TorrentProcess>,
+    peer_states: &mut HashMap<Uuid, PeerState>,
+    peer_id: Uuid,
+    peer_pieces: Vec<u8>,
+    storage: &mut TorrentStorage,
+) -> Result<(), RustorrentError> {
+    debug!("peer connection initiated: {:?}", peer_id);
+
+    let new_pieces = if let Some(existing_peer) = peer_states.get_mut(&peer_id) {
+        match &mut existing_peer.state {
+            TorrentPeerState::Connected { pieces, .. } => {
+                collect_pieces_and_update(pieces, &peer_pieces, &storage.downloaded)
+            }
+            TorrentPeerState::Idle | TorrentPeerState::Connecting(_) => {
+                error!(
+                    "cannot process peer pieces: wrong state: {:?}",
+                    existing_peer.state
+                );
+                vec![]
+            }
+        }
+    } else {
+        vec![]
+    };
+
+    for new_piece in new_pieces {
+        let any_peer_downloading = peer_states.values().any(|x| match x.state {
+            TorrentPeerState::Connected {
+                downloading_piece, ..
+            } => downloading_piece == Some(new_piece),
+            _ => false,
+        });
+
+        if !any_peer_downloading {
+            if let Some(existing_peer) = peer_states.get_mut(&peer_id) {
+                if let TorrentPeerState::Connected {
+                    ref mut downloading_piece,
+                    ref mut sender,
+                    ..
+                } = existing_peer.state
+                {
+                    if downloading_piece.is_none() {
+                        *downloading_piece = Some(new_piece);
+                        sender.send(PeerMessage::Download(new_piece)).await?;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn collect_pieces_and_update(
+    current_pieces: &mut Vec<u8>,
+    new_pieces: &[u8],
+    downloaded_pieces: &[u8],
+) -> Vec<usize> {
+    let mut pieces = vec![];
+    while current_pieces.len() < new_pieces.len() {
+        current_pieces.push(0);
+    }
+    for (i, (a, &b)) in current_pieces.iter_mut().zip(new_pieces).enumerate() {
+        let new = b & !*a;
+
+        *a |= new;
+
+        let new = if let Some(d) = downloaded_pieces.get(i) {
+            b & !d
+        } else {
+            b
+        };
+
+        for j in 0..8 {
+            if new & (0b10000000 >> j) != 0 {
+                pieces.push(i * 8 + j);
+            }
+        }
+    }
+    pieces
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_collect_pieces_and_update() {
+        let mut current_pieces = vec![];
+
+        let result = collect_pieces_and_update(&mut current_pieces, &[192], &[]);
+        assert_eq!(result, vec![0, 1]);
+        assert_eq!(current_pieces, vec![192]);
+
+        let mut current_pieces = vec![192];
+
+        let result = collect_pieces_and_update(&mut current_pieces, &[192], &[192]);
+        assert_eq!(result, vec![]);
+        assert_eq!(current_pieces, vec![192]);
+
+        let mut current_pieces = vec![];
+
+        let result = collect_pieces_and_update(&mut current_pieces, &[192, 192], &[]);
+        assert_eq!(result, vec![0, 1, 8, 9]);
+        assert_eq!(current_pieces, vec![192, 192]);
+
+        let mut current_pieces = vec![];
+
+        let result = collect_pieces_and_update(&mut current_pieces, &[0b10101010], &[0b01010101]);
+        assert_eq!(result, vec![0, 2, 4, 6]);
+        assert_eq!(current_pieces, vec![0b10101010]);
+
+        let mut current_pieces = vec![];
+
+        let result = collect_pieces_and_update(&mut current_pieces, &[0b10101010], &[0b11010101]);
+        assert_eq!(result, vec![2, 4, 6]);
+        assert_eq!(current_pieces, vec![0b10101010]);
+    }
 }
