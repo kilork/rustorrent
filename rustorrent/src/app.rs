@@ -311,6 +311,7 @@ enum DownloadTorrentEvent {
     PeerConnectFailed(Uuid),
     PeerDisconnect(Uuid),
     PeerPieces(Uuid, Vec<u8>),
+    PeerPiece(Uuid, usize),
     PeerUnchoke(Uuid),
     PeerPieceDownloaded(Uuid, Vec<u8>),
 }
@@ -463,6 +464,18 @@ async fn download_torrent(
                         &mut peer_states,
                         peer_id,
                         stream,
+                    )
+                    .await?;
+                }
+                DownloadTorrentEvent::PeerPiece(peer_id, piece) => {
+                    debug!("peer pieces {}", peer_id);
+                    process_peer_piece(
+                        settings.clone(),
+                        torrent_process.clone(),
+                        &mut peer_states,
+                        peer_id,
+                        piece,
+                        &mut torrent_storage,
                     )
                     .await?;
                 }
@@ -689,7 +702,7 @@ async fn peer_loop(
         let mut torrent_piece: Option<Vec<u8>> = None;
 
         while let Some(message) = receiver.next().await {
-            debug!("peer loop received message: {:?}", message);
+            debug!("peer loop received message");
             match message {
                 PeerMessage::Have(piece) => {
                     let piece_index = piece as u32;
@@ -720,6 +733,14 @@ async fn peer_loop(
                             }
                             command_loop_broker_sender
                                 .send(DownloadTorrentEvent::PeerPieces(peer_id, pieces))
+                                .await?;
+                        }
+                        Message::Have { piece_index } => {
+                            command_loop_broker_sender
+                                .send(DownloadTorrentEvent::PeerPiece(
+                                    peer_id,
+                                    piece_index as usize,
+                                ))
                                 .await?;
                         }
                         Message::Unchoke => {
@@ -794,7 +815,7 @@ async fn peer_loop(
                                 error!("abnormal piece message {} for peer {}", index, peer_id);
                             }
                         }
-                        _ => (),
+                        _ => debug!("unhandled message: {}", message),
                     }
                 }
             }
@@ -831,6 +852,41 @@ async fn peer_loop(
         .await?;
 
     debug!("peer loop exit");
+
+    Ok(())
+}
+
+async fn process_peer_piece(
+    settings: Arc<Settings>,
+    torrent_process: Arc<TorrentProcess>,
+    peer_states: &mut HashMap<Uuid, PeerState>,
+    peer_id: Uuid,
+    peer_piece: usize,
+    storage: &mut TorrentStorage,
+) -> Result<(), RustorrentError> {
+    debug!("peer piece: {:?}", peer_id);
+
+    let new_pieces = if let Some(existing_peer) = peer_states.get_mut(&peer_id) {
+        match existing_peer.state {
+            TorrentPeerState::Connected { .. } => {
+                let mut downloadable = vec![];
+                let (index, bit) = crate::messages::index_in_bitarray(peer_piece);
+                match_pieces(&mut downloadable, &storage.downloaded, index, bit);
+                downloadable
+            }
+            TorrentPeerState::Idle | TorrentPeerState::Connecting(_) => {
+                error!(
+                    "cannot process peer pieces: wrong state: {:?}",
+                    existing_peer.state
+                );
+                vec![]
+            }
+        }
+    } else {
+        vec![]
+    };
+
+    select_new_peer(&new_pieces, peer_states, peer_id).await?;
 
     Ok(())
 }
