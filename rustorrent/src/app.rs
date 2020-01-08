@@ -18,29 +18,47 @@ pub struct RustorrentApp {
 
 #[derive(Debug)]
 pub struct TorrentProcess {
-    // pub(crate) path: PathBuf,
     pub(crate) torrent: Torrent,
     pub(crate) info: TorrentInfo,
     pub(crate) hash_id: [u8; SHA1_SIZE],
     pub(crate) handshake: Vec<u8>,
     broker_sender: Sender<DownloadTorrentEvent>,
-    // pub(crate) torrent_state: Arc<Mutex<TorrentProcessState>>,
-    // pub(crate) announce_state: Arc<Mutex<AnnounceState>>,
-    // pub(crate) blocks_downloading: Arc<Mutex<HashMap<Block, Arc<TorrentPeer>>>>,
-    // pub(crate) stats: Arc<Mutex<TorrentProcessStats>>,
-    // pub(crate) torrent_storage: RwLock<TorrentStorage>,
 }
 
 #[derive(Debug)]
 struct TorrentStorage {
     pieces: Vec<TorrentPiece>,
+    pieces_left: usize,
     downloaded: Vec<u8>,
+    bytes_downloaded: usize,
+    bytes_uploaded: usize,
+}
+
+impl TorrentStorage {
+    async fn save(&mut self, index: usize, data: Vec<u8>) -> Result<(), RustorrentError> {
+        while self.pieces.len() <= index {
+            self.pieces.push(TorrentPiece(None));
+        }
+
+        if let TorrentPiece(None) = self.pieces[index] {
+            self.pieces_left -= 1;
+            self.bytes_downloaded += data.len();
+        }
+
+        self.pieces[index] = TorrentPiece(Some(data));
+
+        let (index, bit) = crate::messages::index_in_bitarray(index);
+        while self.downloaded.len() <= index {
+            self.downloaded.push(0);
+        }
+        self.downloaded[index] |= bit;
+
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
-enum TorrentPiece {
-    Data(Vec<u8>),
-}
+struct TorrentPiece(Option<Vec<u8>>);
 
 #[derive(Debug)]
 enum TorrentPeerState {
@@ -103,6 +121,7 @@ enum PeerMessage {
     Disconnect,
     Message(Message),
     Download(usize),
+    Have(usize),
 }
 
 impl RustorrentApp {
@@ -110,62 +129,6 @@ impl RustorrentApp {
         let settings = Arc::new(settings);
         Self { settings }
     }
-    /*
-        pub fn add_torrent_from_file(
-            &self,
-            filename: impl AsRef<Path>,
-        ) -> Result<Arc<TorrentProcess>, RustorrentError> {
-            info!("Adding torrent from file: {:?}", filename.as_ref());
-            let torrent = parse_torrent(&filename)?;
-            let hash_id = torrent.info_sha1_hash();
-
-            if let Some(process) = match self.processes.read() {
-                Ok(processes) => processes,
-                Err(poisoned) => poisoned.into_inner(),
-            }
-            .iter()
-            .filter(|x| x.hash_id == hash_id)
-            .cloned()
-            .next()
-            {
-                warn!(
-                    "Torrent already in the list: {}",
-                    crate::commands::url_encode(&hash_id)
-                );
-                return Ok(process);
-            }
-
-            let info = torrent.info()?;
-            let left = info.len();
-            let pieces_count = info.pieces.len();
-            let pieces = (0..pieces_count)
-                .map(|_| Arc::new(Mutex::new(Default::default())))
-                .collect();
-
-            let process = Arc::new(TorrentProcess {
-                path: filename.as_ref().into(),
-                torrent,
-                info,
-                hash_id,
-                torrent_state: Arc::new(Mutex::new(TorrentProcessState::Init)),
-                announce_state: Arc::new(Mutex::new(AnnounceState::Idle)),
-                stats: Arc::new(Mutex::new(TorrentProcessStats {
-                    downloaded: 0,
-                    uploaded: 0,
-                    left,
-                })),
-                blocks_downloading: Arc::new(Mutex::new(HashMap::new())),
-                torrent_storage: RwLock::new(TorrentStorage {
-                    pieces,
-                    peers: vec![],
-                }),
-            });
-
-            processes.push(process.clone());
-
-            Ok(process)
-        }
-    */
 
     pub async fn download<P: AsRef<Path>>(&self, torrent_file: P) -> Result<(), RustorrentError> {
         let config = &self.settings.config;
@@ -441,9 +404,13 @@ async fn download_torrent(
     torrent_process: Arc<TorrentProcess>,
     mut broker_receiver: Receiver<DownloadTorrentEvent>,
 ) -> Result<(), RustorrentError> {
+    let pieces_left = torrent_process.info.pieces.len();
     let mut torrent_storage = TorrentStorage {
         downloaded: vec![],
         pieces: vec![],
+        pieces_left,
+        bytes_downloaded: 0,
+        bytes_uploaded: 0,
     };
 
     let (abort_handle, abort_registration) = AbortHandle::new_pair();
@@ -523,6 +490,19 @@ async fn download_torrent(
                 }
                 DownloadTorrentEvent::PeerPieceDownloaded(peer_id, piece) => {
                     debug!("downloaded piece for {}", peer_id);
+                    process_peer_piece_downloaded(
+                        settings.clone(),
+                        torrent_process.clone(),
+                        &mut peer_states,
+                        peer_id,
+                        piece,
+                        &mut torrent_storage,
+                    )
+                    .await?;
+
+                    if torrent_storage.pieces_left == 0 {
+                        debug!("torrent downloaded");
+                    }
                 }
             }
         }
@@ -711,6 +691,10 @@ async fn peer_loop(
         while let Some(message) = receiver.next().await {
             debug!("peer loop received message: {:?}", message);
             match message {
+                PeerMessage::Have(piece) => {
+                    let piece_index = piece as u32;
+                    wtransport.send(Message::Have { piece_index }).await?;
+                }
                 PeerMessage::Download(piece) => {
                     info!("download now piece: {}", piece);
                     piece_length = torrent_process.info.sizes(piece).0;
@@ -789,6 +773,7 @@ async fn peer_loop(
                                             ))
                                             .await?;
                                     } else if torrent_peer_piece.len() == piece_length {
+                                        downloading = None;
                                         command_loop_broker_sender
                                             .send(DownloadTorrentEvent::PeerPieceDownloaded(
                                                 peer_id,
@@ -877,7 +862,17 @@ async fn process_peer_pieces(
         vec![]
     };
 
-    for new_piece in new_pieces {
+    select_new_peer(&new_pieces, peer_states, peer_id).await?;
+
+    Ok(())
+}
+
+async fn select_new_peer(
+    new_pieces: &[usize],
+    peer_states: &mut HashMap<Uuid, PeerState>,
+    peer_id: Uuid,
+) -> Result<(), RustorrentError> {
+    for &new_piece in new_pieces {
         let any_peer_downloading = peer_states.values().any(|x| match x.state {
             TorrentPeerState::Connected {
                 downloading_piece, ..
@@ -905,6 +900,53 @@ async fn process_peer_pieces(
     Ok(())
 }
 
+async fn process_peer_piece_downloaded(
+    settings: Arc<Settings>,
+    torrent_process: Arc<TorrentProcess>,
+    peer_states: &mut HashMap<Uuid, PeerState>,
+    peer_id: Uuid,
+    piece: Vec<u8>,
+    storage: &mut TorrentStorage,
+) -> Result<(), RustorrentError> {
+    debug!("peer piece downloaded: {:?}", peer_id);
+
+    let (index, new_pieces) = if let Some(existing_peer) = peer_states.get_mut(&peer_id) {
+        if let TorrentPeerState::Connected {
+            ref pieces,
+            ref mut downloading_piece,
+            ref mut sender,
+            ..
+        } = existing_peer.state
+        {
+            if let Some(index) = downloading_piece.take() {
+                storage.save(index, piece).await?;
+
+                let mut downloadable = vec![];
+                for (i, &a) in pieces.iter().enumerate() {
+                    match_pieces(&mut downloadable, &storage.downloaded, i, a);
+                }
+                (index, downloadable)
+            } else {
+                return Ok(());
+            }
+        } else {
+            return Ok(());
+        }
+    } else {
+        return Ok(());
+    };
+
+    for (_, peer_state) in peer_states.iter_mut().filter(|(&key, _)| key != peer_id) {
+        if let TorrentPeerState::Connected { ref mut sender, .. } = peer_state.state {
+            sender.send(PeerMessage::Have(index)).await?;
+        }
+    }
+
+    select_new_peer(&new_pieces, peer_states, peer_id).await?;
+
+    Ok(())
+}
+
 fn collect_pieces_and_update(
     current_pieces: &mut Vec<u8>,
     new_pieces: &[u8],
@@ -918,20 +960,23 @@ fn collect_pieces_and_update(
         let new = b & !*a;
 
         *a |= new;
-
-        let new = if let Some(d) = downloaded_pieces.get(i) {
-            b & !d
-        } else {
-            b
-        };
-
-        for j in 0..8 {
-            if new & (0b10000000 >> j) != 0 {
-                pieces.push(i * 8 + j);
-            }
-        }
+        match_pieces(&mut pieces, downloaded_pieces, i, b);
     }
     pieces
+}
+
+fn match_pieces(pieces: &mut Vec<usize>, downloaded_pieces: &[u8], i: usize, a: u8) {
+    let new = if let Some(d) = downloaded_pieces.get(i) {
+        a & !d
+    } else {
+        a
+    };
+
+    for j in 0..8 {
+        if new & (0b10000000 >> j) != 0 {
+            pieces.push(i * 8 + j);
+        }
+    }
 }
 
 async fn process_peer_unchoke(

@@ -16,7 +16,7 @@ use crate::app::*;
 // pub(crate) use unchoke::message_unchoke;
 
 #[inline]
-fn index_in_bitarray(index: usize) -> (usize, u8) {
+pub(crate) fn index_in_bitarray(index: usize) -> (usize, u8) {
     (index / 8, 128 >> (index % 8))
 }
 
