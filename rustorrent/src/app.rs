@@ -693,6 +693,7 @@ async fn peer_loop(
                     processor.torrent_piece = Some(Vec::with_capacity(processor.piece_length));
 
                     if processor.chocked {
+                        debug!("[{}] send interested message", peer_id);
                         processor.wtransport.send(Message::Interested).await?;
                     } else if let Some(ref torrent_peer_piece) = processor.torrent_piece {
                         processor
