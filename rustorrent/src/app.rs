@@ -379,14 +379,7 @@ async fn download_torrent(
     torrent_process: Arc<TorrentProcess>,
     mut broker_receiver: Receiver<DownloadTorrentEvent>,
 ) -> Result<(), RustorrentError> {
-    let pieces_left = torrent_process.info.pieces.len();
-    let mut torrent_storage = TorrentStorage {
-        downloaded: vec![],
-        pieces: vec![],
-        pieces_left,
-        bytes_downloaded: 0,
-        bytes_uploaded: 0,
-    };
+    let mut torrent_storage = TorrentStorage::new(torrent_process.clone());
 
     let (abort_handle, abort_registration) = AbortHandle::new_pair();
 
@@ -487,7 +480,7 @@ async fn download_torrent(
                     )
                     .await?;
 
-                    if torrent_storage.pieces_left == 0 {
+                    if torrent_storage.receiver.borrow().pieces_left == 0 {
                         debug!(
                             "torrent downloaded, hash: {}",
                             percent_encode(&torrent_process.hash_id, NON_ALPHANUMERIC)
@@ -883,7 +876,12 @@ async fn process_peer_piece(
             TorrentPeerState::Connected { .. } => {
                 let mut downloadable = vec![];
                 let (index, bit) = crate::messages::index_in_bitarray(peer_piece);
-                match_pieces(&mut downloadable, &storage.downloaded, index, bit);
+                match_pieces(
+                    &mut downloadable,
+                    &storage.receiver.borrow().downloaded,
+                    index,
+                    bit,
+                );
                 downloadable
             }
             TorrentPeerState::Idle | TorrentPeerState::Connecting(_) => {
@@ -915,9 +913,11 @@ async fn process_peer_pieces(
 
     let new_pieces = if let Some(existing_peer) = peer_states.get_mut(&peer_id) {
         match &mut existing_peer.state {
-            TorrentPeerState::Connected { pieces, .. } => {
-                collect_pieces_and_update(pieces, &peer_pieces, &storage.downloaded)
-            }
+            TorrentPeerState::Connected { pieces, .. } => collect_pieces_and_update(
+                pieces,
+                &peer_pieces,
+                &storage.receiver.borrow().downloaded,
+            ),
             TorrentPeerState::Idle | TorrentPeerState::Connecting(_) => {
                 error!(
                     "[{}] cannot process peer pieces: wrong state: {:?}",
@@ -991,7 +991,12 @@ async fn process_peer_piece_downloaded(
 
                 let mut downloadable = vec![];
                 for (i, &a) in pieces.iter().enumerate() {
-                    match_pieces(&mut downloadable, &storage.downloaded, i, a);
+                    match_pieces(
+                        &mut downloadable,
+                        &storage.receiver.borrow().downloaded,
+                        i,
+                        a,
+                    );
                 }
                 (index, downloadable)
             } else {
