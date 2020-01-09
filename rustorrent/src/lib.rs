@@ -5,6 +5,7 @@ use futures::{
     future::{join_all, lazy, try_join, AbortHandle, Abortable, Aborted},
     join,
     prelude::*,
+    stream::SplitSink,
     task::{FutureObj, Spawn, SpawnError, SpawnExt},
     try_join,
 };
@@ -46,9 +47,11 @@ mod commands;
 mod errors;
 mod messages;
 mod parser;
+mod storage;
 pub mod types;
 
 pub use errors::RustorrentError;
+pub use storage::{TorrentPiece, TorrentStorage};
 
 pub(crate) const SHA1_SIZE: usize = 20;
 

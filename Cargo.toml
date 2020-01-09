@@ -2,7 +2,7 @@
 
 members = [
     # "flat-storage-mmap",
-    # "flat-storage",
+    "flat-storage",
     "rustorrent",
     # "rustorrent-web",
     # "rustorrent-web-resources",
