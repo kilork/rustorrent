@@ -16,8 +16,8 @@ services:
     volumes:
       # - "config:/config"
       - "data:/downloads"
-    ports:
-      - 8080:8080
+        #    ports:
+        #      - 8080:8080
   bittorrent-file:
     image: kilork/rustorrent-bittorent-file
     build: docker/bittorent-file

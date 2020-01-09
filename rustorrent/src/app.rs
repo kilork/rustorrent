@@ -304,6 +304,7 @@ async fn download_events_loop(
     Ok(())
 }
 
+#[derive(Debug)]
 enum DownloadTorrentEvent {
     Announce(Vec<Peer>),
     PeerAnnounced(Peer),
@@ -314,6 +315,17 @@ enum DownloadTorrentEvent {
     PeerPiece(Uuid, usize),
     PeerUnchoke(Uuid),
     PeerPieceDownloaded(Uuid, Vec<u8>),
+}
+
+impl Display for DownloadTorrentEvent {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            DownloadTorrentEvent::PeerPieceDownloaded(uuid, data) => {
+                write!(f, "PeerPieceDownloaded({}, [{}])", uuid, data.len())
+            }
+            _ => write!(f, "{:?}", self),
+        }
+    }
 }
 
 async fn announce_loop(
@@ -426,7 +438,7 @@ async fn download_torrent(
 
     let download_events_loop = async move {
         while let Some(event) = broker_receiver.next().await {
-            debug!("received event");
+            debug!("received event: {}", event);
             match event {
                 DownloadTorrentEvent::Announce(peers) => {
                     debug!("we got announce, what now?");
@@ -448,16 +460,16 @@ async fn download_torrent(
                 }
                 DownloadTorrentEvent::PeerDisconnect(peer_id) => {
                     if let Some(_peer_state) = peer_states.remove(&peer_id) {
-                        debug!("removed peer {} due to disconnect", peer_id);
+                        debug!("[{}] removed peer due to disconnect", peer_id);
                     }
                 }
                 DownloadTorrentEvent::PeerConnectFailed(peer_id) => {
                     if let Some(_peer_state) = peer_states.remove(&peer_id) {
-                        debug!("removed peer {} due to connection failure", peer_id);
+                        debug!("[{}] removed peer due to connection failure", peer_id);
                     }
                 }
                 DownloadTorrentEvent::PeerConnected(peer_id, stream) => {
-                    debug!("peer connected: {}", peer_id);
+                    debug!("[{}] peer connected", peer_id);
                     process_peer_connected(
                         settings.clone(),
                         torrent_process.clone(),
@@ -468,7 +480,7 @@ async fn download_torrent(
                     .await?;
                 }
                 DownloadTorrentEvent::PeerPiece(peer_id, piece) => {
-                    debug!("peer pieces {}", peer_id);
+                    debug!("[{}] peer piece: {}", peer_id, piece);
                     process_peer_piece(
                         settings.clone(),
                         torrent_process.clone(),
@@ -480,7 +492,7 @@ async fn download_torrent(
                     .await?;
                 }
                 DownloadTorrentEvent::PeerPieces(peer_id, pieces) => {
-                    debug!("peer pieces {}", peer_id);
+                    debug!("[{}] peer pieces", peer_id);
                     process_peer_pieces(
                         settings.clone(),
                         torrent_process.clone(),
@@ -492,7 +504,7 @@ async fn download_torrent(
                     .await?;
                 }
                 DownloadTorrentEvent::PeerUnchoke(peer_id) => {
-                    debug!("peer pieces {}", peer_id);
+                    debug!("[{}] peer unchoke", peer_id);
                     process_peer_unchoke(
                         settings.clone(),
                         torrent_process.clone(),
@@ -502,7 +514,7 @@ async fn download_torrent(
                     .await?;
                 }
                 DownloadTorrentEvent::PeerPieceDownloaded(peer_id, piece) => {
-                    debug!("downloaded piece for {}", peer_id);
+                    debug!("[{}] downloaded piece for peer", peer_id);
                     process_peer_piece_downloaded(
                         settings.clone(),
                         torrent_process.clone(),
@@ -514,7 +526,10 @@ async fn download_torrent(
                     .await?;
 
                     if torrent_storage.pieces_left == 0 {
-                        debug!("torrent downloaded");
+                        debug!(
+                            "torrent downloaded, hash: {}",
+                            percent_encode(&torrent_process.hash_id, NON_ALPHANUMERIC)
+                        );
                     }
                 }
             }
@@ -794,6 +809,15 @@ async fn peer_loop(
                                             ))
                                             .await?;
                                     } else if torrent_peer_piece.len() == piece_length {
+                                        let control_piece = &torrent_process.info.pieces[piece];
+
+                                        let sha1: types::info::Piece =
+                                            Sha1::digest(torrent_peer_piece.as_slice())[..]
+                                                .try_into()?;
+                                        if sha1 != *control_piece {
+                                            error!("[{}] piece sha1 failure", peer_id);
+                                        }
+
                                         downloading = None;
                                         command_loop_broker_sender
                                             .send(DownloadTorrentEvent::PeerPieceDownloaded(

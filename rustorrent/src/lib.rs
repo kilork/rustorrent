@@ -11,9 +11,12 @@ use futures::{
 use http_body::Body;
 use hyper::{Client, Uri};
 use log::{debug, error, info, warn};
+use percent_encoding::{percent_encode, percent_encode_byte, NON_ALPHANUMERIC};
+use sha1::{Digest, Sha1};
 use std::{
     collections::HashMap,
     convert::TryInto,
+    fmt::{Display, Formatter},
     mem::{self, drop},
     net::{IpAddr, Ipv4Addr, SocketAddr},
     ops::Deref,
