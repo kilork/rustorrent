@@ -87,6 +87,7 @@ enum PeerMessage {
     Message(Message),
     Download(usize),
     Have(usize),
+    Bitfield(Vec<u8>),
 }
 
 impl RustorrentApp {
@@ -421,6 +422,7 @@ async fn download_torrent(
                         torrent_process.clone(),
                         &mut peer_states,
                         stream,
+                        &mut torrent_storage,
                     )
                     .await?;
                 }
@@ -606,6 +608,7 @@ async fn process_peer_forwarded(
     torrent_process: Arc<TorrentProcess>,
     peer_states: &mut HashMap<Uuid, PeerState>,
     stream: TcpStream,
+    storage: &mut TorrentStorage,
 ) -> Result<(), RustorrentError> {
     let peer_id = Uuid::new_v4();
     debug!("[{}] peer connection forwarded", peer_id);
@@ -614,7 +617,7 @@ async fn process_peer_forwarded(
 
     let peer: Peer = peer_addr.into();
 
-    let (sender, receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
+    let (mut sender, receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
     peer_states.insert(
         peer_id,
@@ -630,6 +633,13 @@ async fn process_peer_forwarded(
             announce_count: 0,
         },
     );
+
+    {
+        let downloaded = storage.receiver.borrow().downloaded.clone();
+        if !downloaded.is_empty() {
+            sender.send(PeerMessage::Bitfield(downloaded)).await?;
+        }
+    }
 
     let _ = spawn_and_log_error(peer_loop(
         settings,
@@ -722,6 +732,9 @@ async fn peer_loop(
         while let Some(message) = receiver.next().await {
             debug!("[{}] peer loop received message", peer_id);
             match message {
+                PeerMessage::Bitfield(pieces) => {
+                    processor.wtransport.send(Message::Bitfield(pieces)).await?;
+                }
                 PeerMessage::Have(piece) => {
                     let piece_index = piece as u32;
                     processor
