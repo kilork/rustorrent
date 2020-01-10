@@ -189,21 +189,11 @@ async fn peer_connection(
 
     debug!("handshake done, connected with peer");
 
-    let (wtransport, mut rtransport) = Framed::new(socket, MessageCodec).split();
-
-    let receive_task = async move {
-        while let Some(Ok(message)) = rtransport.next().await {
-            debug!("received peer message: {}", message);
-        }
-
-        debug!("peer connection receive exit");
-
-        Ok::<(), RustorrentError>(())
-    };
-
-    receive_task.await?;
-
-    debug!("peer connection exit");
+    torrent_process
+        .broker_sender
+        .clone()
+        .send(DownloadTorrentEvent::PeerForwarded(socket))
+        .await?;
 
     Ok(())
 }
@@ -271,6 +261,7 @@ enum DownloadTorrentEvent {
     Announce(Vec<Peer>),
     PeerAnnounced(Peer),
     PeerConnected(Uuid, TcpStream),
+    PeerForwarded(TcpStream),
     PeerConnectFailed(Uuid),
     PeerDisconnect(Uuid),
     PeerPieces(Uuid, Vec<u8>),
@@ -422,6 +413,16 @@ async fn download_torrent(
                     if let Some(_peer_state) = peer_states.remove(&peer_id) {
                         debug!("[{}] removed peer due to connection failure", peer_id);
                     }
+                }
+                DownloadTorrentEvent::PeerForwarded(stream) => {
+                    debug!("peer forwarded");
+                    process_peer_forwarded(
+                        settings.clone(),
+                        torrent_process.clone(),
+                        &mut peer_states,
+                        stream,
+                    )
+                    .await?;
                 }
                 DownloadTorrentEvent::PeerConnected(peer_id, stream) => {
                     debug!("[{}] peer connected", peer_id);
@@ -600,6 +601,48 @@ async fn connect_to_peer(
     Ok(())
 }
 
+async fn process_peer_forwarded(
+    settings: Arc<Settings>,
+    torrent_process: Arc<TorrentProcess>,
+    peer_states: &mut HashMap<Uuid, PeerState>,
+    stream: TcpStream,
+) -> Result<(), RustorrentError> {
+    let peer_id = Uuid::new_v4();
+    debug!("[{}] peer connection forwarded", peer_id);
+
+    let peer_addr = stream.peer_addr()?;
+
+    let peer: Peer = peer_addr.into();
+
+    let (sender, receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
+
+    peer_states.insert(
+        peer_id,
+        PeerState {
+            peer: peer.clone(),
+            state: TorrentPeerState::Connected {
+                chocked: true,
+                interested: false,
+                downloading_piece: None,
+                pieces: vec![],
+                sender: sender.clone(),
+            },
+            announce_count: 0,
+        },
+    );
+
+    let _ = spawn_and_log_error(peer_loop(
+        settings,
+        torrent_process,
+        peer_id,
+        sender,
+        receiver,
+        stream,
+    ));
+
+    Ok(())
+}
+
 async fn process_peer_connected(
     settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,
@@ -656,7 +699,7 @@ async fn peer_loop(
     mut receiver: Receiver<PeerMessage>,
     stream: TcpStream,
 ) -> Result<(), RustorrentError> {
-    let (mut wtransport, mut rtransport) = Framed::new(stream, MessageCodec).split();
+    let (wtransport, mut rtransport) = Framed::new(stream, MessageCodec).split();
 
     let mut broker_sender = torrent_process.broker_sender.clone();
 
@@ -765,24 +808,26 @@ struct PeerLoopMessage {
 
 impl PeerLoopMessage {
     async fn peer_loop_message(&mut self, message: Message) -> Result<bool, RustorrentError> {
+        let peer_id = self.peer_id;
+        debug!("[{}] message {}", peer_id, message);
         self.message_count += 1;
         match message {
             Message::Bitfield(pieces) => {
                 if self.message_count != 1 {
                     error!(
                     "[{}] wrong message sequence for peer: bitfield message must be first message",
-                    self.peer_id
+                    peer_id
                 );
                     return Ok(true);
                 }
                 self.command_loop_broker_sender
-                    .send(DownloadTorrentEvent::PeerPieces(self.peer_id, pieces))
+                    .send(DownloadTorrentEvent::PeerPieces(peer_id, pieces))
                     .await?;
             }
             Message::Have { piece_index } => {
                 self.command_loop_broker_sender
                     .send(DownloadTorrentEvent::PeerPiece(
-                        self.peer_id,
+                        peer_id,
                         piece_index as usize,
                     ))
                     .await?;
@@ -790,7 +835,7 @@ impl PeerLoopMessage {
             Message::Unchoke => {
                 self.chocked = false;
                 self.command_loop_broker_sender
-                    .send(DownloadTorrentEvent::PeerUnchoke(self.peer_id))
+                    .send(DownloadTorrentEvent::PeerUnchoke(peer_id))
                     .await?;
 
                 if let Some(piece) = self.downloading {
@@ -814,7 +859,7 @@ impl PeerLoopMessage {
                     if piece as u32 != index {
                         error!(
                             "[{}] abnormal piece message {} for peer, expected {}",
-                            self.peer_id, index, piece
+                            peer_id, index, piece
                         );
                         return Ok(false);
                     }
@@ -822,7 +867,7 @@ impl PeerLoopMessage {
                         if torrent_peer_piece.len() != begin as usize {
                             error!(
                             "[{}] abnormal piece message for peer piece {}, expected begin {} but got {}",
-                            self.peer_id, piece, torrent_peer_piece.len(), begin,
+                            peer_id, piece, torrent_peer_piece.len(), begin,
                         );
                             return Ok(false);
                         }
@@ -843,20 +888,20 @@ impl PeerLoopMessage {
                             let sha1: types::info::Piece =
                                 Sha1::digest(torrent_peer_piece.as_slice())[..].try_into()?;
                             if sha1 != *control_piece {
-                                error!("[{}] piece sha1 failure", self.peer_id);
+                                error!("[{}] piece sha1 failure", peer_id);
                             }
 
                             self.downloading = None;
                             self.command_loop_broker_sender
                                 .send(DownloadTorrentEvent::PeerPieceDownloaded(
-                                    self.peer_id,
+                                    peer_id,
                                     self.torrent_piece.take().unwrap(),
                                 ))
                                 .await?;
                         } else {
                             error!(
                                 "[{}] wrong piece length: {} {}",
-                                self.peer_id,
+                                peer_id,
                                 piece,
                                 torrent_peer_piece.len()
                             );
@@ -864,13 +909,10 @@ impl PeerLoopMessage {
                         }
                     }
                 } else {
-                    error!(
-                        "[{}] abnormal piece message {} for peer",
-                        self.peer_id, index
-                    );
+                    error!("[{}] abnormal piece message {} for peer", peer_id, index);
                 }
             }
-            _ => debug!("[{}] unhandled message: {}", self.peer_id, message),
+            _ => debug!("[{}] unhandled message: {}", peer_id, message),
         }
 
         Ok(false)
