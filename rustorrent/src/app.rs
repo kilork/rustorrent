@@ -935,6 +935,17 @@ impl PeerLoopMessage {
         Ok(false)
     }
 
+    async fn request(
+        &mut self,
+        index: u32,
+        begin: u32,
+        length: u32,
+    ) -> Result<bool, RustorrentError> {
+        let peer_id = self.peer_id;
+
+        Ok(false)
+    }
+
     async fn peer_loop_message(&mut self, message: Message) -> Result<bool, RustorrentError> {
         let peer_id = self.peer_id;
         debug!("[{}] message {}", peer_id, message);
@@ -955,6 +966,9 @@ impl PeerLoopMessage {
                 block,
             } => {
                 return self.piece(index, begin, block).await;
+            }
+            Message::Request { index, begin, length } => {
+                return self.request(index, begin, length).await;
             }
             _ => debug!("[{}] unhandled message: {}", peer_id, message),
         }
