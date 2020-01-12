@@ -998,7 +998,6 @@ async fn process_peer_piece_downloaded(
         if let TorrentPeerState::Connected {
             ref pieces,
             ref mut downloading_piece,
-            ref mut sender,
             ..
         } = existing_peer.state
         {
@@ -1113,15 +1112,15 @@ mod tests {
 
         let mut current_pieces = vec![];
 
-        let result = collect_pieces_and_update(&mut current_pieces, &[0b10101010], &[0b01010101]);
+        let result = collect_pieces_and_update(&mut current_pieces, &[0b1010_1010], &[0b010_10101]);
         assert_eq!(result, vec![0, 2, 4, 6]);
-        assert_eq!(current_pieces, vec![0b10101010]);
+        assert_eq!(current_pieces, vec![0b1010_1010]);
 
         let mut current_pieces = vec![];
 
-        let result = collect_pieces_and_update(&mut current_pieces, &[0b10101010], &[0b11010101]);
+        let result = collect_pieces_and_update(&mut current_pieces, &[0b1010_1010], &[0b1101_0101]);
         assert_eq!(result, vec![2, 4, 6]);
-        assert_eq!(current_pieces, vec![0b10101010]);
+        assert_eq!(current_pieces, vec![0b1010_1010]);
     }
 
     fn test_settings() -> Arc<Settings> {
