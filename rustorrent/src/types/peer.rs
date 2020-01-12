@@ -2,7 +2,7 @@ use super::*;
 use crate::parser::parse_handshake;
 use crate::SHA1_SIZE;
 
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Peer {
@@ -36,6 +36,16 @@ impl TryFrom<BencodeBlob> for Vec<Peer> {
                 .collect()),
             BencodeValue::List(l) => Ok(l.into_iter().map(|x| x.try_into().unwrap()).collect()),
             _ => Err(TryFromBencode::NotDictionary),
+        }
+    }
+}
+
+impl From<SocketAddr> for Peer {
+    fn from(value: SocketAddr) -> Peer {
+        Peer {
+            ip: value.ip(),
+            peer_id: None,
+            port: value.port(),
         }
     }
 }

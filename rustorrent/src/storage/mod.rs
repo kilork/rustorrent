@@ -12,6 +12,10 @@ pub struct TorrentStorage {
 }
 
 enum TorrentStorageMessage {
+    LoadPiece {
+        index: usize,
+        sender: tokio::sync::oneshot::Sender<Option<TorrentPiece>>,
+    },
     SavePiece {
         index: usize,
         data: Vec<u8>,
@@ -50,15 +54,15 @@ impl TorrentStorage {
                             sender,
                         } => {
                             while pieces.len() <= index {
-                                pieces.push(TorrentPiece(None));
+                                pieces.push(None);
                             }
 
-                            if let TorrentPiece(None) = pieces[index] {
+                            if pieces[index].is_none() {
                                 pieces_left -= 1;
                                 bytes_downloaded += data.len();
                             }
 
-                            pieces[index] = TorrentPiece(Some(data));
+                            pieces[index] = Some(TorrentPiece(data));
 
                             let (index, bit) = crate::messages::index_in_bitarray(index);
                             while downloaded.len() <= index {
@@ -77,10 +81,17 @@ impl TorrentStorage {
                                 error!("cannot send oneshot");
                             }
                         }
+                        TorrentStorageMessage::LoadPiece { index, sender } => {
+                            if let Err(_) = sender.send(pieces.get(index).cloned().unwrap_or(None))
+                            {
+                                error!("cannot send oneshot");
+                            }
+                        }
                     }
                 }
                 Ok::<(), RustorrentError>(())
             })?;
+
             Ok(())
         });
 
@@ -102,13 +113,18 @@ impl TorrentStorage {
             })
             .await?;
 
-        if let Err(err) = receiver.await {
-            error!("cannot receive oneshot: {}", err);
-        }
+        receiver.map_err(|x| x.into()).await
+    }
 
-        Ok(())
+    pub async fn load(&mut self, index: usize) -> Result<Option<TorrentPiece>, RustorrentError> {
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        self.sender
+            .send(TorrentStorageMessage::LoadPiece { index, sender })
+            .await?;
+
+        receiver.map_err(|x| x.into()).await
     }
 }
 
-#[derive(Debug)]
-pub struct TorrentPiece(Option<Vec<u8>>);
+#[derive(Debug, Clone)]
+pub struct TorrentPiece(Vec<u8>);

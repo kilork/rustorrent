@@ -44,6 +44,8 @@ pub enum RustorrentError {
     WrongConfig,
     #[fail(display = "send error {}", _0)]
     SendError(futures::channel::mpsc::SendError),
+    #[fail(display = "oneshot recv error {}", _0)]
+    TokioMpscOneshotRecvError(tokio::sync::oneshot::error::RecvError),
     #[fail(display = "cannot parse uri {}", _0)]
     InvalidUri(http::uri::InvalidUri),
     #[fail(display = "aborted")]
@@ -75,6 +77,10 @@ from_rustorrent_error!(tokio::time::Error, TimerFailure);
 from_rustorrent_error!(futures::channel::mpsc::SendError, SendError);
 from_rustorrent_error!(http::uri::InvalidUri, InvalidUri);
 from_rustorrent_error!(MessageCodecError, MessageCodec);
+from_rustorrent_error!(
+    tokio::sync::oneshot::error::RecvError,
+    TokioMpscOneshotRecvError
+);
 
 impl From<futures::future::Aborted> for RustorrentError {
     fn from(_: futures::future::Aborted) -> Self {
