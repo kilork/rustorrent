@@ -537,7 +537,7 @@ async fn process_peer_announced(
                 let handler = spawn_and_log_error(connect_to_peer(
                     settings,
                     torrent_process,
-                    peer_id.clone(),
+                    *peer_id,
                     peer,
                 ));
                 existing_peer.state = TorrentPeerState::Connecting(handler);
