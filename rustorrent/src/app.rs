@@ -534,12 +534,8 @@ async fn process_peer_announced(
     if let Some((peer_id, existing_peer)) = peer_states_iter.find(|x| x.1.peer == peer) {
         match existing_peer.state {
             TorrentPeerState::Idle => {
-                let handler = spawn_and_log_error(connect_to_peer(
-                    settings,
-                    torrent_process,
-                    *peer_id,
-                    peer,
-                ));
+                let handler =
+                    spawn_and_log_error(connect_to_peer(settings, torrent_process, *peer_id, peer));
                 existing_peer.state = TorrentPeerState::Connecting(handler);
             }
             TorrentPeerState::Connected { .. } => {
@@ -894,38 +890,43 @@ impl PeerLoopMessage {
 
                 torrent_peer_piece.extend(block);
 
-                if self.piece_length > torrent_peer_piece.len() {
-                    self.wtransport
-                        .send(request_message(
-                            torrent_peer_piece,
-                            piece,
-                            self.piece_length,
-                        ))
-                        .await?;
-                } else if torrent_peer_piece.len() == self.piece_length {
-                    let control_piece = &self.torrent_process.info.pieces[piece];
-
-                    let sha1: types::info::Piece =
-                        Sha1::digest(torrent_peer_piece.as_slice())[..].try_into()?;
-                    if sha1 != *control_piece {
-                        error!("[{}] piece sha1 failure", peer_id);
+                use std::cmp::Ordering;
+                match self.piece_length.cmp(&torrent_peer_piece.len()) {
+                    Ordering::Greater => {
+                        self.wtransport
+                            .send(request_message(
+                                torrent_peer_piece,
+                                piece,
+                                self.piece_length,
+                            ))
+                            .await?;
                     }
+                    Ordering::Equal => {
+                        let control_piece = &self.torrent_process.info.pieces[piece];
 
-                    self.downloading = None;
-                    self.command_loop_broker_sender
-                        .send(DownloadTorrentEvent::PeerPieceDownloaded(
+                        let sha1: types::info::Piece =
+                            Sha1::digest(torrent_peer_piece.as_slice())[..].try_into()?;
+                        if sha1 != *control_piece {
+                            error!("[{}] piece sha1 failure", peer_id);
+                        }
+
+                        self.downloading = None;
+                        self.command_loop_broker_sender
+                            .send(DownloadTorrentEvent::PeerPieceDownloaded(
+                                peer_id,
+                                self.torrent_piece.take().unwrap(),
+                            ))
+                            .await?;
+                    }
+                    _ => {
+                        error!(
+                            "[{}] wrong piece length: {} {}",
                             peer_id,
-                            self.torrent_piece.take().unwrap(),
-                        ))
-                        .await?;
-                } else {
-                    error!(
-                        "[{}] wrong piece length: {} {}",
-                        peer_id,
-                        piece,
-                        torrent_peer_piece.len()
-                    );
-                    return Ok(false);
+                            piece,
+                            torrent_peer_piece.len()
+                        );
+                        return Ok(false);
+                    }
                 }
             }
         } else {
@@ -967,7 +968,11 @@ impl PeerLoopMessage {
             } => {
                 return self.piece(index, begin, block).await;
             }
-            Message::Request { index, begin, length } => {
+            Message::Request {
+                index,
+                begin,
+                length,
+            } => {
                 return self.request(index, begin, length).await;
             }
             _ => debug!("[{}] unhandled message: {}", peer_id, message),
