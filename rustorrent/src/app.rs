@@ -88,6 +88,11 @@ enum PeerMessage {
     Download(usize),
     Have(usize),
     Bitfield(Vec<u8>),
+    Piece {
+        index: u32,
+        begin: u32,
+        block: Vec<u8>,
+    },
 }
 
 impl RustorrentApp {
@@ -268,7 +273,14 @@ enum DownloadTorrentEvent {
     PeerPieces(Uuid, Vec<u8>),
     PeerPiece(Uuid, usize),
     PeerUnchoke(Uuid),
+    PeerInterested(Uuid),
     PeerPieceDownloaded(Uuid, Vec<u8>),
+    PeerPieceRequest {
+        peer_id: Uuid,
+        index: u32,
+        begin: u32,
+        length: u32,
+    },
 }
 
 impl Display for DownloadTorrentEvent {
@@ -471,6 +483,16 @@ async fn download_torrent(
                     )
                     .await?;
                 }
+                DownloadTorrentEvent::PeerInterested(peer_id) => {
+                    debug!("[{}] peer interested", peer_id);
+                    process_peer_interested(
+                        settings.clone(),
+                        torrent_process.clone(),
+                        &mut peer_states,
+                        peer_id,
+                    )
+                    .await?;
+                }
                 DownloadTorrentEvent::PeerPieceDownloaded(peer_id, piece) => {
                     debug!("[{}] downloaded piece for peer", peer_id);
                     process_peer_piece_downloaded(
@@ -489,6 +511,24 @@ async fn download_torrent(
                             percent_encode(&torrent_process.hash_id, NON_ALPHANUMERIC)
                         );
                     }
+                }
+                DownloadTorrentEvent::PeerPieceRequest {
+                    peer_id,
+                    index,
+                    begin,
+                    length,
+                } => {
+                    process_peer_piece_request(
+                        settings.clone(),
+                        torrent_process.clone(),
+                        &mut peer_states,
+                        peer_id,
+                        index,
+                        begin,
+                        length,
+                        &mut torrent_storage,
+                    )
+                    .await?;
                 }
             }
         }
@@ -738,6 +778,20 @@ async fn peer_loop(
                         .send(Message::Have { piece_index })
                         .await?;
                 }
+                PeerMessage::Piece {
+                    index,
+                    begin,
+                    block,
+                } => {
+                    processor
+                        .wtransport
+                        .send(Message::Piece {
+                            index,
+                            begin,
+                            block,
+                        })
+                        .await?;
+                }
                 PeerMessage::Download(piece) => {
                     debug!("[{}] download now piece: {}", peer_id, piece);
                     processor.piece_length = torrent_process.info.sizes(piece).0;
@@ -944,6 +998,29 @@ impl PeerLoopMessage {
     ) -> Result<bool, RustorrentError> {
         let peer_id = self.peer_id;
 
+        if !self.interested {
+            error!("[{}] peer requested data without unchoke", peer_id);
+            return Ok(true);
+        }
+
+        self.command_loop_broker_sender
+            .send(DownloadTorrentEvent::PeerPieceRequest {
+                peer_id,
+                index,
+                begin,
+                length,
+            })
+            .await?;
+
+        Ok(false)
+    }
+
+    async fn interested(&mut self) -> Result<bool, RustorrentError> {
+        self.interested = true;
+        self.command_loop_broker_sender
+            .send(DownloadTorrentEvent::PeerInterested(self.peer_id))
+            .await?;
+
         Ok(false)
     }
 
@@ -960,6 +1037,9 @@ impl PeerLoopMessage {
             }
             Message::Unchoke => {
                 return self.unchoke().await;
+            }
+            Message::Interested => {
+                return self.interested().await;
             }
             Message::Piece {
                 index,
@@ -1188,6 +1268,51 @@ async fn process_peer_unchoke(
         *chocked = false;
     }
 
+    Ok(())
+}
+
+async fn process_peer_interested(
+    settings: Arc<Settings>,
+    torrent_process: Arc<TorrentProcess>,
+    peer_states: &mut HashMap<Uuid, PeerState>,
+    peer_id: Uuid,
+) -> Result<(), RustorrentError> {
+    debug!("[{}] process peer interested", peer_id);
+
+    if let Some(TorrentPeerState::Connected {
+        ref mut interested, ..
+    }) = peer_states.get_mut(&peer_id).map(|x| &mut x.state)
+    {
+        *interested = true;
+    }
+
+    Ok(())
+}
+
+async fn process_peer_piece_request(
+    settings: Arc<Settings>,
+    torrent_process: Arc<TorrentProcess>,
+    peer_states: &mut HashMap<Uuid, PeerState>,
+    peer_id: Uuid,
+    index: u32,
+    begin: u32,
+    length: u32,
+    storage: &mut TorrentStorage,
+) -> Result<(), RustorrentError> {
+    if let Some(TorrentPeerState::Connected { ref mut sender, .. }) =
+        peer_states.get_mut(&peer_id).map(|x| &mut x.state)
+    {
+        if let Some(piece) = storage.load(index as usize).await? {
+            let block = piece.as_ref()[begin as usize..(begin as usize + length as usize)].to_vec();
+            sender
+                .send(PeerMessage::Piece {
+                    index,
+                    begin,
+                    block,
+                })
+                .await?;
+        }
+    }
     Ok(())
 }
 

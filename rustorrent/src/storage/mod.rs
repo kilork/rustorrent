@@ -1,6 +1,6 @@
 use super::*;
 use app::TorrentProcess;
-use std::thread;
+use std::{ops::Range, thread};
 use tokio::runtime::Builder;
 
 #[derive(Debug)]
@@ -84,7 +84,7 @@ impl TorrentStorage {
                         TorrentStorageMessage::LoadPiece { index, sender } => {
                             if let Err(_) = sender.send(pieces.get(index).cloned().unwrap_or(None))
                             {
-                                error!("cannot send oneshot");
+                                error!("cannot send piece with oneshot message");
                             }
                         }
                     }
@@ -128,3 +128,10 @@ impl TorrentStorage {
 
 #[derive(Debug, Clone)]
 pub struct TorrentPiece(Vec<u8>);
+
+impl Deref for TorrentPiece {
+    type Target = dyn AsRef<[u8]>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
