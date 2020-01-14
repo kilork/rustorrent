@@ -22,7 +22,7 @@ pub struct TorrentProcess {
     pub(crate) info: TorrentInfo,
     pub(crate) hash_id: [u8; SHA1_SIZE],
     pub(crate) handshake: Vec<u8>,
-    broker_sender: Sender<DownloadTorrentEvent>,
+    pub(crate) broker_sender: Sender<DownloadTorrentEvent>,
 }
 
 #[derive(Debug)]
@@ -263,7 +263,7 @@ async fn download_events_loop(
 }
 
 #[derive(Debug)]
-enum DownloadTorrentEvent {
+pub(crate) enum DownloadTorrentEvent {
     Announce(Vec<Peer>),
     PeerAnnounced(Peer),
     PeerConnected(Uuid, TcpStream),
@@ -294,90 +294,6 @@ impl Display for DownloadTorrentEvent {
     }
 }
 
-async fn announce_loop(
-    settings: Arc<Settings>,
-    torrent_process: Arc<TorrentProcess>,
-) -> Result<(), RustorrentError> {
-    loop {
-        let announce_url = &torrent_process.torrent.announce_url;
-
-        let client: Client<_> = Client::new();
-
-        let left = torrent_process.info.len();
-        let config = &settings.config;
-        let mut url = {
-            format!(
-                "{}?info_hash={}&peer_id={}&left={}&port={}",
-                announce_url,
-                url_encode(&torrent_process.hash_id[..]),
-                url_encode(&PEER_ID[..]),
-                left,
-                config.port,
-            )
-        };
-
-        if let Some(compact) = config.compact {
-            url += &format!("&compact={}", if compact { 1 } else { 0 });
-        }
-
-        let uri = url.parse()?;
-        let res = client.get(uri).await;
-
-        debug!("Got tracker announce from: {}", url);
-
-        let result = match res {
-            Ok(result) if result.status().is_success() => result,
-            Ok(bad_result) => {
-                error!(
-                    "Bad response from tracker: {:?}, retry in 5 seconds...",
-                    bad_result
-                );
-                delay_for(Duration::from_secs(5)).await;
-                continue;
-            }
-            Err(err) => {
-                error!("Failure {}, retry in 5 seconds", err);
-                delay_for(Duration::from_secs(5)).await;
-                continue;
-            }
-        };
-
-        let mut announce_data = result.into_body();
-
-        let mut announce_bytes = vec![];
-
-        while let Some(chunk) = announce_data.data().await {
-            announce_bytes.append(&mut chunk?.to_vec());
-        }
-
-        let tracker_announce: Result<TrackerAnnounce, _> = announce_bytes.try_into();
-
-        let interval_to_query_tracker = match tracker_announce {
-            Ok(tracker_announce) => {
-                let interval_to_reannounce = tracker_announce.interval.try_into()?;
-
-                debug!("Tracker announce: {:?}", tracker_announce);
-
-                torrent_process
-                    .broker_sender
-                    .clone()
-                    .send(DownloadTorrentEvent::Announce(tracker_announce.peers))
-                    .await?;
-                Duration::from_secs(interval_to_reannounce)
-            }
-
-            Err(err) => {
-                error!("Failure {}, retry in 5 seconds", err);
-                Duration::from_secs(5)
-            }
-        };
-
-        debug!("query tracker in {:?}", interval_to_query_tracker);
-
-        delay_for(interval_to_query_tracker).await;
-    }
-}
-
 async fn download_torrent(
     settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,
@@ -388,10 +304,16 @@ async fn download_torrent(
     let (abort_handle, abort_registration) = AbortHandle::new_pair();
 
     let announce_loop = Abortable::new(
-        announce_loop(settings.clone(), torrent_process.clone()),
+        announce::announce_loop(settings.clone(), torrent_process.clone()).map_err(|e| {
+            error!("announce loop error: {}", e);
+            e
+        }),
         abort_registration,
     )
-    .map_err(|e| e.into());
+    .map_err(|e| {
+        error!("abortable error: {}", e);
+        e.into()
+    });
 
     let mut peer_states = HashMap::new();
 

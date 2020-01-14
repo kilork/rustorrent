@@ -49,6 +49,7 @@ mod messages;
 mod parser;
 mod storage;
 pub mod types;
+pub mod announce;
 
 pub use errors::RustorrentError;
 pub use storage::{TorrentPiece, TorrentStorage};

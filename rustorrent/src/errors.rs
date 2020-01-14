@@ -54,6 +54,10 @@ pub enum RustorrentError {
     PeerHandshakeFailure,
     #[fail(display = "message codec {}", _0)]
     MessageCodec(MessageCodecError),
+    #[fail(display = "cannot determine announce protocol")]
+    AnnounceProtocolFailure,
+    #[fail(display = "unknown announce protocol {}", _0)]
+    AnnounceProtocolUnknown(String),
 }
 
 macro_rules! from_rustorrent_error {
