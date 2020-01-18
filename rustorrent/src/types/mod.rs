@@ -9,6 +9,7 @@ pub mod info;
 pub mod message;
 pub mod peer;
 pub mod torrent;
+pub mod udp_tracker;
 
 pub use bencode::{BencodeBlob, BencodeValue};
 pub use config::{Config, Settings};

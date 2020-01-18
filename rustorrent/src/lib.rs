@@ -42,6 +42,7 @@ use tokio::{
 use tokio_util::codec::{Decoder, Encoder, Framed};
 use uuid::Uuid;
 
+pub mod announce;
 pub mod app;
 mod commands;
 mod errors;
@@ -49,7 +50,6 @@ mod messages;
 mod parser;
 mod storage;
 pub mod types;
-pub mod announce;
 
 pub use errors::RustorrentError;
 pub use storage::{TorrentPiece, TorrentStorage};
