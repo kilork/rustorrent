@@ -30,7 +30,7 @@ use std::{
 };
 use tokio::{
     io,
-    net::{TcpListener, TcpStream},
+    net::{TcpListener, TcpStream, UdpSocket},
     prelude::*,
     sync::{
         mpsc::{self, Receiver, Sender},
@@ -39,7 +39,10 @@ use tokio::{
     task::JoinHandle,
     time::{delay_for, Interval},
 };
-use tokio_util::codec::{Decoder, Encoder, Framed};
+use tokio_util::{
+    codec::{Decoder, Encoder, Framed},
+    udp::UdpFramed,
+};
 use uuid::Uuid;
 
 pub mod announce;

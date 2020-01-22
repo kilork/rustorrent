@@ -5,7 +5,7 @@ authors = ["Alexander Korolev <kilork@yandex.ru>"]
 edition = "2018"
 
 [dependencies]
-nom = "5.0"
+nom = "5"
 structopt = "0.3"
 console = "0.9"
 indicatif = "0.13"
