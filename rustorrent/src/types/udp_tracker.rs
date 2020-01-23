@@ -168,6 +168,52 @@ impl Encoder for UdpTrackerCodec {
             authentication,
             request_string,
         } = frame;
+        match data {
+            UdpTrackerRequestData::Connect => {
+                buf.reserve(16);
+                buf.put_i64(connection_id);
+                buf.put_i32(0);
+                buf.put_i32(transaction_id);
+            }
+            UdpTrackerRequestData::Announce {
+                info_hash,
+                peer_id,
+                downloaded,
+                left,
+                uploaded,
+                event,
+                ip,
+                key,
+                num_want,
+                port,
+                extensions,
+            } => {
+                buf.reserve(16 + 20 + 20 + 8 + 8 + 8 + 4 + 4 + 4 + 4 + 2 + 2);
+                buf.put_i64(connection_id);
+                buf.put_i32(1);
+                buf.put_i32(transaction_id);
+                buf.put(info_hash.as_ref());
+                buf.put(peer_id.as_ref());
+                buf.put_i64(downloaded);
+                buf.put_i64(left);
+                buf.put_i64(uploaded);
+                buf.put_i32(event);
+                buf.put_u32(ip);
+                buf.put_u32(key);
+                buf.put_i32(num_want);
+                buf.put_u16(port);
+                buf.put_u16(extensions);
+            }
+            UdpTrackerRequestData::Scrape { info_hashes } => {
+                buf.reserve(16 + 20 * info_hashes.len());
+                buf.put_i64(connection_id);
+                buf.put_i32(2);
+                buf.put_i32(transaction_id);
+                for info_hash in info_hashes {
+                    buf.put(info_hash.as_ref());
+                }
+            }
+        }
 
         Ok(())
     }
