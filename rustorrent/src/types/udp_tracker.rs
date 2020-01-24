@@ -1,9 +1,13 @@
 use super::*;
-use crate::parser::parser_udp_tracker;
+use crate::{app::TorrentProcess, parser::parser_udp_tracker};
 use bytes::{Buf, BufMut, BytesMut};
 use failure::Fail;
 use nom::Offset;
-use std::fmt::{Display, Formatter};
+use rand::prelude::*;
+use std::{
+    fmt::{Display, Formatter},
+    sync::Arc,
+};
 use tokio_util::codec::{Decoder, Encoder};
 
 /// Bittorrent UDP-tracker protocol extension.
@@ -18,16 +22,89 @@ pub(crate) enum UdpTracker {
     Response(UdpTrackerResponse),
 }
 
+#[derive(Debug, Clone)]
 pub(crate) struct UdpTrackerRequest {
     /// Must be initialized to 0x41727101980 in network byte order for connect.
     /// This will identify the protocol.
-    connection_id: i64,
-    transaction_id: i32,
-    data: UdpTrackerRequestData,
-    authentication: Option<UdpTrackerAuthentication>,
-    request_string: Option<String>,
+    pub(crate) connection_id: i64,
+    pub(crate) transaction_id: i32,
+    pub(crate) data: UdpTrackerRequestData,
+    pub(crate) authentication: Option<UdpTrackerAuthentication>,
+    pub(crate) request_string: Option<String>,
 }
 
+impl UdpTrackerRequest {
+    pub(crate) fn connect() -> Self {
+        Self {
+            connection_id: 0x41727101980,
+            transaction_id: random(),
+            data: UdpTrackerRequestData::Connect,
+            authentication: None,
+            request_string: None,
+        }
+    }
+
+    pub(crate) fn announce(
+        connection_id: i64,
+        settings: Arc<Settings>,
+        torrent_process: Arc<TorrentProcess>,
+    ) -> Self {
+        let left = torrent_process.info.len() as i64;
+
+        Self {
+            connection_id,
+            transaction_id: random(),
+            data: UdpTrackerRequestData::Announce {
+                info_hash: torrent_process.hash_id,
+                peer_id: crate::PEER_ID,
+                downloaded: 0,
+                uploaded: 0,
+                left,
+                event: 0,
+                ip: 0,
+                extensions: 0,
+                num_want: -1,
+                key: random(),
+                port: settings.config.port,
+            },
+            authentication: None,
+            request_string: None,
+        }
+    }
+
+    pub(crate) fn match_response(&self, response: &UdpTrackerResponse) -> bool {
+        match (self, response) {
+            (
+                UdpTrackerRequest {
+                    transaction_id: request_transaction_id,
+                    data: request_data,
+                    ..
+                },
+                UdpTrackerResponse {
+                    transaction_id: response_transaction_id,
+                    data: response_data,
+                    ..
+                },
+            ) if request_transaction_id == response_transaction_id => {
+                match (request_data, response_data) {
+                    (UdpTrackerRequestData::Connect, UdpTrackerResponseData::Connect { .. })
+                    | (
+                        UdpTrackerRequestData::Announce { .. },
+                        UdpTrackerResponseData::Announce { .. },
+                    )
+                    | (
+                        UdpTrackerRequestData::Scrape { .. },
+                        UdpTrackerResponseData::Scrape { .. },
+                    ) => true,
+                    _ => false,
+                }
+            }
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub(crate) enum UdpTrackerRequestData {
     /// connecting
     Connect,
@@ -64,11 +141,13 @@ pub(crate) enum UdpTrackerRequestData {
     Scrape { info_hashes: Vec<[u8; 20]> },
 }
 
+#[derive(Debug, PartialEq)]
 pub(crate) struct UdpTrackerResponse {
     pub(crate) transaction_id: i32,
     pub(crate) data: UdpTrackerResponseData,
 }
 
+#[derive(Debug, PartialEq)]
 pub(crate) enum UdpTrackerResponseData {
     /// connecting
     Connect {
@@ -99,12 +178,14 @@ pub(crate) enum UdpTrackerResponseData {
     },
 }
 
+#[derive(Debug, PartialEq)]
 pub(crate) struct UdpTrackerScrape {
     pub(crate) complete: i32,
     pub(crate) downloaded: i32,
     pub(crate) incomplete: i32,
 }
 
+#[derive(Debug, Clone)]
 pub(crate) struct UdpTrackerAuthentication {
     /// User name.
     username: String,

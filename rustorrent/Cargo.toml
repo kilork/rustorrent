@@ -20,6 +20,7 @@ sha-1 = "0.8"
 percent-encoding = "2"
 
 uuid = { version = "0.8", features = ["v4"] }
+rand = "0.7"
 
 http = "0.2"
 http-body = "0.3"

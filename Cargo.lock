@@ -557,9 +557,9 @@ dependencies = [
 
 [[package]]
 name = "itoa"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "501266b7edd0174f8530248f87f99c88fbe60ca4ef3dd486835b8d8d53136f7f"
+checksum = "b8b7a7c0c47db5545ed3fef7468ee7bb5b74691498139e4b3f6a20685dc6dd8e"
 
 [[package]]
 name = "kernel32-sys"
@@ -945,6 +945,7 @@ dependencies = [
  "log",
  "nom",
  "percent-encoding",
+ "rand",
  "serde",
  "sha-1",
  "structopt",

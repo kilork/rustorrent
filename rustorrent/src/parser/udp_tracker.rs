@@ -88,4 +88,19 @@ pub fn peer(i: &[u8]) -> IResult<&[u8], Peer> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn parse(buf: &[u8], udp_tracker_response: UdpTrackerResponse) {
+        assert_eq!(parser_udp_tracker(buf).unwrap().1, udp_tracker_response);
+    }
+
+    #[test]
+    fn parse_udp_tracker_response_connect() {
+        parse(
+            &[0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2],
+            UdpTrackerResponse {
+                data: UdpTrackerResponseData::Connect { connection_id: 2 },
+                transaction_id: 1,
+            },
+        );
+    }
 }

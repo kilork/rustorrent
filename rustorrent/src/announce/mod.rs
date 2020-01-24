@@ -39,14 +39,22 @@ pub async fn announce_loop(
     };
 
     loop {
-        let interval_to_query_tracker = match proto {
+        let try_interval_to_query_tracker = match proto {
             Announce::Http => {
-                http::http_announce(settings.clone(), torrent_process.clone(), announce_url).await?
+                http::http_announce(settings.clone(), torrent_process.clone(), announce_url).await
             }
             Announce::Udp => {
-                udp::udp_announce(settings.clone(), torrent_process.clone(), announce_url).await?
+                udp::udp_announce(settings.clone(), torrent_process.clone(), announce_url).await
             }
             _ => return Ok(()),
+        };
+
+        let interval_to_query_tracker = match try_interval_to_query_tracker {
+            Ok(i) => i,
+            Err(err) => {
+                error!("announce loop error {:?}", err);
+                Duration::from_secs(5)
+            }
         };
 
         debug!("query tracker in {:?}", interval_to_query_tracker);

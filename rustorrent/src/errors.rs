@@ -1,4 +1,4 @@
-use crate::types::message::MessageCodecError;
+use crate::types::{message::MessageCodecError, udp_tracker::UdpTrackerCodecError};
 use failure::*;
 use log::error;
 
@@ -54,6 +54,8 @@ pub enum RustorrentError {
     PeerHandshakeFailure,
     #[fail(display = "message codec {}", _0)]
     MessageCodec(MessageCodecError),
+    #[fail(display = "udp tracker codec {}", _0)]
+    UdpTrackerCodec(UdpTrackerCodecError),
     #[fail(display = "cannot determine announce protocol")]
     AnnounceProtocolFailure,
     #[fail(display = "unknown announce protocol {}", _0)]
@@ -81,6 +83,7 @@ from_rustorrent_error!(tokio::time::Error, TimerFailure);
 from_rustorrent_error!(futures::channel::mpsc::SendError, SendError);
 from_rustorrent_error!(http::uri::InvalidUri, InvalidUri);
 from_rustorrent_error!(MessageCodecError, MessageCodec);
+from_rustorrent_error!(UdpTrackerCodecError, UdpTrackerCodec);
 from_rustorrent_error!(
     tokio::sync::oneshot::error::RecvError,
     TokioMpscOneshotRecvError
