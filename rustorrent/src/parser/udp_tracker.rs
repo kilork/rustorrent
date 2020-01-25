@@ -103,4 +103,26 @@ mod tests {
             },
         );
     }
+
+    #[test]
+    fn parse_udp_tracker_response_announce() {
+        parse(
+            &[
+                0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 10, 0, 0, 0, 20, 0, 0, 0, 30, 1, 2, 3, 4, 0, 80,
+            ],
+            UdpTrackerResponse {
+                data: UdpTrackerResponseData::Announce {
+                    interval: 10,
+                    leechers: 20,
+                    seeders: 30,
+                    peers: vec![Peer {
+                        ip: IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4)),
+                        port: 80,
+                        peer_id: None,
+                    }],
+                },
+                transaction_id: 2,
+            },
+        );
+    }
 }

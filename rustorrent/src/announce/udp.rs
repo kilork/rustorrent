@@ -3,7 +3,7 @@ use crate::types::udp_tracker::{
     UdpTrackerCodec, UdpTrackerRequest, UdpTrackerRequestData, UdpTrackerResponse,
     UdpTrackerResponseData,
 };
-use tokio::net::lookup_host;
+use tokio::{net::lookup_host, time};
 
 const UDP_PREFIX: &str = "udp://";
 
@@ -54,7 +54,9 @@ pub(crate) async fn udp_announce(
                     );
                     debug!("sending udp tracker announce request: {:?}", request);
                     wtransport.send((request.clone(), addr)).await?;
-                    if let Some(Ok((connect_response, _socket))) = rtransport.next().await {
+                    if let Ok(Some(Ok((connect_response, _socket)))) =
+                        time::timeout(Duration::from_millis(200), rtransport.next()).await
+                    {
                         debug!(
                             "received udp tracker announce response: {:?}",
                             connect_response
