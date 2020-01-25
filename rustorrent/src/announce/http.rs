@@ -1,5 +1,11 @@
 use super::*;
 
+fn url_encode(data: &[u8]) -> String {
+    data.iter()
+        .map(|&x| percent_encode_byte(x))
+        .collect::<String>()
+}
+
 pub(crate) async fn http_announce(
     settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,

@@ -26,6 +26,7 @@ pub(crate) async fn udp_announce(
 
     let (mut wtransport, mut rtransport) = UdpFramed::new(udp_socket, UdpTrackerCodec).split();
 
+    // TODO: implement 2^n * 15 up to 8 times
     loop {
         let mut addrs = lookup_host(announce_url).await?;
         if let Some(addr) = addrs.next() {

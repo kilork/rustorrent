@@ -47,7 +47,6 @@ use uuid::Uuid;
 
 pub mod announce;
 pub mod app;
-mod commands;
 mod errors;
 mod messages;
 mod parser;

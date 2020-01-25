@@ -9,7 +9,7 @@ use crate::{
         torrent::{Torrent, TrackerAnnounce},
         Settings,
     },
-    {commands::url_encode, count_parts, SHA1_SIZE},
+    {count_parts, SHA1_SIZE},
 };
 
 pub struct RustorrentApp {
