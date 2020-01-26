@@ -49,7 +49,11 @@ impl TorrentStorage {
             let mut rt = Builder::new().basic_scheduler().enable_io().build()?;
             let mut downloaded = vec![];
             let mmap_storage = Arc::new(MmapFlatStorage::create(
-                ".",
+                settings
+                    .config
+                    .save_to
+                    .clone()
+                    .unwrap_or_else(|| ".".into()),
                 info.piece_length,
                 info.files.clone(),
                 &downloaded,

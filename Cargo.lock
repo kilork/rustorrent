@@ -302,6 +302,7 @@ dependencies = [
  "failure",
  "flat-storage",
  "futures",
+ "log",
  "memmap",
 ]
 

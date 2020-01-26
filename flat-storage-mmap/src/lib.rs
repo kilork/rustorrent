@@ -1,7 +1,8 @@
 use flat_storage::*;
+use log::debug;
 use memmap::MmapMut;
 use std::{
-    fs::{create_dir_all, File, OpenOptions},
+    fs::{create_dir_all, OpenOptions},
     future::Future,
     path::{Path, PathBuf},
     sync::Mutex,
@@ -54,24 +55,24 @@ fn load_files<P: AsRef<Path>>(
     let mut result = vec![];
     for file in files {
         let file_path = download_path.as_ref().join(&file.path);
-        eprintln!("load file: {:?}", file_path);
+        debug!("checking file: {:?}", file_path);
         let f = if file_path.is_file() {
             OpenOptions::new().read(true).write(true).open(&file_path)?
         } else {
             if let Some(path) = file_path.parent() {
-                eprintln!("create dir {:?}", path);
-                std::fs::create_dir_all(path)?;
+                debug!("create dir {:?}", path);
+                create_dir_all(path)?;
             }
-            eprintln!("create file");
-            let new_file = File::create(&file_path)?;
-            eprintln!("set len");
+            debug!("create file");
+            let new_file = OpenOptions::new().read(true).write(true).create(true).open(&file_path)?;
+            debug!("set len");
             new_file.set_len(file.length as u64)?;
             new_file
         };
-        eprintln!("create mmap");
+        debug!("creating mmap...");
         let mmap = unsafe { MmapMut::map_mut(&f)? };
         result.push(Mutex::new(FileHandle { mmap, saved: 0 }));
-        eprintln!("processed file: {:?}", file_path);
+        debug!("processed file: {:?}", file_path);
     }
     Ok(result)
 }

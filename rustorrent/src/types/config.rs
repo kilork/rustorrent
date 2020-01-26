@@ -15,17 +15,21 @@ pub struct Config {
     /// To force compact=1 use true value. To force compact=0 use false value.
     #[structopt(long)]
     pub compact: Option<bool>,
-    /// address to listen to
+    /// Address to listen to
     #[structopt(long)]
     pub listen: Option<IpAddr>,
-    /// port to listen on
+    /// Port to listen on
     #[structopt(long, env = "RUSTORRENT_PEER_PORT", default_value = PEER_PORT)]
     pub port: u16,
-    /// max port
+    /// Max port
     ///
     /// If there is no free port between port and port-max - client will exit with exception.
     #[structopt(long, env = "RUSTORRENT_PEER_PORT_MAX", default_value = PEER_PORT_MAX)]
     pub port_max: u16,
+
+    /// Download path
+    #[structopt(long)]
+    pub save_to: Option<String>,
 }
 
 /// Global application settings
