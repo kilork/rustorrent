@@ -10,13 +10,36 @@ pub struct FlatStorageFile {
     pub length: usize,
 }
 
+pub struct FlatStoragePieceIndex(usize);
+
+impl From<usize> for FlatStoragePieceIndex {
+    fn from(value: usize) -> Self {
+        Self(value)
+    }
+}
+
 /// Flat storage of different sized files.
 ///
 /// Access to data is asynchronious. Files created lazy.
-pub trait FlatStorage<F: Future<Output = Result<(), FlatStorageError>>> {
+pub trait FlatStorage {
     fn files(&self) -> &[FlatStorageFile];
-    fn read_block(&self, begin: usize, block: &mut [u8]) -> F;
-    fn write_block(&self, begin: usize, block: &[u8]) -> F;
+
+    fn read_piece<
+        I: Into<FlatStoragePieceIndex>,
+        R: Future<Output = Result<Option<Vec<u8>>, FlatStorageError>>,
+    >(
+        &self,
+        index: I,
+    ) -> R;
+
+    fn write_piece<
+        I: Into<FlatStoragePieceIndex>,
+        R: Future<Output = Result<(), FlatStorageError>>,
+    >(
+        &self,
+        index: I,
+        block: Vec<u8>,
+    ) -> R;
 }
 
 #[derive(Debug, Fail)]

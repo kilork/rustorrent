@@ -2,8 +2,6 @@ use super::*;
 use crate::count_parts;
 use flat_storage::FlatStorageFile as TorrentInfoFile;
 
-use std::path::PathBuf;
-
 use crate::{BLOCK_SIZE, SHA1_SIZE};
 
 /// Normalized info from torrent.
@@ -14,7 +12,6 @@ pub struct TorrentInfo {
     pub last_piece_length: usize,
     pub last_piece_blocks_count: usize,
     pub pieces: Vec<Piece>,
-    pub mapping: Vec<PieceToFiles>,
     pub length: usize,
     pub files: Vec<TorrentInfoFile>,
 }
@@ -80,64 +77,16 @@ impl From<TorrentInfoRaw> for TorrentInfo {
 
         let last_piece_blocks_count = count_parts(last_piece_length, BLOCK_SIZE);
 
-        let mapping = map_pieces_to_files(piece_length, &files);
-
         Self {
             piece_length,
             default_blocks_count,
             last_piece_length,
             last_piece_blocks_count,
             pieces,
-            mapping,
             length,
             files,
         }
     }
-}
-
-fn map_pieces_to_files(piece_length: usize, files: &[TorrentInfoFile]) -> Vec<PieceToFiles> {
-    let mut current_piece_left = piece_length;
-    let mut current_piece = PieceToFiles(vec![]);
-    let mut offset = 0;
-
-    let mut mapping = vec![];
-
-    for (file_index, file) in files.iter().enumerate() {
-        let mut file_remaining_length = file.length;
-        let mut file_offset = 0;
-        while current_piece_left < file_remaining_length {
-            current_piece.0.push(FileBlock {
-                offset,
-                file_index,
-                file_offset,
-                size: current_piece_left,
-            });
-
-            file_remaining_length -= current_piece_left;
-            file_offset += current_piece_left;
-            current_piece_left = piece_length;
-
-            mapping.push(current_piece);
-            current_piece = PieceToFiles(vec![]);
-            offset = 0;
-        }
-        if current_piece_left >= file_remaining_length {
-            current_piece.0.push(FileBlock {
-                offset,
-                file_index,
-                file_offset,
-                size: file_remaining_length,
-            });
-            current_piece_left -= file_remaining_length;
-            offset += file_remaining_length;
-        }
-    }
-
-    if !current_piece.0.is_empty() {
-        mapping.push(current_piece);
-    }
-
-    mapping
 }
 
 #[derive(Debug, PartialEq)]
@@ -149,17 +98,6 @@ impl TryFrom<&[u8]> for Piece {
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         Ok(Piece(value.try_into()?))
     }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct PieceToFiles(Vec<FileBlock>);
-
-#[derive(Debug, PartialEq)]
-pub struct FileBlock {
-    offset: usize,
-    file_index: usize,
-    file_offset: usize,
-    size: usize,
 }
 
 #[derive(Debug, PartialEq)]
@@ -257,146 +195,5 @@ mod tests {
             Some(b"c123456789d123456789".as_ref())
         );
         assert_eq!(torrent_info.piece(2), None);
-    }
-
-    #[test]
-    fn pieces_to_files() {
-        let result = map_pieces_to_files(
-            100,
-            &[TorrentInfoFile {
-                path: "test".into(),
-                length: 1000,
-            }],
-        );
-        dbg!(&result);
-        assert_eq!(result.len(), 10);
-
-        let result = map_pieces_to_files(
-            1000,
-            &[TorrentInfoFile {
-                path: "test".into(),
-                length: 1000,
-            }],
-        );
-        assert_eq!(
-            result,
-            vec![PieceToFiles(vec![FileBlock {
-                offset: 0,
-                file_index: 0,
-                file_offset: 0,
-                size: 1000,
-            }])]
-        );
-
-        let result = map_pieces_to_files(
-            1000,
-            &[TorrentInfoFile {
-                path: "test".into(),
-                length: 800,
-            }],
-        );
-        assert_eq!(
-            result,
-            vec![PieceToFiles(vec![FileBlock {
-                offset: 0,
-                file_index: 0,
-                file_offset: 0,
-                size: 800,
-            }])]
-        );
-
-        let result = map_pieces_to_files(
-            333,
-            &[TorrentInfoFile {
-                path: "test".into(),
-                length: 1000,
-            }],
-        );
-        assert_eq!(
-            result,
-            vec![
-                PieceToFiles(vec![FileBlock {
-                    offset: 0,
-                    file_index: 0,
-                    file_offset: 0,
-                    size: 333,
-                }]),
-                PieceToFiles(vec![FileBlock {
-                    offset: 0,
-                    file_index: 0,
-                    file_offset: 333,
-                    size: 333,
-                }]),
-                PieceToFiles(vec![FileBlock {
-                    offset: 0,
-                    file_index: 0,
-                    file_offset: 666,
-                    size: 333,
-                }]),
-                PieceToFiles(vec![FileBlock {
-                    offset: 0,
-                    file_index: 0,
-                    file_offset: 999,
-                    size: 1,
-                }])
-            ]
-        );
-
-        let result = map_pieces_to_files(
-            500,
-            &[
-                TorrentInfoFile {
-                    path: "test1".into(),
-                    length: 300,
-                },
-                TorrentInfoFile {
-                    path: "test2".into(),
-                    length: 400,
-                },
-                TorrentInfoFile {
-                    path: "test3".into(),
-                    length: 500,
-                },
-            ],
-        );
-        assert_eq!(
-            result,
-            vec![
-                PieceToFiles(vec![
-                    FileBlock {
-                        offset: 0,
-                        file_index: 0,
-                        file_offset: 0,
-                        size: 300,
-                    },
-                    FileBlock {
-                        offset: 300,
-                        file_index: 1,
-                        file_offset: 0,
-                        size: 200,
-                    }
-                ]),
-                PieceToFiles(vec![
-                    FileBlock {
-                        offset: 0,
-                        file_index: 1,
-                        file_offset: 200,
-                        size: 200,
-                    },
-                    FileBlock {
-                        offset: 200,
-                        file_index: 2,
-                        file_offset: 0,
-                        size: 300,
-                    }
-                ]),
-                PieceToFiles(vec![FileBlock {
-                    offset: 0,
-                    file_index: 2,
-                    file_offset: 300,
-                    size: 200,
-                }])
-            ]
-        );
     }
 }
