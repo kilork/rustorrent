@@ -34,3 +34,4 @@ bytes = "0.5"
 serde = { version = "1.0", features = ["derive"] }
 
 flat-storage = { path = "../flat-storage" }
+flat-storage-mmap = { path = "../flat-storage-mmap" }

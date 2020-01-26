@@ -60,6 +60,10 @@ pub enum RustorrentError {
     AnnounceProtocolFailure,
     #[fail(display = "unknown announce protocol {}", _0)]
     AnnounceProtocolUnknown(String),
+    #[fail(display = "join task {}", _0)]
+    JoinError(tokio::task::JoinError),
+    #[fail(display = "storage {}", _0)]
+    Storage(flat_storage::FlatStorageError),
 }
 
 macro_rules! from_rustorrent_error {
@@ -80,14 +84,16 @@ from_rustorrent_error!(std::convert::Infallible, Convert);
 from_rustorrent_error!(std::num::TryFromIntError, ConvertInt);
 from_rustorrent_error!(core::array::TryFromSliceError, ConvertFromSlice);
 from_rustorrent_error!(tokio::time::Error, TimerFailure);
-from_rustorrent_error!(futures::channel::mpsc::SendError, SendError);
-from_rustorrent_error!(http::uri::InvalidUri, InvalidUri);
-from_rustorrent_error!(MessageCodecError, MessageCodec);
-from_rustorrent_error!(UdpTrackerCodecError, UdpTrackerCodec);
+from_rustorrent_error!(tokio::task::JoinError, JoinError);
 from_rustorrent_error!(
     tokio::sync::oneshot::error::RecvError,
     TokioMpscOneshotRecvError
 );
+from_rustorrent_error!(futures::channel::mpsc::SendError, SendError);
+from_rustorrent_error!(http::uri::InvalidUri, InvalidUri);
+from_rustorrent_error!(MessageCodecError, MessageCodec);
+from_rustorrent_error!(UdpTrackerCodecError, UdpTrackerCodec);
+from_rustorrent_error!(flat_storage::FlatStorageError, Storage);
 
 impl From<futures::future::Aborted> for RustorrentError {
     fn from(_: futures::future::Aborted) -> Self {

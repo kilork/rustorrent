@@ -1,13 +1,15 @@
 use flat_storage::*;
+use memmap::MmapMut;
 use std::{
+    fs::{create_dir_all, File, OpenOptions},
     future::Future,
     path::{Path, PathBuf},
+    sync::Mutex,
 };
 
 pub struct MmapFlatStorage {
-    download_path: PathBuf,
     files: Vec<FlatStorageFile>,
-    piece_size: usize,
+    file_handles: Vec<Mutex<FileHandle>>,
     mapping: Vec<MmapFlatStorageMapping>,
 }
 
@@ -22,20 +24,56 @@ struct FileBlock {
     size: usize,
 }
 
+struct FileHandle {
+    mmap: MmapMut,
+    saved: usize,
+}
+
 impl MmapFlatStorage {
-    pub fn new<P: AsRef<Path>>(
+    pub fn create<P: AsRef<Path>>(
         download_path: P,
         piece_size: usize,
         files: Vec<FlatStorageFile>,
-    ) -> Self {
+        downloaded: &[u8],
+    ) -> Result<Self, std::io::Error> {
         let mapping = map_pieces_to_files(piece_size, &files);
-        Self {
-            download_path: download_path.as_ref().into(),
+        let file_handles = load_files(&download_path, &files, downloaded)?;
+        Ok(Self {
             files,
-            piece_size,
+            file_handles,
             mapping,
-        }
+        })
     }
+}
+
+fn load_files<P: AsRef<Path>>(
+    download_path: P,
+    files: &[FlatStorageFile],
+    downloaded: &[u8],
+) -> Result<Vec<Mutex<FileHandle>>, std::io::Error> {
+    let mut result = vec![];
+    for file in files {
+        let file_path = download_path.as_ref().join(&file.path);
+        eprintln!("load file: {:?}", file_path);
+        let f = if file_path.is_file() {
+            OpenOptions::new().read(true).write(true).open(&file_path)?
+        } else {
+            if let Some(path) = file_path.parent() {
+                eprintln!("create dir {:?}", path);
+                std::fs::create_dir_all(path)?;
+            }
+            eprintln!("create file");
+            let new_file = File::create(&file_path)?;
+            eprintln!("set len");
+            new_file.set_len(file.length as u64)?;
+            new_file
+        };
+        eprintln!("create mmap");
+        let mmap = unsafe { MmapMut::map_mut(&f)? };
+        result.push(Mutex::new(FileHandle { mmap, saved: 0 }));
+        eprintln!("processed file: {:?}", file_path);
+    }
+    Ok(result)
 }
 
 impl FlatStorage for MmapFlatStorage {
@@ -43,25 +81,36 @@ impl FlatStorage for MmapFlatStorage {
         &self.files
     }
 
-    fn read_piece<
-        I: Into<FlatStoragePieceIndex>,
-        R: Future<Output = Result<Option<Vec<u8>>, FlatStorageError>>,
-    >(
+    fn read_piece<I: Into<FlatStoragePieceIndex>>(
         &self,
         index: I,
-    ) -> R {
-        unimplemented!();
+    ) -> Result<Option<Vec<u8>>, FlatStorageError> {
+        let map_to_files = &self.mapping[*index.into()];
+        let mut result = vec![];
+        for file_block in &map_to_files.0 {
+            let f = &self.file_handles[file_block.file_index];
+            let data = &f.lock().unwrap().mmap
+                [file_block.file_offset..file_block.file_offset + file_block.size];
+            result.extend_from_slice(data);
+        }
+
+        Ok(Some(result))
     }
 
-    fn write_piece<
-        I: Into<FlatStoragePieceIndex>,
-        R: Future<Output = Result<(), FlatStorageError>>,
-    >(
+    fn write_piece<I: Into<FlatStoragePieceIndex>>(
         &self,
         index: I,
         block: Vec<u8>,
-    ) -> R {
-        unimplemented!();
+    ) -> Result<(), FlatStorageError> {
+        let map_to_files = &self.mapping[*index.into()];
+        for file_block in &map_to_files.0 {
+            let f = &self.file_handles[file_block.file_index];
+            let data = &mut f.lock().unwrap().mmap
+                [file_block.file_offset..file_block.file_offset + file_block.size];
+            data.copy_from_slice(&block[file_block.offset..file_block.offset + file_block.size])
+        }
+
+        Ok(())
     }
 }
 

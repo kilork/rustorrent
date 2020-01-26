@@ -1,16 +1,11 @@
-use exitfailure::ExitFailure;
-use failure::{Context, ResultExt};
 use futures::{
-    // channel::mpsc::{self, UnboundedReceiver, UnboundedSender},
-    future::{join_all, lazy, try_join, AbortHandle, Abortable, Aborted},
-    join,
+    future::{try_join, AbortHandle, Abortable},
     prelude::*,
     stream::SplitSink,
-    task::{FutureObj, Spawn, SpawnError, SpawnExt},
     try_join,
 };
 use http_body::Body;
-use hyper::{Client, Uri};
+use hyper::Client;
 use log::{debug, error, info, warn};
 use percent_encoding::{percent_encode, percent_encode_byte, NON_ALPHANUMERIC};
 use sha1::{Digest, Sha1};
@@ -18,18 +13,13 @@ use std::{
     collections::HashMap,
     convert::TryInto,
     fmt::{Display, Formatter},
-    mem::{self, drop},
     net::{IpAddr, Ipv4Addr, SocketAddr},
     ops::Deref,
     path::{Path, PathBuf},
-    sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
-        Arc, Mutex, RwLock,
-    },
+    sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
 };
 use tokio::{
-    io,
     net::{TcpListener, TcpStream, UdpSocket},
     prelude::*,
     sync::{
@@ -37,12 +27,9 @@ use tokio::{
         oneshot,
     },
     task::JoinHandle,
-    time::{delay_for, Interval},
+    time::delay_for,
 };
-use tokio_util::{
-    codec::{Decoder, Encoder, Framed},
-    udp::UdpFramed,
-};
+use tokio_util::{codec::Framed, udp::UdpFramed};
 use uuid::Uuid;
 
 pub mod announce;

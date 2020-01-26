@@ -299,7 +299,7 @@ async fn download_torrent(
     torrent_process: Arc<TorrentProcess>,
     mut broker_receiver: Receiver<DownloadTorrentEvent>,
 ) -> Result<(), RustorrentError> {
-    let mut torrent_storage = TorrentStorage::new(torrent_process.clone());
+    let mut torrent_storage = TorrentStorage::new(settings.clone(), torrent_process.clone());
 
     let (abort_handle, abort_registration) = AbortHandle::new_pair();
 

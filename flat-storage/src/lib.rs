@@ -1,10 +1,11 @@
 use failure::Fail;
 use std::{
     future::Future,
+    ops::Deref,
     path::{Path, PathBuf},
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct FlatStorageFile {
     pub path: PathBuf,
     pub length: usize,
@@ -18,28 +19,29 @@ impl From<usize> for FlatStoragePieceIndex {
     }
 }
 
+impl Deref for FlatStoragePieceIndex {
+    type Target = usize;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 /// Flat storage of different sized files.
 ///
 /// Access to data is asynchronious. Files created lazy.
 pub trait FlatStorage {
     fn files(&self) -> &[FlatStorageFile];
 
-    fn read_piece<
-        I: Into<FlatStoragePieceIndex>,
-        R: Future<Output = Result<Option<Vec<u8>>, FlatStorageError>>,
-    >(
+    fn read_piece<I: Into<FlatStoragePieceIndex>>(
         &self,
         index: I,
-    ) -> R;
+    ) -> Result<Option<Vec<u8>>, FlatStorageError>;
 
-    fn write_piece<
-        I: Into<FlatStoragePieceIndex>,
-        R: Future<Output = Result<(), FlatStorageError>>,
-    >(
+    fn write_piece<I: Into<FlatStoragePieceIndex>>(
         &self,
         index: I,
         block: Vec<u8>,
-    ) -> R;
+    ) -> Result<(), FlatStorageError>;
 }
 
 #[derive(Debug, Fail)]

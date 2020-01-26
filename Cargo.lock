@@ -958,6 +958,7 @@ dependencies = [
  "exitfailure",
  "failure",
  "flat-storage",
+ "flat-storage-mmap",
  "futures",
  "http",
  "http-body",
