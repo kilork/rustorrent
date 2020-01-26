@@ -435,7 +435,8 @@ async fn download_torrent(
                         &mut peer_states,
                         peer_id,
                     )
-                    .await {
+                    .await
+                    {
                         error!("[{}] cannot process peer interested: {}", peer_id, err);
                     }
                 }
@@ -449,8 +450,12 @@ async fn download_torrent(
                         piece,
                         &mut torrent_storage,
                     )
-                    .await {
-                        error!("[{}] cannot process peer piece downloaded: {}", peer_id, err);
+                    .await
+                    {
+                        error!(
+                            "[{}] cannot process peer piece downloaded: {}",
+                            peer_id, err
+                        );
                     }
 
                     if torrent_storage.receiver.borrow().pieces_left == 0 {
@@ -476,7 +481,8 @@ async fn download_torrent(
                         length,
                         &mut torrent_storage,
                     )
-                    .await {
+                    .await
+                    {
                         error!("[{}] cannot process peer piece request: {}", peer_id, err);
                     }
                 }
@@ -851,10 +857,23 @@ impl PeerLoopMessage {
 
     async fn unchoke(&mut self) -> Result<bool, RustorrentError> {
         self.chocked = false;
+
+        let peer_id = self.peer_id;
+        debug!("[{}] unchocked", peer_id);
+
         self.command_loop_broker_sender
             .send(DownloadTorrentEvent::PeerUnchoke(self.peer_id))
             .await?;
 
+        debug!(
+            "[{}] send DownloadTorrentEvent::PeerUnchoke message",
+            peer_id
+        );
+
+        debug!(
+            "[{}] checking piece progress: {:?}",
+            peer_id, self.downloading
+        );
         if let Some(piece) = self.downloading {
             if let Some(ref torrent_peer_piece) = self.torrent_piece {
                 self.wtransport
