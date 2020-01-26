@@ -51,7 +51,7 @@ pub(crate) const PEER_ID: [u8; 20] = *b"-rs0001-zzzzxxxxyyyy";
 
 pub(crate) const PEER_MAX_CONNECTIONS: usize = 50;
 
-pub(crate) const DEFAULT_CHANNEL_BUFFER: usize = 10;
+pub(crate) const DEFAULT_CHANNEL_BUFFER: usize = 100;
 
 pub(crate) const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(110);
 
