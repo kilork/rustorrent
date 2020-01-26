@@ -25,10 +25,7 @@ async fn main() -> Result<(), ExitFailure> {
                 Some(&env!("CARGO_PKG_NAME").replace("-", "_")),
                 level_filter,
             )
-            .filter(
-                Some("flat_storage_mmap"),
-                level_filter,
-            )
+            .filter(Some("flat_storage_mmap"), level_filter)
             .filter(None, Level::Warn.to_level_filter())
             .try_init()?;
     }

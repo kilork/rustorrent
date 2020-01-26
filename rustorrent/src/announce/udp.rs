@@ -33,57 +33,62 @@ pub(crate) async fn udp_announce(
             let request = UdpTrackerRequest::connect();
             debug!("sending udp tracker connect request: {:?}", request);
             wtransport.send((request.clone(), addr)).await?;
-            if let Some(Ok((connect_response, _socket))) = rtransport.next().await {
-                debug!(
-                    "received udp tracker connect response: {:?}",
-                    connect_response
-                );
-
-                if !request.match_response(&connect_response) {
-                    debug!("request does not match response");
-                    break;
-                }
-                if let UdpTrackerResponse {
-                    data: UdpTrackerResponseData::Connect { connection_id },
-                    ..
-                } = connect_response
-                {
-                    let request = UdpTrackerRequest::announce(
-                        connection_id,
-                        settings,
-                        torrent_process.clone(),
+            debug!("awaiting response...");
+            match rtransport.next().await {
+                Some(Ok((connect_response, _socket))) => {
+                    debug!(
+                        "received udp tracker connect response: {:?}",
+                        connect_response
                     );
-                    debug!("sending udp tracker announce request: {:?}", request);
-                    wtransport.send((request.clone(), addr)).await?;
-                    if let Ok(Some(Ok((connect_response, _socket)))) =
-                        time::timeout(Duration::from_millis(200), rtransport.next()).await
-                    {
-                        debug!(
-                            "received udp tracker announce response: {:?}",
-                            connect_response
-                        );
 
-                        if !request.match_response(&connect_response) {
-                            debug!("request does not match response");
-                            break;
-                        }
-                        if let UdpTrackerResponse {
-                            data:
-                                UdpTrackerResponseData::Announce {
-                                    interval, peers, ..
-                                },
-                            ..
-                        } = connect_response
+                    if !request.match_response(&connect_response) {
+                        debug!("request does not match response");
+                        break;
+                    }
+                    if let UdpTrackerResponse {
+                        data: UdpTrackerResponseData::Connect { connection_id },
+                        ..
+                    } = connect_response
+                    {
+                        let request = UdpTrackerRequest::announce(
+                            connection_id,
+                            settings,
+                            torrent_process.clone(),
+                        );
+                        debug!("sending udp tracker announce request: {:?}", request);
+                        wtransport.send((request.clone(), addr)).await?;
+                        if let Ok(Some(Ok((connect_response, _socket)))) =
+                            time::timeout(Duration::from_millis(200), rtransport.next()).await
                         {
-                            torrent_process
-                                .broker_sender
-                                .clone()
-                                .send(DownloadTorrentEvent::Announce(peers))
-                                .await?;
-                            return Ok(Duration::from_secs(interval as u64));
+                            debug!(
+                                "received udp tracker announce response: {:?}",
+                                connect_response
+                            );
+
+                            if !request.match_response(&connect_response) {
+                                debug!("request does not match response");
+                                break;
+                            }
+                            if let UdpTrackerResponse {
+                                data:
+                                    UdpTrackerResponseData::Announce {
+                                        interval, peers, ..
+                                    },
+                                ..
+                            } = connect_response
+                            {
+                                torrent_process
+                                    .broker_sender
+                                    .clone()
+                                    .send(DownloadTorrentEvent::Announce(peers))
+                                    .await?;
+                                return Ok(Duration::from_secs(interval as u64));
+                            }
                         }
                     }
                 }
+                Some(Err(err)) => error!("udp connect failure: {}", err),
+                None => error!("no response from udp connect"),
             }
         }
         break;

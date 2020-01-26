@@ -56,19 +56,20 @@ fn load_files<P: AsRef<Path>>(
     for file in files {
         let file_path = download_path.as_ref().join(&file.path);
         debug!("checking file: {:?}", file_path);
-        let f = if file_path.is_file() {
-            OpenOptions::new().read(true).write(true).open(&file_path)?
-        } else {
+        if !file_path.is_file() {
             if let Some(path) = file_path.parent() {
                 debug!("create dir {:?}", path);
                 create_dir_all(path)?;
             }
-            debug!("create file");
-            let new_file = OpenOptions::new().read(true).write(true).create(true).open(&file_path)?;
-            debug!("set len");
-            new_file.set_len(file.length as u64)?;
-            new_file
-        };
+        }
+        debug!("create file");
+        let f = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&file_path)?;
+        debug!("set len");
+        f.set_len(file.length as u64)?;
         debug!("creating mmap...");
         let mmap = unsafe { MmapMut::map_mut(&f)? };
         result.push(Mutex::new(FileHandle { mmap, saved: 0 }));
