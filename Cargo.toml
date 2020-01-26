@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-    # "flat-storage-mmap",
+    "flat-storage-mmap",
     "flat-storage",
     "rustorrent",
     # "rustorrent-web",

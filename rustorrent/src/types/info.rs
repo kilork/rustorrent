@@ -1,5 +1,6 @@
 use super::*;
 use crate::count_parts;
+use flat_storage::FlatStorageFile as TorrentInfoFile;
 
 use std::path::PathBuf;
 
@@ -137,12 +138,6 @@ fn map_pieces_to_files(piece_length: usize, files: &[TorrentInfoFile]) -> Vec<Pi
     }
 
     mapping
-}
-
-#[derive(Debug, PartialEq)]
-pub struct TorrentInfoFile {
-    pub path: PathBuf,
-    pub length: usize,
 }
 
 #[derive(Debug, PartialEq)]
@@ -355,11 +350,11 @@ mod tests {
                     length: 300,
                 },
                 TorrentInfoFile {
-                    path: "test1".into(),
+                    path: "test2".into(),
                     length: 400,
                 },
                 TorrentInfoFile {
-                    path: "test1".into(),
+                    path: "test3".into(),
                     length: 500,
                 },
             ],

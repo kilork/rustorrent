@@ -1,11 +1,20 @@
 use failure::Fail;
-use std::{future::Future, path::Path};
+use std::{
+    future::Future,
+    path::{Path, PathBuf},
+};
+
+#[derive(Debug, PartialEq)]
+pub struct FlatStorageFile {
+    pub path: PathBuf,
+    pub length: usize,
+}
 
 /// Flat storage of different sized files.
 ///
 /// Access to data is asynchronious. Files created lazy.
 pub trait FlatStorage<F: Future<Output = Result<(), FlatStorageError>>> {
-    fn allocate_file<P: AsRef<Path>>(relative_path: P, file_size: usize);
+    fn files(&self) -> &[FlatStorageFile];
     fn read_block(&self, begin: usize, block: &mut [u8]) -> F;
     fn write_block(&self, begin: usize, block: &[u8]) -> F;
 }

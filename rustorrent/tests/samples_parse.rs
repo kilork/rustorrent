@@ -1,4 +1,4 @@
-use rustorrent::types::info::TorrentInfoFile;
+use flat_storage::FlatStorageFile as TorrentInfoFile;
 use rustorrent::types::torrent::Torrent;
 use rustorrent::RustorrentError;
 
