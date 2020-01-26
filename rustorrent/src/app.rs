@@ -134,13 +134,14 @@ impl RustorrentApp {
     }
 }
 
-fn spawn_and_log_error<F>(f: F) -> tokio::task::JoinHandle<()>
+fn spawn_and_log_error<F, M>(f: F, message: M) -> tokio::task::JoinHandle<()>
 where
     F: Future<Output = Result<(), RustorrentError>> + Send + 'static,
+    M: Fn() -> String + Send + 'static,
 {
     tokio::spawn(async move {
         if let Err(e) = f.await {
-            error!("{}", e)
+            error!("{}: {}", message(), e)
         }
     })
 }
@@ -155,7 +156,10 @@ async fn accept_connections_loop(
 
     loop {
         let (socket, _) = listener.accept().await?;
-        let _ = spawn_and_log_error(peer_connection(settings.clone(), socket, sender.clone()));
+        let _ = spawn_and_log_error(
+            peer_connection(settings.clone(), socket, sender.clone()),
+            move || format!("peer connection {} failed", addr),
+        );
     }
 }
 
@@ -236,11 +240,10 @@ async fn download_events_loop(
 
                 torrents.push(torrent_process.clone());
 
-                let _ = spawn_and_log_error(download_torrent(
-                    settings.clone(),
-                    torrent_process,
-                    broker_receiver,
-                ));
+                let _ = spawn_and_log_error(
+                    download_torrent(settings.clone(), torrent_process, broker_receiver),
+                    || format!("download_events_loop: add torrent failed"),
+                );
             }
             RustorrentEvent::TorrentHandshake {
                 handshake_request,
@@ -323,11 +326,10 @@ async fn download_torrent(
             match event {
                 DownloadTorrentEvent::Announce(peers) => {
                     debug!("we got announce, what now?");
-                    spawn_and_log_error(process_announce(
-                        settings.clone(),
-                        torrent_process.clone(),
-                        peers,
-                    ));
+                    spawn_and_log_error(
+                        process_announce(settings.clone(), torrent_process.clone(), peers),
+                        || format!("process announce failed"),
+                    );
                 }
                 DownloadTorrentEvent::PeerAnnounced(peer) => {
                     debug!("peer announced: {:?}", peer);
@@ -493,11 +495,15 @@ async fn process_peer_announced(
     peer: Peer,
 ) -> Result<(), RustorrentError> {
     let mut peer_states_iter = peer_states.iter_mut();
+    let peer_err = peer.clone();
     if let Some((peer_id, existing_peer)) = peer_states_iter.find(|x| x.1.peer == peer) {
+        let peer_id = peer_id.clone();
         match existing_peer.state {
             TorrentPeerState::Idle => {
-                let handler =
-                    spawn_and_log_error(connect_to_peer(settings, torrent_process, *peer_id, peer));
+                let handler = spawn_and_log_error(
+                    connect_to_peer(settings, torrent_process, peer_id, peer),
+                    move || format!("connect to existing peer {} {:?} failed", peer_id, peer_err),
+                );
                 existing_peer.state = TorrentPeerState::Connecting(handler);
             }
             TorrentPeerState::Connected { .. } => {
@@ -511,12 +517,10 @@ async fn process_peer_announced(
             peer_id,
             PeerState {
                 peer: peer.clone(),
-                state: TorrentPeerState::Connecting(spawn_and_log_error(connect_to_peer(
-                    settings,
-                    torrent_process,
-                    peer_id,
-                    peer,
-                ))),
+                state: TorrentPeerState::Connecting(spawn_and_log_error(
+                    connect_to_peer(settings, torrent_process, peer_id, peer),
+                    move || format!("connect to new peer {} {:?} failed", peer_id, peer_err),
+                )),
                 announce_count: 0,
             },
         );
@@ -599,14 +603,10 @@ async fn process_peer_forwarded(
         }
     }
 
-    let _ = spawn_and_log_error(peer_loop(
-        settings,
-        torrent_process,
-        peer_id,
-        sender,
-        receiver,
-        stream,
-    ));
+    let _ = spawn_and_log_error(
+        peer_loop(settings, torrent_process, peer_id, sender, receiver, stream),
+        move || format!("[{}] peer loop failed", peer_id),
+    );
 
     Ok(())
 }
@@ -623,14 +623,17 @@ async fn process_peer_connected(
     if let Some(existing_peer) = peer_states.get_mut(&peer_id) {
         let (sender, receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
-        let _ = spawn_and_log_error(peer_loop(
-            settings,
-            torrent_process,
-            peer_id,
-            sender.clone(),
-            receiver,
-            stream,
-        ));
+        let _ = spawn_and_log_error(
+            peer_loop(
+                settings,
+                torrent_process,
+                peer_id,
+                sender.clone(),
+                receiver,
+                stream,
+            ),
+            move || format!("[{}] existing peer loop failed", peer_id),
+        );
 
         existing_peer.state = TorrentPeerState::Connected {
             chocked: true,
