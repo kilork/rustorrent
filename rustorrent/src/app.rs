@@ -2,14 +2,15 @@ use super::*;
 use crate::{errors::RustorrentError, types::torrent::parse_torrent, PEER_ID};
 
 use crate::{
+    messages::{bit_by_index, index_in_bitarray},
     types::{
         info::TorrentInfo,
         message::{Message, MessageCodec},
         peer::{Handshake, Peer},
-        torrent::{Torrent, TrackerAnnounce},
+        torrent::Torrent,
         Settings,
     },
-    {count_parts, SHA1_SIZE},
+    SHA1_SIZE,
 };
 
 pub struct RustorrentApp {
@@ -33,6 +34,9 @@ enum TorrentPeerState {
         chocked: bool,
         interested: bool,
         downloading_piece: Option<usize>,
+        downloading_since: Option<Instant>,
+        downloaded: usize,
+        uploaded: usize,
         sender: Sender<PeerMessage>,
         pieces: Vec<u8>,
     },
@@ -555,14 +559,29 @@ async fn process_peer_announced(
         }
     } else {
         let peer_id = Uuid::new_v4();
+        let torrent_process_on_failure = torrent_process.clone();
         peer_states.insert(
             peer_id,
             PeerState {
                 peer: peer.clone(),
-                state: TorrentPeerState::Connecting(spawn_and_log_error(
-                    connect_to_peer(settings, torrent_process, peer_id, peer),
-                    move || format!("connect to new peer {} {:?} failed", peer_id, peer_err),
-                )),
+                state: TorrentPeerState::Connecting(tokio::spawn(async move {
+                    if let Err(err) =
+                        connect_to_peer(settings, torrent_process, peer_id, peer).await
+                    {
+                        error!(
+                            "[{}] connect to new peer {:?} failed: {}",
+                            peer_id, peer_err, err
+                        );
+                        if let Err(err) = torrent_process_on_failure
+                            .broker_sender
+                            .clone()
+                            .send(DownloadTorrentEvent::PeerConnectFailed(peer_id))
+                            .await
+                        {
+                            error!("[{}] cannot send peer connect failed: {}", peer_id, err);
+                        }
+                    }
+                })),
                 announce_count: 0,
             },
         );
@@ -631,6 +650,9 @@ async fn process_peer_forwarded(
                 chocked: true,
                 interested: false,
                 downloading_piece: None,
+                downloading_since: None,
+                downloaded: 0,
+                uploaded: 0,
                 pieces: vec![],
                 sender: sender.clone(),
             },
@@ -681,6 +703,9 @@ async fn process_peer_connected(
             chocked: true,
             interested: false,
             downloading_piece: None,
+            downloading_since: None,
+            downloaded: 0,
+            uploaded: 0,
             pieces: vec![],
             sender,
         };
@@ -1063,7 +1088,7 @@ async fn process_peer_piece(
         match existing_peer.state {
             TorrentPeerState::Connected { .. } => {
                 let mut downloadable = vec![];
-                let (index, bit) = crate::messages::index_in_bitarray(peer_piece);
+                let (index, bit) = index_in_bitarray(peer_piece);
                 match_pieces(
                     &mut downloadable,
                     &storage.receiver.borrow().downloaded,
@@ -1140,12 +1165,14 @@ async fn select_new_peer(
             if let Some(existing_peer) = peer_states.get_mut(&peer_id) {
                 if let TorrentPeerState::Connected {
                     ref mut downloading_piece,
+                    ref mut downloading_since,
                     ref mut sender,
                     ..
                 } = existing_peer.state
                 {
                     if downloading_piece.is_none() {
                         *downloading_piece = Some(new_piece);
+                        *downloading_since = Some(Instant::now());
                         sender.send(PeerMessage::Download(new_piece)).await?;
                     }
                 }
@@ -1170,10 +1197,12 @@ async fn process_peer_piece_downloaded(
         if let TorrentPeerState::Connected {
             ref pieces,
             ref mut downloading_piece,
+            ref mut downloading_since,
             ..
         } = existing_peer.state
         {
-            if let Some(index) = downloading_piece.take() {
+            if let (Some(index), Some(since)) = (downloading_piece.take(), downloading_since.take())
+            {
                 storage.save(index, piece).await?;
 
                 let mut downloadable = vec![];
@@ -1196,8 +1225,18 @@ async fn process_peer_piece_downloaded(
         return Ok(());
     };
 
-    for (_, peer_state) in peer_states.iter_mut().filter(|(&key, _)| key != peer_id) {
-        if let TorrentPeerState::Connected { ref mut sender, .. } = peer_state.state {
+    for (peer_id, peer_state) in peer_states.iter_mut().filter(|(&key, _)| key != peer_id) {
+        if let TorrentPeerState::Connected {
+            ref mut sender,
+            ref pieces,
+            ..
+        } = peer_state.state
+        {
+            let peer_already_have_piece = bit_by_index(index, pieces).is_some();
+            if peer_already_have_piece {
+                continue;
+            }
+            debug!("[{}] sending Have {}", peer_id, index);
             if let Err(err) = sender.send(PeerMessage::Have(index)).await {
                 error!(
                     "[{}] cannot send Have to {:?}: {}",

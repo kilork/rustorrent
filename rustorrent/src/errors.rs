@@ -70,7 +70,6 @@ macro_rules! from_rustorrent_error {
     ($i:ty, $g:ident) => {
         impl From<$i> for RustorrentError {
             fn from(value: $i) -> Self {
-                error!("{}", value);
                 RustorrentError::$g(value)
             }
         }
@@ -106,11 +105,6 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for RustorrentError {
         RustorrentError::TokioMpscSendError
     }
 }
-
-// from_rustorrent_error!(
-//     tokio::sync::mpsc::error::UnboundedRecvError,
-//     TokioMpscUnboundedRecvError
-// );
 
 impl<'a> From<nom::Err<&'a [u8]>> for RustorrentError {
     fn from(value: nom::Err<&'a [u8]>) -> Self {

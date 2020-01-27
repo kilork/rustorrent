@@ -5,16 +5,6 @@ use log::{debug, error, info, warn};
 
 use crate::app::*;
 
-// mod bitfield;
-// mod choke;
-// mod piece;
-// mod unchoke;
-
-// pub(crate) use bitfield::message_bitfield;
-// pub(crate) use choke::message_choke;
-// pub(crate) use piece::message_piece;
-// pub(crate) use unchoke::message_unchoke;
-
 #[inline]
 pub(crate) fn index_in_bitarray(index: usize) -> (usize, u8) {
     (index / 8, 128 >> (index % 8))
