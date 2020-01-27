@@ -1183,7 +1183,12 @@ async fn process_peer_piece_downloaded(
 
     for (_, peer_state) in peer_states.iter_mut().filter(|(&key, _)| key != peer_id) {
         if let TorrentPeerState::Connected { ref mut sender, .. } = peer_state.state {
-            sender.send(PeerMessage::Have(index)).await?;
+            if let Err(err) = sender.send(PeerMessage::Have(index)).await {
+                error!(
+                    "[{}] cannot send Have to {:?}: {}",
+                    peer_id, peer_state.peer, err
+                );
+            };
         }
     }
 
