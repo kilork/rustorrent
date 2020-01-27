@@ -223,6 +223,10 @@ async fn download_events_loop(
                 let hash_id = torrent.info_sha1_hash();
                 let info = torrent.info()?;
 
+                debug!("torrent size: {}", info.len());
+                debug!("piece length: {}", info.piece_length);
+                debug!("total pieces: {}", info.pieces.len());
+
                 let mut handshake = vec![];
                 handshake.extend_from_slice(&crate::types::HANDSHAKE_PREFIX);
                 handshake.extend_from_slice(&hash_id);
@@ -746,7 +750,13 @@ async fn peer_loop(
                     begin,
                     block,
                 } => {
-                    debug!("[{}] sending piece {} {} [{}]", index, begin, block.len());
+                    debug!(
+                        "[{}] sending piece {} {} [{}]",
+                        peer_id,
+                        index,
+                        begin,
+                        block.len()
+                    );
                     processor
                         .wtransport
                         .send(Message::Piece {
