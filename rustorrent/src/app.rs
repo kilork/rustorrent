@@ -458,11 +458,14 @@ async fn download_torrent(
                         );
                     }
 
-                    if torrent_storage.receiver.borrow().pieces_left == 0 {
+                    let pieces_left = torrent_storage.receiver.borrow().pieces_left;
+                    if pieces_left == 0 {
                         debug!(
                             "torrent downloaded, hash: {}",
                             percent_encode(&torrent_process.hash_id, NON_ALPHANUMERIC)
                         );
+                    } else {
+                        debug!("pieces left: {}", pieces_left);
                     }
                 }
                 DownloadTorrentEvent::PeerPieceRequest {
@@ -471,6 +474,7 @@ async fn download_torrent(
                     begin,
                     length,
                 } => {
+                    debug!("[{}] request piece to peer", peer_id);
                     if let Err(err) = process_peer_piece_request(
                         settings.clone(),
                         torrent_process.clone(),
@@ -742,6 +746,7 @@ async fn peer_loop(
                     begin,
                     block,
                 } => {
+                    debug!("[{}] sending piece {} {} [{}]", index, begin, block.len());
                     processor
                         .wtransport
                         .send(Message::Piece {
