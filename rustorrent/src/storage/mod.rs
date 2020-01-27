@@ -17,12 +17,12 @@ pub struct TorrentStorage {
 enum TorrentStorageMessage {
     LoadPiece {
         index: usize,
-        sender: tokio::sync::oneshot::Sender<Option<TorrentPiece>>,
+        sender: tokio::sync::oneshot::Sender<Result<Option<TorrentPiece>, RustorrentError>>,
     },
     SavePiece {
         index: usize,
         data: Vec<u8>,
-        sender: tokio::sync::oneshot::Sender<()>,
+        sender: tokio::sync::oneshot::Sender<Result<(), RustorrentError>>,
     },
 }
 
@@ -70,12 +70,31 @@ impl TorrentStorage {
                             sender,
                         } => {
                             let (block_index, bit) = crate::messages::index_in_bitarray(index);
+
+                            let storage = mmap_storage.clone();
+                            let len = data.len();
+
+                            match tokio::task::spawn_blocking(move || {
+                                storage.write_piece(index, data)
+                            })
+                            .await?
+                            {
+                                Ok(()) => (),
+                                Err(err) => {
+                                    error!("cannot write piece: {}", err);
+                                    if let Err(_) = sender.send(Err(err.into())) {
+                                        error!("cannot send piece with oneshot message");
+                                    }
+                                    continue;
+                                }
+                            }
+
                             while downloaded.len() <= index {
                                 downloaded.push(0);
                             }
                             if downloaded[block_index] & bit == 0 {
                                 pieces_left -= 1;
-                                bytes_downloaded += data.len();
+                                bytes_downloaded += len;
                             }
                             downloaded[block_index] |= bit;
 
@@ -86,23 +105,29 @@ impl TorrentStorage {
                                 error!("cannot notify watchers: {}", err);
                             }
 
-                            if let Err(_) = sender.send(()) {
+                            if let Err(_) = sender.send(Ok(())) {
                                 error!("cannot send oneshot");
                             }
-                            let storage = mmap_storage.clone();
-
-                            tokio::task::spawn_blocking(move || storage.write_piece(index, data))
-                                .await??;
                         }
                         TorrentStorageMessage::LoadPiece { index, sender } => {
                             let storage = mmap_storage.clone();
 
-                            let piece =
-                                tokio::task::spawn_blocking(move || storage.read_piece(index))
-                                    .await??
-                                    .map(|x| TorrentPiece(x));
+                            let piece = match tokio::task::spawn_blocking(move || {
+                                storage.read_piece(index)
+                            })
+                            .await?
+                            {
+                                Ok(data) => data.map(|x| TorrentPiece(x)),
+                                Err(err) => {
+                                    error!("cannot read piece: {}", err);
+                                    if let Err(_) = sender.send(Err(err.into())) {
+                                        error!("cannot send piece with oneshot message");
+                                    }
+                                    continue;
+                                }
+                            };
 
-                            if let Err(_) = sender.send(piece) {
+                            if let Err(_) = sender.send(Ok(piece)) {
                                 error!("cannot send piece with oneshot message");
                             }
                         }
@@ -132,7 +157,7 @@ impl TorrentStorage {
             })
             .await?;
 
-        receiver.map_err(|x| x.into()).await
+        receiver.await?
     }
 
     pub async fn load(&mut self, index: usize) -> Result<Option<TorrentPiece>, RustorrentError> {
@@ -141,7 +166,7 @@ impl TorrentStorage {
             .send(TorrentStorageMessage::LoadPiece { index, sender })
             .await?;
 
-        receiver.map_err(|x| x.into()).await
+        receiver.await?
     }
 }
 
