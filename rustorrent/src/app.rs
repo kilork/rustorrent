@@ -1109,7 +1109,7 @@ async fn process_peer_piece(
         vec![]
     };
 
-    select_new_peer(&new_pieces, peer_states, peer_id).await?;
+    select_new_peer(&new_pieces, peer_states, peer_id, storage).await?;
 
     Ok(())
 }
@@ -1143,7 +1143,7 @@ async fn process_peer_pieces(
         vec![]
     };
 
-    select_new_peer(&new_pieces, peer_states, peer_id).await?;
+    select_new_peer(&new_pieces, peer_states, peer_id, storage).await?;
 
     Ok(())
 }
@@ -1152,29 +1152,51 @@ async fn select_new_peer(
     new_pieces: &[usize],
     peer_states: &mut HashMap<Uuid, PeerState>,
     peer_id: Uuid,
+    storage: &mut TorrentStorage,
 ) -> Result<(), RustorrentError> {
-    for &new_piece in new_pieces {
-        let any_peer_downloading = peer_states.values().any(|x| match x.state {
-            TorrentPeerState::Connected {
-                downloading_piece, ..
-            } => downloading_piece == Some(new_piece),
-            _ => false,
-        });
+    let pieces_left = storage.receiver.borrow().pieces_left;
 
-        if !any_peer_downloading {
-            if let Some(existing_peer) = peer_states.get_mut(&peer_id) {
-                if let TorrentPeerState::Connected {
-                    ref mut downloading_piece,
-                    ref mut downloading_since,
-                    ref mut sender,
-                    ..
-                } = existing_peer.state
-                {
-                    if downloading_piece.is_none() {
-                        *downloading_piece = Some(new_piece);
-                        *downloading_since = Some(Instant::now());
-                        sender.send(PeerMessage::Download(new_piece)).await?;
-                    }
+    let connected_count = peer_states
+        .values()
+        .filter(|x| match x.state {
+            TorrentPeerState::Connected { .. } => true,
+            _ => false,
+        })
+        .count();
+
+    let final_mode = pieces_left < connected_count;
+
+    if final_mode {
+        debug!("[{}] select piece in final mode", peer_id);
+    } else {
+        debug!("[{}] select piece in normal mode", peer_id);
+    }
+
+    for &new_piece in new_pieces {
+        if !final_mode {
+            let any_peer_downloading = peer_states.values().any(|x| match x.state {
+                TorrentPeerState::Connected {
+                    downloading_piece, ..
+                } => downloading_piece == Some(new_piece),
+                _ => false,
+            });
+            if any_peer_downloading {
+                continue;
+            }
+        }
+
+        if let Some(existing_peer) = peer_states.get_mut(&peer_id) {
+            if let TorrentPeerState::Connected {
+                ref mut downloading_piece,
+                ref mut downloading_since,
+                ref mut sender,
+                ..
+            } = existing_peer.state
+            {
+                if downloading_piece.is_none() {
+                    *downloading_piece = Some(new_piece);
+                    *downloading_since = Some(Instant::now());
+                    sender.send(PeerMessage::Download(new_piece)).await?;
                 }
             }
         }
@@ -1246,7 +1268,7 @@ async fn process_peer_piece_downloaded(
         }
     }
 
-    select_new_peer(&new_pieces, peer_states, peer_id).await?;
+    select_new_peer(&new_pieces, peer_states, peer_id, storage).await?;
 
     Ok(())
 }
@@ -1270,6 +1292,7 @@ fn collect_pieces_and_update(
     pieces
 }
 
+/// Adds matching (new) pieces ( downloaded_pieces[i] & a ) to pieces (list of indexes).
 fn match_pieces(pieces: &mut Vec<usize>, downloaded_pieces: &[u8], i: usize, a: u8) {
     let new = if let Some(d) = downloaded_pieces.get(i) {
         a & !d
