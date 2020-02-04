@@ -99,6 +99,11 @@ enum PeerMessage {
     },
 }
 
+enum TorrentDownloadMode {
+    Normal,
+    Final,
+}
+
 impl RustorrentApp {
     pub fn new(settings: Settings) -> Self {
         let settings = Arc::new(settings);
@@ -329,6 +334,7 @@ async fn download_torrent(
     });
 
     let mut peer_states = HashMap::new();
+    let mut mode = TorrentDownloadMode::Normal;
 
     let download_events_loop = async move {
         while let Some(event) = broker_receiver.next().await {
@@ -398,6 +404,7 @@ async fn download_torrent(
                         settings.clone(),
                         torrent_process.clone(),
                         &mut peer_states,
+                        &mode,
                         peer_id,
                         piece,
                         &mut torrent_storage,
@@ -413,6 +420,7 @@ async fn download_torrent(
                         settings.clone(),
                         torrent_process.clone(),
                         &mut peer_states,
+                        &mode,
                         peer_id,
                         pieces,
                         &mut torrent_storage,
@@ -454,6 +462,7 @@ async fn download_torrent(
                         settings.clone(),
                         torrent_process.clone(),
                         &mut peer_states,
+                        &mode,
                         peer_id,
                         piece,
                         &mut torrent_storage,
@@ -465,6 +474,8 @@ async fn download_torrent(
                             peer_id, err
                         );
                     }
+
+                    mode = determine_download_mode(&mut peer_states, &mut torrent_storage, peer_id);
 
                     let pieces_left = torrent_storage.receiver.borrow().pieces_left;
                     if pieces_left == 0 {
@@ -1074,10 +1085,12 @@ impl PeerLoopMessage {
     }
 }
 
+/// Peer reveived message Have.
 async fn process_peer_piece(
     settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,
     peer_states: &mut HashMap<Uuid, PeerState>,
+    mode: &TorrentDownloadMode,
     peer_id: Uuid,
     peer_piece: usize,
     storage: &mut TorrentStorage,
@@ -1109,7 +1122,7 @@ async fn process_peer_piece(
         vec![]
     };
 
-    select_new_peer(&new_pieces, peer_states, peer_id, storage).await?;
+    select_new_peer(&new_pieces, peer_states, mode, peer_id, storage).await?;
 
     Ok(())
 }
@@ -1118,6 +1131,7 @@ async fn process_peer_pieces(
     settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,
     peer_states: &mut HashMap<Uuid, PeerState>,
+    mode: &TorrentDownloadMode,
     peer_id: Uuid,
     peer_pieces: Vec<u8>,
     storage: &mut TorrentStorage,
@@ -1143,17 +1157,16 @@ async fn process_peer_pieces(
         vec![]
     };
 
-    select_new_peer(&new_pieces, peer_states, peer_id, storage).await?;
+    select_new_peer(&new_pieces, peer_states, mode, peer_id, storage).await?;
 
     Ok(())
 }
 
-async fn select_new_peer(
-    new_pieces: &[usize],
+fn determine_download_mode(
     peer_states: &mut HashMap<Uuid, PeerState>,
-    peer_id: Uuid,
     storage: &mut TorrentStorage,
-) -> Result<(), RustorrentError> {
+    peer_id: Uuid,
+) -> TorrentDownloadMode {
     let pieces_left = storage.receiver.borrow().pieces_left;
 
     let connected_count = peer_states
@@ -1168,12 +1181,22 @@ async fn select_new_peer(
 
     if final_mode {
         debug!("[{}] select piece in final mode", peer_id);
+        TorrentDownloadMode::Final
     } else {
         debug!("[{}] select piece in normal mode", peer_id);
+        TorrentDownloadMode::Normal
     }
+}
 
+async fn select_new_peer(
+    new_pieces: &[usize],
+    peer_states: &mut HashMap<Uuid, PeerState>,
+    mode: &TorrentDownloadMode,
+    peer_id: Uuid,
+    storage: &mut TorrentStorage,
+) -> Result<(), RustorrentError> {
     for &new_piece in new_pieces {
-        if !final_mode {
+        if let TorrentDownloadMode::Normal = mode {
             let any_peer_downloading = peer_states.values().any(|x| match x.state {
                 TorrentPeerState::Connected {
                     downloading_piece, ..
@@ -1209,6 +1232,7 @@ async fn process_peer_piece_downloaded(
     settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,
     peer_states: &mut HashMap<Uuid, PeerState>,
+    mode: &TorrentDownloadMode,
     peer_id: Uuid,
     piece: Vec<u8>,
     storage: &mut TorrentStorage,
@@ -1268,7 +1292,7 @@ async fn process_peer_piece_downloaded(
         }
     }
 
-    select_new_peer(&new_pieces, peer_states, peer_id, storage).await?;
+    select_new_peer(&new_pieces, peer_states, mode, peer_id, storage).await?;
 
     Ok(())
 }
