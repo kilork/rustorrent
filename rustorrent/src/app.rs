@@ -88,6 +88,7 @@ struct PeerState {
 #[derive(Debug)]
 enum PeerMessage {
     Disconnect,
+    Cancel,
     Message(Message),
     Download(usize),
     Have(usize),
@@ -293,6 +294,7 @@ pub(crate) enum DownloadTorrentEvent {
     PeerUnchoke(Uuid),
     PeerInterested(Uuid),
     PeerPieceDownloaded(Uuid, Vec<u8>),
+    PeerPieceCanceled(Uuid),
     PeerPieceRequest {
         peer_id: Uuid,
         index: u32,
@@ -454,6 +456,21 @@ async fn download_torrent(
                     .await
                     {
                         error!("[{}] cannot process peer interested: {}", peer_id, err);
+                    }
+                }
+                DownloadTorrentEvent::PeerPieceCanceled(peer_id) => {
+                    debug!("[{}] canceled piece for peer", peer_id);
+                    if let Err(err) = process_peer_piece_canceled(
+                        settings.clone(),
+                        torrent_process.clone(),
+                        &mut peer_states,
+                        &mode,
+                        peer_id,
+                        &mut torrent_storage,
+                    )
+                    .await
+                    {
+                        error!("[{}] cannot process peer piece canceled: {}", peer_id, err);
                     }
                 }
                 DownloadTorrentEvent::PeerPieceDownloaded(peer_id, piece) => {
@@ -725,7 +742,7 @@ async fn process_peer_connected(
     Ok(())
 }
 
-fn request_message(buffer: &[u8], piece: usize, piece_length: usize) -> Message {
+fn request_message(buffer: &[u8], piece: usize, piece_length: usize) -> (u32, u32, u32) {
     let index = piece as u32;
     let begin = buffer.len() as u32;
     let length = if piece_length - buffer.len() < BLOCK_SIZE {
@@ -733,11 +750,7 @@ fn request_message(buffer: &[u8], piece: usize, piece_length: usize) -> Message 
     } else {
         BLOCK_SIZE
     } as u32;
-    Message::Request {
-        index,
-        begin,
-        length,
-    }
+    (index, begin, length)
 }
 
 async fn peer_loop(
@@ -766,6 +779,7 @@ async fn peer_loop(
             piece_length: 0,
             torrent_piece: None,
             wtransport,
+            request: None,
         };
 
         while let Some(message) = receiver.next().await {
@@ -802,6 +816,26 @@ async fn peer_loop(
                         })
                         .await?;
                 }
+                PeerMessage::Cancel => {
+                    debug!("[{}] cancel download", peer_id);
+                    if let Some((index, begin, length)) = processor.request {
+                        processor
+                            .wtransport
+                            .send(Message::Cancel {
+                                index,
+                                begin,
+                                length,
+                            })
+                            .await?;
+                        processor.request = None;
+                        processor.downloading = None;
+                        processor.torrent_piece = None;
+                        processor
+                            .command_loop_broker_sender
+                            .send(DownloadTorrentEvent::PeerPieceCanceled(peer_id))
+                            .await?;
+                    }
+                }
                 PeerMessage::Download(piece) => {
                     debug!("[{}] download now piece: {}", peer_id, piece);
                     processor.piece_length = torrent_process.info.sizes(piece).0;
@@ -812,13 +846,16 @@ async fn peer_loop(
                         debug!("[{}] send interested message", peer_id);
                         processor.wtransport.send(Message::Interested).await?;
                     } else if let Some(ref torrent_peer_piece) = processor.torrent_piece {
+                        let (index, begin, length) =
+                            request_message(torrent_peer_piece, piece, processor.piece_length);
+                        processor.request = Some((index, begin, length));
                         processor
                             .wtransport
-                            .send(request_message(
-                                torrent_peer_piece,
-                                piece,
-                                processor.piece_length,
-                            ))
+                            .send(Message::Request {
+                                index,
+                                begin,
+                                length,
+                            })
                             .await?;
                     }
                 }
@@ -877,6 +914,7 @@ struct PeerLoopMessage {
     torrent_piece: Option<Vec<u8>>,
     piece_length: usize,
     wtransport: SplitSink<Framed<TcpStream, MessageCodec>, Message>,
+    request: Option<(u32, u32, u32)>,
 }
 
 impl PeerLoopMessage {
@@ -927,12 +965,15 @@ impl PeerLoopMessage {
         );
         if let Some(piece) = self.downloading {
             if let Some(ref torrent_peer_piece) = self.torrent_piece {
+                let (index, begin, length) =
+                    request_message(torrent_peer_piece, piece, self.piece_length);
+                self.request = Some((index, begin, length));
                 self.wtransport
-                    .send(request_message(
-                        torrent_peer_piece,
-                        piece,
-                        self.piece_length,
-                    ))
+                    .send(Message::Request {
+                        index,
+                        begin,
+                        length,
+                    })
                     .await?;
             }
         }
@@ -970,12 +1011,15 @@ impl PeerLoopMessage {
                 use std::cmp::Ordering;
                 match self.piece_length.cmp(&torrent_peer_piece.len()) {
                     Ordering::Greater => {
+                        let (index, begin, length) =
+                            request_message(torrent_peer_piece, piece, self.piece_length);
+                        self.request = Some((index, begin, length));
                         self.wtransport
-                            .send(request_message(
-                                torrent_peer_piece,
-                                piece,
-                                self.piece_length,
-                            ))
+                            .send(Message::Request {
+                                index,
+                                begin,
+                                length,
+                            })
                             .await?;
                     }
                     Ordering::Equal => {
@@ -1275,6 +1319,8 @@ async fn process_peer_piece_downloaded(
         if let TorrentPeerState::Connected {
             ref mut sender,
             ref pieces,
+            ref mut downloading_piece,
+            ref mut downloading_since,
             ..
         } = peer_state.state
         {
@@ -1289,8 +1335,60 @@ async fn process_peer_piece_downloaded(
                     peer_id, peer_state.peer, err
                 );
             };
+
+            let peer_downloads_same_piece = *downloading_piece == Some(index);
+            if peer_downloads_same_piece {
+                if let Err(err) = sender.send(PeerMessage::Cancel).await {
+                    error!(
+                        "[{}] cannot send Have to {:?}: {}",
+                        peer_id, peer_state.peer, err
+                    );
+                };
+            }
         }
     }
+
+    select_new_peer(&new_pieces, peer_states, mode, peer_id, storage).await?;
+
+    Ok(())
+}
+
+async fn process_peer_piece_canceled(
+    settings: Arc<Settings>,
+    torrent_process: Arc<TorrentProcess>,
+    peer_states: &mut HashMap<Uuid, PeerState>,
+    mode: &TorrentDownloadMode,
+    peer_id: Uuid,
+    storage: &mut TorrentStorage,
+) -> Result<(), RustorrentError> {
+    debug!("[{}] peer piece downloaded", peer_id);
+
+    let new_pieces = if let Some(existing_peer) = peer_states.get_mut(&peer_id) {
+        if let TorrentPeerState::Connected {
+            ref pieces,
+            ref mut downloading_piece,
+            ref mut downloading_since,
+            ..
+        } = existing_peer.state
+        {
+            *downloading_piece = None;
+            *downloading_since = None;
+            let mut downloadable = vec![];
+            for (i, &a) in pieces.iter().enumerate() {
+                match_pieces(
+                    &mut downloadable,
+                    &storage.receiver.borrow().downloaded,
+                    i,
+                    a,
+                );
+            }
+            downloadable
+        } else {
+            return Ok(());
+        }
+    } else {
+        return Ok(());
+    };
 
     select_new_peer(&new_pieces, peer_states, mode, peer_id, storage).await?;
 
