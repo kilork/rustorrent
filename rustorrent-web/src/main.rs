@@ -12,7 +12,7 @@ use actix_web_static_files;
 use bytes::Bytes;
 use exitfailure::ExitFailure;
 use failure::ResultExt;
-use futures::{Async, Poll, Stream};
+// use futures::{Async, Poll, Stream};
 use rand::prelude::*;
 use rustorrent_web_resources::*;
 use serde::{Deserialize, Serialize};
@@ -20,23 +20,24 @@ use std::io;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tokio::timer::{Delay, Interval};
+// use tokio::timer::{Delay, Interval};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 const INDEX: &str = include_str!("../static/templates/index.html");
 
 #[get("/")]
-fn index() -> impl Responder {
+async fn index() -> impl Responder {
     HttpResponse::Ok()
         .header("content-type", "text/html")
         .body(INDEX)
 }
 
 #[get("/torrents")]
-fn torrent_list() -> impl Responder {
+async fn torrent_list() -> impl Responder {
     web::Json("")
 }
 
+/*
 #[get("/stream")]
 fn stream(
     broadcaster: web::Data<RwLock<Broadcaster>>,
@@ -47,21 +48,23 @@ fn stream(
         .keep_alive()
         .streaming(rx)
 }
+*/
 
-fn main() -> Result<(), ExitFailure> {
-    let system = System::new(env!("CARGO_PKG_NAME"));
+#[actix_rt::main]
+async fn main() -> Result<(), ExitFailure> {
+    // let system = System::new(env!("CARGO_PKG_NAME"));
 
-    let broadcaster = web::Data::new(RwLock::new(Broadcaster::new()));
+    // let broadcaster = web::Data::new(RwLock::new(Broadcaster::new()));
 
-    let broadcaster_timer = broadcaster.clone();
+    // let broadcaster_timer = broadcaster.clone();
 
     HttpServer::new(move || {
         let generated_files = generate_files();
         let generated_css = generate_css();
         App::new()
-            .register_data(broadcaster.clone())
+            // .register_data(broadcaster.clone())
             .service(index)
-            .service(stream)
+            // .service(stream)
             .service(torrent_list)
             .service(actix_web_static_files::ResourceFiles::new(
                 "/files",
@@ -73,8 +76,9 @@ fn main() -> Result<(), ExitFailure> {
             ))
     })
     .bind("127.0.0.1:8080")?
-    .start();
-
+    .run().await?;
+    Ok(())
+/*
     let task = Interval::new(Instant::now(), Duration::from_secs(10))
         .for_each(move |_| {
             eprintln!("timer event");
@@ -87,10 +91,11 @@ fn main() -> Result<(), ExitFailure> {
         })
         .map_err(|_| ());
     Arbiter::spawn(task);
-
-    system.run().map_err(|x| x.into())
+*/
+    // system.run().map_err(|x| x.into())
 }
 
+/*
 struct Broadcaster {
     clients: Vec<Sender<Bytes>>,
 }
@@ -139,3 +144,4 @@ impl Stream for Client {
         self.0.poll().map_err(ErrorInternalServerError)
     }
 }
+*/

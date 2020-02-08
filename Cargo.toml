@@ -4,8 +4,8 @@ members = [
     "flat-storage-mmap",
     "flat-storage",
     "rustorrent",
-    # "rustorrent-web",
-    # "rustorrent-web-resources",
+    "rustorrent-web",
+    "rustorrent-web-resources",
 ]
 
 [profile.release]
