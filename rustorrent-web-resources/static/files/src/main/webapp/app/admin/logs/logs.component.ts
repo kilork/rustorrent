@@ -4,7 +4,7 @@ import { Log, LoggersResponse, Logger, Level } from './log.model';
 import { LogsService } from './logs.service';
 
 @Component({
-  selector: 'jhi-logs',
+  selector: 'rt-logs',
   templateUrl: './logs.component.html'
 })
 export class LogsComponent implements OnInit {

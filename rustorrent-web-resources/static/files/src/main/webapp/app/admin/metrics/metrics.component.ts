@@ -4,7 +4,7 @@ import { flatMap } from 'rxjs/operators';
 import { MetricsService, Metrics, MetricsKey, ThreadDump, Thread } from './metrics.service';
 
 @Component({
-  selector: 'jhi-metrics',
+  selector: 'rt-metrics',
   templateUrl: './metrics.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush
 })

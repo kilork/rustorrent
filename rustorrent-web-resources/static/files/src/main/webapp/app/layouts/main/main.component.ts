@@ -6,7 +6,7 @@ import { TranslateService, LangChangeEvent } from '@ngx-translate/core';
 import { AccountService } from 'app/core/auth/account.service';
 
 @Component({
-  selector: 'jhi-main',
+  selector: 'rt-main',
   templateUrl: './main.component.html'
 })
 export class MainComponent implements OnInit {

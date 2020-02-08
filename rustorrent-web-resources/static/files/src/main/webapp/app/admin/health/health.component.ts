@@ -6,7 +6,7 @@ import { HealthService, HealthStatus, Health, HealthKey, HealthDetails } from '.
 import { HealthModalComponent } from './health-modal.component';
 
 @Component({
-  selector: 'jhi-health',
+  selector: 'rt-health',
   templateUrl: './health.component.html'
 })
 export class HealthComponent implements OnInit {

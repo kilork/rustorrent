@@ -3,7 +3,7 @@ import { Component, OnInit } from '@angular/core';
 import { ConfigurationService, Bean, PropertySource } from './configuration.service';
 
 @Component({
-  selector: 'jhi-configuration',
+  selector: 'rt-configuration',
   templateUrl: './configuration.component.html'
 })
 export class ConfigurationComponent implements OnInit {
