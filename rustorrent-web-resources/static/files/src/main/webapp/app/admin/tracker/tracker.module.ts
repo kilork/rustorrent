@@ -1,13 +1,13 @@
 import { NgModule } from '@angular/core';
 import { RouterModule } from '@angular/router';
-import { TestMonolitic01SharedModule } from 'app/shared/shared.module';
+import { RustorrentSharedModule } from 'app/shared/shared.module';
 
 import { TrackerComponent } from './tracker.component';
 
 import { trackerRoute } from './tracker.route';
 
 @NgModule({
-  imports: [TestMonolitic01SharedModule, RouterModule.forChild([trackerRoute])],
+  imports: [RustorrentSharedModule, RouterModule.forChild([trackerRoute])],
   declarations: [TrackerComponent]
 })
 export class TrackerModule {}

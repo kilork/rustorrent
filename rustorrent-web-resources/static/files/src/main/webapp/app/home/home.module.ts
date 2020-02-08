@@ -1,12 +1,12 @@
 import { NgModule } from '@angular/core';
 import { RouterModule } from '@angular/router';
 
-import { TestMonolitic01SharedModule } from 'app/shared/shared.module';
+import { RustorrentSharedModule } from 'app/shared/shared.module';
 import { HOME_ROUTE } from './home.route';
 import { HomeComponent } from './home.component';
 
 @NgModule({
-  imports: [TestMonolitic01SharedModule, RouterModule.forChild([HOME_ROUTE])],
+  imports: [RustorrentSharedModule, RouterModule.forChild([HOME_ROUTE])],
   declarations: [HomeComponent]
 })
-export class TestMonolitic01HomeModule {}
+export class RustorrentHomeModule {}

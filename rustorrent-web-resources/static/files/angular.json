@@ -3,7 +3,7 @@
   "version": 1,
   "newProjectRoot": "projects",
   "projects": {
-    "test-monolitic-01": {
+    "rustorrent": {
       "root": "",
       "sourceRoot": "src/main/webapp",
       "projectType": "application",
@@ -29,7 +29,7 @@
       "architect": {}
     }
   },
-  "defaultProject": "test-monolitic-01",
+  "defaultProject": "rustorrent",
   "cli": {
     "packageManager": "npm"
   }

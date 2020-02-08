@@ -27,4 +27,4 @@ const LAYOUT_ROUTES = [navbarRoute, ...errorRoute];
   ],
   exports: [RouterModule]
 })
-export class TestMonolitic01AppRoutingModule {}
+export class RustorrentAppRoutingModule {}

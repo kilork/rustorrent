@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed, async } from '@angular/core/testing';
 import { of } from 'rxjs';
 
-import { TestMonolitic01TestModule } from '../../../test.module';
+import { RustorrentTestModule } from '../../../test.module';
 import { ConfigurationComponent } from 'app/admin/configuration/configuration.component';
 import { ConfigurationService, Bean, PropertySource } from 'app/admin/configuration/configuration.service';
 
@@ -13,7 +13,7 @@ describe('Component Tests', () => {
 
     beforeEach(async(() => {
       TestBed.configureTestingModule({
-        imports: [TestMonolitic01TestModule],
+        imports: [RustorrentTestModule],
         declarations: [ConfigurationComponent],
         providers: [ConfigurationService]
       })
