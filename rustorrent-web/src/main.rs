@@ -1,73 +1,64 @@
 #[macro_use]
 extern crate actix_web;
 
-#[macro_use]
-extern crate serde_json;
-
 use actix::prelude::*;
-use actix_web::error::ErrorInternalServerError;
 
 use actix_web::{web, App, Error, HttpResponse, HttpServer, Responder};
 use actix_web_static_files;
 use bytes::Bytes;
 use exitfailure::ExitFailure;
-use failure::ResultExt;
-// use futures::{Async, Poll, Stream};
-use rand::prelude::*;
 use rustorrent_web_resources::*;
-use serde::{Deserialize, Serialize};
-use std::io;
-use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, Instant};
+use std::{
+    pin::Pin,
+    sync::RwLock,
+    task::{Context, Poll},
+};
 use tokio::sync::mpsc::{channel, Receiver, Sender};
-// use tokio::timer::{Delay, Interval};
-use std::sync::atomic::{AtomicUsize, Ordering};
-
-const INDEX: &str = include_str!("../static/templates/index.html");
-
-#[get("/")]
-async fn index() -> impl Responder {
-    HttpResponse::Ok()
-        .header("content-type", "text/html")
-        .body(INDEX)
-}
+use tokio::time::{interval_at, Duration, Instant};
 
 #[get("/torrents")]
 async fn torrent_list() -> impl Responder {
     web::Json("")
 }
 
-/*
 #[get("/stream")]
-fn stream(
-    broadcaster: web::Data<RwLock<Broadcaster>>,
-) -> impl Responder {
+async fn stream(broadcaster: web::Data<RwLock<Broadcaster>>) -> impl Responder {
     let rx = broadcaster.write().unwrap().new_client();
     HttpResponse::Ok()
         .content_type("text/event-stream")
         .keep_alive()
+        .no_chunking()
         .streaming(rx)
 }
-*/
 
 #[actix_rt::main]
 async fn main() -> Result<(), ExitFailure> {
-    // let system = System::new(env!("CARGO_PKG_NAME"));
+    let broadcaster = web::Data::new(RwLock::new(Broadcaster::new()));
 
-    // let broadcaster = web::Data::new(RwLock::new(Broadcaster::new()));
-
-    // let broadcaster_timer = broadcaster.clone();
+    let broadcaster_timer = broadcaster.clone();
+    let task = async move {
+        let mut timer = interval_at(Instant::now(), Duration::from_secs(10));
+        loop {
+            timer.tick().await;
+            eprintln!("timer event");
+            let mut me = broadcaster_timer.write().unwrap();
+            if let Err(ok_clients) = me.message("ping") {
+                eprintln!("refresh client list");
+                me.clients = ok_clients;
+            }
+        }
+    };
+    Arbiter::spawn(task);
 
     HttpServer::new(move || {
         let generated_files = generate_files();
         let generated_css = generate_css();
         App::new()
-            // .register_data(broadcaster.clone())
-            .service(index)
-            // .service(stream)
+            .app_data(broadcaster.clone())
+            .service(stream)
             .service(torrent_list)
             .service(actix_web_static_files::ResourceFiles::new(
-                "/files",
+                "/",
                 generated_files,
             ))
             .service(actix_web_static_files::ResourceFiles::new(
@@ -76,26 +67,12 @@ async fn main() -> Result<(), ExitFailure> {
             ))
     })
     .bind("127.0.0.1:8080")?
-    .run().await?;
+    .run()
+    .await?;
+
     Ok(())
-/*
-    let task = Interval::new(Instant::now(), Duration::from_secs(10))
-        .for_each(move |_| {
-            eprintln!("timer event");
-            let mut me = broadcaster_timer.write().unwrap();
-            if let Err(ok_clients) = me.message("data: ping\n\n") {
-                eprintln!("refresh client list");
-                me.clients = ok_clients;
-            }
-            Ok(())
-        })
-        .map_err(|_| ());
-    Arbiter::spawn(task);
-*/
-    // system.run().map_err(|x| x.into())
 }
 
-/*
 struct Broadcaster {
     clients: Vec<Sender<Bytes>>,
 }
@@ -118,11 +95,12 @@ impl Broadcaster {
         Client(rx)
     }
 
-    fn message(&mut self, data: &str) -> Result<(), Vec<Sender<Bytes>>> {
+    fn message(&mut self, msg: &str) -> Result<(), Vec<Sender<Bytes>>> {
         let mut ok_clients = vec![];
         eprintln!("message to {} client(s)", self.clients.len());
+        let msg = Bytes::from(["data: ", msg, "\n\n"].concat());
         for client in &mut self.clients {
-            if let Ok(()) = client.try_send(Bytes::from(data)) {
+            if let Ok(()) = client.try_send(msg.clone()) {
                 ok_clients.push(client.clone())
             }
         }
@@ -137,11 +115,13 @@ impl Broadcaster {
 struct Client(Receiver<Bytes>);
 
 impl Stream for Client {
-    type Item = Bytes;
-    type Error = Error;
+    type Item = Result<Bytes, Error>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        self.0.poll().map_err(ErrorInternalServerError)
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        match Pin::new(&mut self.0).poll_next(cx) {
+            Poll::Ready(Some(v)) => Poll::Ready(Some(Ok(v))),
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending,
+        }
     }
 }
-*/

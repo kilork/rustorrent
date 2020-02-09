@@ -6,7 +6,7 @@ edition = "2018"
 build = "build.rs"
 
 [dependencies]
-actix-web-static-files = "0.3"
+actix-web-static-files = "2"
 
 [build-dependencies]
-actix-web-static-files = "0.3"
+actix-web-static-files = "2"
