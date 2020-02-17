@@ -11,6 +11,7 @@ use actix_web::{
 use actix_web_static_files;
 use bytes::Bytes;
 use exitfailure::ExitFailure;
+use inth_oauth2::token::Token;
 use log::{debug, error, info};
 use oidc;
 use reqwest;
@@ -27,6 +28,7 @@ use tokio::{
     task,
     time::{interval_at, Duration, Instant},
 };
+use url::Url;
 
 lazy_static::lazy_static! {
 pub  static ref RUSTORRENT_HOST: String = std::env::var("RUSTORRENT_HOST")
@@ -34,16 +36,24 @@ pub  static ref RUSTORRENT_HOST: String = std::env::var("RUSTORRENT_HOST")
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
+#[serde(rename_all = "camelCase")]
 struct User {
     id: String,
     login: Option<String>,
-    firstName: Option<String>,
-    lastName: Option<String>,
+    first_name: Option<String>,
+    last_name: Option<String>,
     email: Option<String>,
-    imageUrl: Option<String>,
+    image_url: Option<String>,
     activated: bool,
-    langKey: Option<String>,
+    lang_key: Option<String>,
     authorities: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct Logout {
+    id_token: String,
+    logout_url: Option<Url>,
 }
 
 impl FromRequest for User {
@@ -135,12 +145,12 @@ async fn login(
             let user = User {
                 id: userinfo.sub.clone(),
                 login: userinfo.preferred_username.clone(),
-                lastName: userinfo.family_name.clone(),
-                firstName: userinfo.name.clone(),
+                last_name: userinfo.family_name.clone(),
+                first_name: userinfo.name.clone(),
                 email: userinfo.email.clone(),
                 activated: userinfo.email_verified,
-                imageUrl: userinfo.picture.clone().map(|x| x.to_string()),
-                langKey: Some("en".to_string()),
+                image_url: userinfo.picture.clone().map(|x| x.to_string()),
+                lang_key: Some("en".to_string()),
                 authorities: vec!["ROLE_USER".to_string()], //FIXME: read from token
             };
 
@@ -164,6 +174,24 @@ async fn login(
             HttpResponse::Unauthorized().finish()
         }
     }
+}
+
+#[post("/logout")]
+async fn logout(
+    oidc_client: web::Data<oidc::Client>,
+    sessions: web::Data<RwLock<Sessions>>,
+    identity: Identity,
+) -> impl Responder {
+    if let Some(id) = identity.identity() {
+        identity.forget();
+        if let Some((user, token, _userinfo)) = sessions.write().unwrap().map.remove(&id) {
+            debug!("logout user: {:?}", user);
+            let id_token = token.access_token().into();
+            let logout_url = oidc_client.config().end_session_endpoint.clone();
+            return HttpResponse::Ok().json(Logout { id_token, logout_url });
+        }
+    }
+    HttpResponse::Unauthorized().finish()
 }
 
 fn host(path: &str) -> String {
@@ -190,6 +218,7 @@ async fn main() -> Result<(), ExitFailure> {
             let redirect = reqwest::Url::parse(&host("/login/oauth2/code/oidc"))?;
             let issuer = reqwest::Url::parse("http://keycloak:9080/auth/realms/jhipster")?;
             let client = oidc::Client::discover(client_id, client_secret, redirect, issuer)?;
+            debug!("discovered config: {:?}", client.config());
             Ok::<oidc::Client, ExitFailure>(client)
         })
         .await??,
@@ -241,6 +270,7 @@ async fn main() -> Result<(), ExitFailure> {
                         }
                     })
                     .service(account)
+                    .service(logout)
                     .service(stream),
             )
             .service(actix_web_static_files::ResourceFiles::new(

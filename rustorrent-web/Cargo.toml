@@ -25,10 +25,12 @@ rustorrent-web-resources = { path = "../rustorrent-web-resources" }
 actix-web-static-files = "2"
 lazy_static = "1.4"
 uuid = { version = "0.8", features = [ "v4" ] }
+url = "2.1"
 
 # oxide-auth-actix = { git = "https://github.com/HeroicKatora/oxide-auth", branch = "next" }
 # oxide-auth = { git = "https://github.com/gzp-crey/oxide-auth", branch = "ring_0.16_actix_web_2.0" }
 # oxide-auth-actix = { git = "https://github.com/gzp-crey/oxide-auth", branch = "ring_0.16_actix_web_2.0" }
-oidc = { path = "../../oidc-reqwest" }
-# git = "https://github.com/kilork/oidc-reqwest" 
+# oidc = { path = "../../oidc-reqwest" }
+oidc = { git = "https://github.com/kilork/oidc-reqwest" }
+inth-oauth2 = { git = "https://github.com/kilork/inth-oauth2" }
 reqwest = { version = "0.10", features = ["json", "blocking"] }
