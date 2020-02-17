@@ -102,11 +102,26 @@ dependencies = [
  "pin-project",
  "rand",
  "regex",
+ "ring",
  "serde",
  "serde_json",
  "serde_urlencoded",
  "sha1",
  "slab",
+ "time",
+]
+
+[[package]]
+name = "actix-identity"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a379b0639c293292d71defb8cc1f94c87b7705c904adf044338ad392df77c7a"
+dependencies = [
+ "actix-service",
+ "actix-web",
+ "futures",
+ "serde",
+ "serde_json",
  "time",
 ]
 
@@ -1194,7 +1209,6 @@ dependencies = [
 [[package]]
 name = "inth-oauth2"
 version = "0.17.0-fork"
-source = "git+https://github.com/kilork/inth-oauth2#7c900f1db7ed24c47ddaa5d9621a530d723175a2"
 dependencies = [
  "chrono",
  "lazy_static",
@@ -1578,7 +1592,6 @@ checksum = "17b02fc0ff9a9e4b35b3342880f48e896ebf69f2967921fe8646bf5b7125956a"
 [[package]]
 name = "oidc"
 version = "0.3.0"
-source = "git+https://github.com/kilork/oidc-reqwest#e9f174d971a28970dbe33a58c7a2b43ad68ab19c"
 dependencies = [
  "base64 0.11.0",
  "biscuit",
@@ -1984,7 +1997,9 @@ name = "rustorrent-web"
 version = "0.1.0"
 dependencies = [
  "actix",
+ "actix-identity",
  "actix-rt",
+ "actix-service",
  "actix-web",
  "actix-web-static-files",
  "bytes",
@@ -1992,6 +2007,7 @@ dependencies = [
  "exitfailure",
  "failure",
  "futures",
+ "lazy_static",
  "log",
  "oidc",
  "rand",
@@ -2001,6 +2017,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

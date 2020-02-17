@@ -6,7 +6,9 @@ edition = "2018"
 
 [dependencies]
 actix = "0.9"
+actix-identity = "0.2"
 actix-rt = "1.0"
+actix-service = "1.0"
 actix-web = { version = "2.0", features = ["rustls"] }
 bytes = "0.5"
 tokio = { version = "0.2", features = ["full"] }
@@ -21,9 +23,12 @@ rand = "0.7"
 rustorrent = { path = "../rustorrent" }
 rustorrent-web-resources = { path = "../rustorrent-web-resources" }
 actix-web-static-files = "2"
+lazy_static = "1.4"
+uuid = { version = "0.8", features = [ "v4" ] }
 
 # oxide-auth-actix = { git = "https://github.com/HeroicKatora/oxide-auth", branch = "next" }
 # oxide-auth = { git = "https://github.com/gzp-crey/oxide-auth", branch = "ring_0.16_actix_web_2.0" }
 # oxide-auth-actix = { git = "https://github.com/gzp-crey/oxide-auth", branch = "ring_0.16_actix_web_2.0" }
-oidc = { git = "https://github.com/kilork/oidc-reqwest" }
+oidc = { path = "../../oidc-reqwest" }
+# git = "https://github.com/kilork/oidc-reqwest" 
 reqwest = { version = "0.10", features = ["json", "blocking"] }
