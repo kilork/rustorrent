@@ -1,5 +1,6 @@
 **/target
 **/*.rs.bk
 .ENV.md
-rustorrent-web-resources/static/files/node_modules
-rustorrent-web-resources/static/files/package-lock.json
+rustorrent-web-resources/www/node_modules
+rustorrent-web-resources/www/package-lock.json
+.env
