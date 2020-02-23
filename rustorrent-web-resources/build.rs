@@ -6,8 +6,10 @@ fn main() {
 
     let generated_files = Path::new(&out_dir).join("generated_www.rs");
     actix_web_static_files::NpmBuild::new("./www")
-        .install().unwrap()
-        .run("build").unwrap()
+        .install()
+        .unwrap()
+        .run("build")
+        .unwrap()
         .target("./www/target/classes/static")
         .to_resource_dir()
         .with_generated_filename(&generated_files)
