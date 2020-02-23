@@ -1,0 +1,30 @@
+<div class="row justify-content-center">
+    <div class="col-8">
+        <div *ngIf="torrent">
+            <h2><span jhiTranslate="rustorrent.torrent.detail.title">Torrent</span> {{ torrent.id }}</h2>
+
+            <hr>
+
+            <rt-alert-error></rt-alert-error>
+
+            <dl class="row-md jh-entity-details">
+                <dt><span jhiTranslate="rustorrent.torrent.name">Name</span></dt>
+                <dd>
+                    <span>{{ torrent.name }}</span>
+                </dd>
+            </dl>
+
+            <button type="submit"
+                    (click)="previousState()"
+                    class="btn btn-info">
+                <fa-icon icon="arrow-left"></fa-icon>&nbsp;<span jhiTranslate="entity.action.back">Back</span>
+            </button>
+
+            <button type="button"
+                    [routerLink]="['/torrent', torrent.id, 'edit']"
+                    class="btn btn-primary">
+                <fa-icon icon="pencil-alt"></fa-icon>&nbsp;<span jhiTranslate="entity.action.edit">Edit</span>
+            </button>
+        </div>
+    </div>
+</div>

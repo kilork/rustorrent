@@ -1,0 +1,22 @@
+{
+  "rustorrent": {
+    "torrent": {
+      "home": {
+        "title": "Torrents",
+        "createLabel": "Torrent erstellen",
+        "createOrEditLabel": "Torrent erstellen oder bearbeiten",
+        "notFound": "No Torrents found"
+      },
+      "created": "Torrent erstellt mit ID {{ param }}",
+      "updated": "Torrent aktualisiert mit ID {{ param }}",
+      "deleted": "Torrent gelöscht mit ID {{ param }}",
+      "delete": {
+        "question": "Soll Torrent {{ id }} wirklich dauerhaft gelöscht werden?"
+      },
+      "detail": {
+        "title": "Torrent"
+      },
+      "name": "Name"
+    }
+  }
+}

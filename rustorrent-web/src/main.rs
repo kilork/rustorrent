@@ -37,6 +37,7 @@ static ref RUSTORRENT_BIND: String = std::env::var("RUSTORRENT_BIND").unwrap_or_
 static ref RUSTORRENT_OPENID_CLIENT_ID: String = std::env::var("RUSTORRENT_OPENID_CLIENT_ID").unwrap_or_else(|_| "web_app".to_string());
 static ref RUSTORRENT_OPENID_CLIENT_SECRET: String = std::env::var("RUSTORRENT_OPENID_CLIENT_SECRET").unwrap_or_else(|_| "web_app".to_string());
 static ref RUSTORRENT_OPENID_ISSUER: String = std::env::var("RUSTORRENT_OPENID_ISSUER").unwrap_or_else(|_| "http://keycloak:9080/auth/realms/jhipster".to_string());
+static ref RUSTORRENT_ALLOW: String = std::env::var("RUSTORRENT_ALLOW").unwrap_or_else(|_| "user@localhost".to_string());
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
@@ -148,12 +149,19 @@ async fn login(
         Ok(Ok((token, userinfo))) => {
             let id = uuid::Uuid::new_v4().to_string();
 
+            let login = userinfo.preferred_username.clone();
+            let email = userinfo.email.clone();
+
+            if email != Some(RUSTORRENT_ALLOW.to_string()) {
+                error!("email {:?} is not allowed", email);
+            }
+
             let user = User {
                 id: userinfo.sub.clone(),
-                login: userinfo.preferred_username.clone(),
+                login,
                 last_name: userinfo.family_name.clone(),
                 first_name: userinfo.name.clone(),
-                email: userinfo.email.clone(),
+                email,
                 activated: userinfo.email_verified,
                 image_url: userinfo.picture.clone().map(|x| x.to_string()),
                 lang_key: Some("en".to_string()),
@@ -281,7 +289,6 @@ async fn main() -> Result<(), ExitFailure> {
             .app_data(broadcaster.clone())
             .app_data(client.clone())
             .app_data(sessions.clone())
-            .service(torrent_list)
             .service(authorize)
             .service(login)
             .service(
@@ -293,6 +300,7 @@ async fn main() -> Result<(), ExitFailure> {
                             Ok(res)
                         }
                     })
+                    .service(torrent_list)
                     .service(account)
                     .service(logout)
                     .service(stream),
