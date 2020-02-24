@@ -19,12 +19,15 @@ use inth_oauth2::token::Token;
 use log::{debug, error, info};
 use oidc;
 use reqwest;
-use rustorrent::{app::RustorrentApp, types::Settings};
+use rustorrent::{
+    app::{RustorrentApp, RustorrentEvent},
+    types::Settings,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     pin::Pin,
-    sync::RwLock,
+    sync::{Mutex, RwLock},
     task::{Context, Poll},
 };
 use tokio::{
@@ -105,8 +108,30 @@ struct Sessions {
 }
 
 #[get("/torrents")]
-async fn torrent_list() -> impl Responder {
-    web::Json("")
+async fn torrent_list(event_sender: web::Data<Mutex<Sender<RustorrentEvent>>>) -> impl Responder {
+    let (sender, receiver) = oneshot::channel();
+
+    if let Err(err) = event_sender
+        .lock()
+        .unwrap()
+        .send(RustorrentEvent::TorrentList { sender })
+        .await
+    {
+        error!("cannot send to torren process: {}", err);
+    }
+
+    match receiver.await {
+        Ok(torrents) => {
+            return web::Json(
+                torrents
+                    .iter()
+                    .map(|torrent| torrent.info.files.clone())
+                    .collect(),
+            )
+        }
+        Err(err) => error!("error in receiver: {}", err),
+    }
+    web::Json(vec![])
 }
 
 #[get("/oauth2/authorization/oidc")]
@@ -289,15 +314,17 @@ async fn main() -> Result<(), ExitFailure> {
     let (mut download_events_sender, download_events_receiver) =
         mpsc::channel(rustorrent::DEFAULT_CHANNEL_BUFFER);
     let rustorrent_app_clone = rustorrent_app.clone();
+    let download_events_task_sender = download_events_sender.clone();
     let rustorrent_app_task = async move {
         if let Err(err) = rustorrent_app_clone
-            .processing_loop(download_events_sender.clone(), download_events_receiver)
+            .processing_loop(download_events_task_sender, download_events_receiver)
             .await
         {
             error!("problem detected: {}", err);
         }
     };
     Arbiter::spawn(rustorrent_app_task);
+    let sender = web::Data::new(Mutex::new(download_events_sender));
 
     HttpServer::new(move || {
         let app = App::new()
@@ -311,6 +338,7 @@ async fn main() -> Result<(), ExitFailure> {
             .app_data(client.clone())
             .app_data(sessions.clone())
             .app_data(rustorrent_app.clone())
+            .app_data(sender.clone())
             .service(authorize)
             .service(login)
             .service(

@@ -867,6 +867,7 @@ version = "0.1.0"
 dependencies = [
  "failure",
  "futures",
+ "serde",
 ]
 
 [[package]]

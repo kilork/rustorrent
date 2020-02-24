@@ -20,7 +20,7 @@ pub struct RustorrentApp {
 #[derive(Debug)]
 pub struct TorrentProcess {
     pub(crate) torrent: Torrent,
-    pub(crate) info: TorrentInfo,
+    pub info: TorrentInfo,
     pub(crate) hash_id: [u8; SHA1_SIZE],
     pub(crate) handshake: Vec<u8>,
     pub(crate) broker_sender: Sender<DownloadTorrentEvent>,
@@ -76,6 +76,9 @@ pub enum RustorrentEvent {
     TorrentHandshake {
         handshake_request: Handshake,
         handshake_sender: oneshot::Sender<Option<Arc<TorrentProcess>>>,
+    },
+    TorrentList {
+        sender: oneshot::Sender<Vec<Arc<TorrentProcess>>>,
     },
 }
 
@@ -275,6 +278,12 @@ async fn download_events_loop(
                 if let Err(_) =
                     handshake_sender.send(torrents.iter().find(|x| x.hash_id == hash_id).cloned())
                 {
+                    error!("cannot send handshake, receiver is dropped");
+                }
+            }
+            RustorrentEvent::TorrentList { sender } => {
+                debug!("collecting torrent list");
+                if let Err(_) = sender.send(torrents.iter().cloned().collect()) {
                     error!("cannot send handshake, receiver is dropped");
                 }
             }

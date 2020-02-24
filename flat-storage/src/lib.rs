@@ -1,11 +1,12 @@
 use failure::Fail;
+use serde::Serialize;
 use std::{
     future::Future,
     ops::Deref,
     path::{Path, PathBuf},
 };
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct FlatStorageFile {
     pub path: PathBuf,
     pub length: usize,
