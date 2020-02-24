@@ -1,11 +1,7 @@
 use env_logger::Builder as LoggerBuilder;
 use exitfailure::ExitFailure;
-use failure::ResultExt;
-use futures::future::lazy;
-use futures::prelude::*;
 use log::{debug, info, Level};
-use rustorrent::app::RustorrentApp;
-use rustorrent::types::Settings;
+use rustorrent::{app::RustorrentApp, types::Settings};
 
 mod cli;
 

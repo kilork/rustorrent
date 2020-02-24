@@ -1,6 +1,9 @@
 #[macro_use]
 extern crate actix_web;
 
+#[cfg(ui)]
+use rustorrent_web_resources::*;
+
 use actix::prelude::*;
 use actix_identity::{CookieIdentityPolicy, Identity, IdentityService};
 use actix_service::Service;
@@ -16,7 +19,7 @@ use inth_oauth2::token::Token;
 use log::{debug, error, info};
 use oidc;
 use reqwest;
-use rustorrent_web_resources::*;
+use rustorrent::{app::RustorrentApp, types::Settings};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -25,7 +28,11 @@ use std::{
     task::{Context, Poll},
 };
 use tokio::{
-    sync::mpsc::{channel, Receiver, Sender},
+    prelude::*,
+    sync::{
+        mpsc::{self, Receiver, Sender},
+        oneshot,
+    },
     task,
     time::{interval_at, Duration, Instant},
 };
@@ -251,6 +258,8 @@ async fn main() -> Result<(), ExitFailure> {
         .await??,
     );
 
+    let settings = Settings::default();
+    let rustorrent_app = web::Data::new(RustorrentApp::new(settings));
     let broadcaster = web::Data::new(RwLock::new(Broadcaster::new()));
 
     let sessions = web::Data::new(RwLock::new(Sessions {
@@ -277,9 +286,21 @@ async fn main() -> Result<(), ExitFailure> {
     };
     Arbiter::spawn(task);
 
+    let (mut download_events_sender, download_events_receiver) =
+        mpsc::channel(rustorrent::DEFAULT_CHANNEL_BUFFER);
+    let rustorrent_app_clone = rustorrent_app.clone();
+    let rustorrent_app_task = async move {
+        if let Err(err) = rustorrent_app_clone
+            .processing_loop(download_events_sender.clone(), download_events_receiver)
+            .await
+        {
+            error!("problem detected: {}", err);
+        }
+    };
+    Arbiter::spawn(rustorrent_app_task);
+
     HttpServer::new(move || {
-        let generated_files = generate_files();
-        App::new()
+        let app = App::new()
             .wrap(middleware::Logger::default())
             .wrap(IdentityService::new(
                 CookieIdentityPolicy::new(&[0; 32])
@@ -289,6 +310,7 @@ async fn main() -> Result<(), ExitFailure> {
             .app_data(broadcaster.clone())
             .app_data(client.clone())
             .app_data(sessions.clone())
+            .app_data(rustorrent_app.clone())
             .service(authorize)
             .service(login)
             .service(
@@ -304,11 +326,16 @@ async fn main() -> Result<(), ExitFailure> {
                     .service(account)
                     .service(logout)
                     .service(stream),
-            )
-            .service(actix_web_static_files::ResourceFiles::new(
+            );
+        #[cfg(ui)]
+        {
+            let generated_files = generate_files();
+            app.service(actix_web_static_files::ResourceFiles::new(
                 "/",
                 generated_files,
-            ))
+            ));
+        }
+        app
     })
     .bind(RUSTORRENT_BIND.as_str())?
     .run()
@@ -328,7 +355,7 @@ impl Broadcaster {
 
     fn new_client(&mut self) -> Client {
         eprintln!("adding new client");
-        let (tx, rx) = channel(100);
+        let (tx, rx) = mpsc::channel(100);
 
         tx.clone()
             .try_send(Bytes::from("data: connected\n\n"))

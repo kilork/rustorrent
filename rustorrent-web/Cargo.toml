@@ -4,6 +4,12 @@ version = "0.1.0"
 authors = ["Alexander Korolev <kilork@yandex.ru>"]
 edition = "2018"
 
+[features]
+
+default = []
+
+ui = ["rustorrent-web-resources"]
+
 [dependencies]
 actix = "0.9"
 actix-identity = "0.2"
@@ -22,7 +28,7 @@ log = "0.4"
 env_logger = "0.7"
 rand = "0.7"
 rustorrent = { path = "../rustorrent" }
-rustorrent-web-resources = { path = "../rustorrent-web-resources" }
+rustorrent-web-resources = { path = "../rustorrent-web-resources", optional = true }
 actix-web-static-files = "2"
 lazy_static = "1.4"
 uuid = { version = "0.8", features = [ "v4" ] }

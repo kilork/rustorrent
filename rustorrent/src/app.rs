@@ -71,7 +71,7 @@ pub(crate) struct Block {
     pub length: u32,
 }
 
-pub(crate) enum RustorrentEvent {
+pub enum RustorrentEvent {
     AddTorrent(PathBuf),
     TorrentHandshake {
         handshake_request: Handshake,
@@ -111,7 +111,11 @@ impl RustorrentApp {
         Self { settings }
     }
 
-    pub async fn download<P: AsRef<Path>>(&self, torrent_file: P) -> Result<(), RustorrentError> {
+    pub async fn processing_loop(
+        &self,
+        sender: Sender<RustorrentEvent>,
+        receiver: Receiver<RustorrentEvent>,
+    ) -> Result<(), RustorrentError> {
         let config = &self.settings.config;
 
         let listen = config
@@ -120,27 +124,28 @@ impl RustorrentApp {
 
         let addr = SocketAddr::new(listen.into(), config.port);
 
-        let (mut download_events_sender, download_events_receiver) =
-            mpsc::channel(DEFAULT_CHANNEL_BUFFER);
-
-        let download_events = download_events_loop(
-            self.settings.clone(),
-            download_events_sender.clone(),
-            download_events_receiver,
-        );
-
-        download_events_sender
-            .send(RustorrentEvent::AddTorrent(torrent_file.as_ref().into()))
-            .await?;
+        let download_events = download_events_loop(self.settings.clone(), sender.clone(), receiver);
 
         let accept_incoming_connections =
-            accept_connections_loop(self.settings.clone(), addr, download_events_sender.clone());
+            accept_connections_loop(self.settings.clone(), addr, sender.clone());
 
         if let Err(err) = try_join(accept_incoming_connections, download_events).await {
             return Err(err);
         }
 
         Ok(())
+    }
+
+    pub async fn download<P: AsRef<Path>>(&self, torrent_file: P) -> Result<(), RustorrentError> {
+        let (mut download_events_sender, download_events_receiver) =
+            mpsc::channel(DEFAULT_CHANNEL_BUFFER);
+
+        download_events_sender
+            .send(RustorrentEvent::AddTorrent(torrent_file.as_ref().into()))
+            .await?;
+
+        self.processing_loop(download_events_sender, download_events_receiver)
+            .await
     }
 }
 
