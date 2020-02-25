@@ -117,7 +117,7 @@ async fn torrent_list(event_sender: web::Data<Mutex<Sender<RustorrentEvent>>>) -
         .send(RustorrentEvent::TorrentList { sender })
         .await
     {
-        error!("cannot send to torren process: {}", err);
+        error!("cannot send to torrent process: {}", err);
     }
 
     match receiver.await {
@@ -274,6 +274,8 @@ async fn main() -> Result<(), ExitFailure> {
             let client_secret = RUSTORRENT_OPENID_CLIENT_SECRET.to_string();
             let redirect = reqwest::Url::parse(&host("/login/oauth2/code/oidc"))?;
             let issuer = reqwest::Url::parse(RUSTORRENT_OPENID_ISSUER.as_str())?;
+            debug!("redirect: {}", redirect);
+            debug!("issuer: {}", issuer);
             let client = oidc::Client::discover(client_id, client_secret, redirect, issuer)?;
 
             debug!("discovered config: {:?}", client.config());
