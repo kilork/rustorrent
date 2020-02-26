@@ -107,31 +107,47 @@ struct Sessions {
     map: HashMap<String, (User, oidc::token::Token, oidc::Userinfo)>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+struct Failure {
+    error: String,
+}
+
 #[get("/torrents")]
 async fn torrent_list(event_sender: web::Data<Mutex<Sender<RustorrentEvent>>>) -> impl Responder {
     let (sender, receiver) = oneshot::channel();
 
-    if let Err(err) = event_sender
-        .lock()
-        .unwrap()
-        .send(RustorrentEvent::TorrentList { sender })
-        .await
     {
-        error!("cannot send to torrent process: {}", err);
+        let mut event_sender = match event_sender.lock() {
+            Ok(lock) => lock,
+            Err(err) => err.into_inner(),
+        };
+        if let Err(err) = event_sender
+            .send(RustorrentEvent::TorrentList { sender })
+            .await
+        {
+            error!("cannot send to torrent process: {}", err);
+            return HttpResponse::InternalServerError().json(Failure {
+                error: format!("cannot send to torrent process: {}", err),
+            });
+        }
     }
 
     match receiver.await {
         Ok(torrents) => {
-            return web::Json(
+            return HttpResponse::Ok().json::<Vec<_>>(
                 torrents
                     .iter()
                     .map(|torrent| torrent.info.files.clone())
                     .collect(),
-            )
+            );
         }
-        Err(err) => error!("error in receiver: {}", err),
+        Err(err) => {
+            error!("error in receiver: {}", err);
+            return HttpResponse::InternalServerError().json(Failure {
+                error: format!("cannot receive from torrent process: {}", err),
+            });
+        }
     }
-    web::Json(vec![])
 }
 
 #[get("/oauth2/authorization/oidc")]
@@ -186,6 +202,7 @@ async fn login(
 
             if email != Some(RUSTORRENT_ALLOW.to_string()) {
                 error!("email {:?} is not allowed", email);
+                return HttpResponse::Unauthorized().finish();
             }
 
             let user = User {
@@ -315,6 +332,7 @@ async fn main() -> Result<(), ExitFailure> {
 
     let (mut download_events_sender, download_events_receiver) =
         mpsc::channel(rustorrent::DEFAULT_CHANNEL_BUFFER);
+
     let rustorrent_app_clone = rustorrent_app.clone();
     let download_events_task_sender = download_events_sender.clone();
     let rustorrent_app_task = async move {
