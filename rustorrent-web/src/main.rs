@@ -20,7 +20,7 @@ use log::{debug, error, info};
 use oidc;
 use reqwest;
 use rustorrent::{
-    app::{RustorrentApp, RustorrentEvent},
+    app::{RustorrentApp, RustorrentCommand},
     types::Settings,
 };
 use serde::{Deserialize, Serialize};
@@ -112,8 +112,18 @@ struct Failure {
     error: String,
 }
 
+#[derive(Deserialize)]
+struct Paging {
+    page: usize,
+    size: usize,
+    sort: String,
+}
+
 #[get("/torrents")]
-async fn torrent_list(event_sender: web::Data<Mutex<Sender<RustorrentEvent>>>) -> impl Responder {
+async fn torrent_list(
+    paging: web::Query<Paging>,
+    event_sender: web::Data<Mutex<Sender<RustorrentCommand>>>,
+) -> impl Responder {
     let (sender, receiver) = oneshot::channel();
 
     {
@@ -122,7 +132,7 @@ async fn torrent_list(event_sender: web::Data<Mutex<Sender<RustorrentEvent>>>) -
             Err(err) => err.into_inner(),
         };
         if let Err(err) = event_sender
-            .send(RustorrentEvent::TorrentList { sender })
+            .send(RustorrentCommand::TorrentList { sender })
             .await
         {
             error!("cannot send to torrent process: {}", err);

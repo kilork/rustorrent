@@ -19,6 +19,7 @@ pub struct RustorrentApp {
 
 #[derive(Debug)]
 pub struct TorrentProcess {
+    pub id: usize,
     pub(crate) torrent: Torrent,
     pub info: TorrentInfo,
     pub(crate) hash_id: [u8; SHA1_SIZE],
@@ -71,7 +72,12 @@ pub(crate) struct Block {
     pub length: u32,
 }
 
-pub enum RustorrentEvent {
+pub struct WithOptionalResponse<T, R> {
+    request: T,
+    response: Option<R>,
+}
+
+pub enum RustorrentCommand {
     AddTorrent(PathBuf),
     TorrentHandshake {
         handshake_request: Handshake,
@@ -116,8 +122,8 @@ impl RustorrentApp {
 
     pub async fn processing_loop(
         &self,
-        sender: Sender<RustorrentEvent>,
-        receiver: Receiver<RustorrentEvent>,
+        sender: Sender<RustorrentCommand>,
+        receiver: Receiver<RustorrentCommand>,
     ) -> Result<(), RustorrentError> {
         let config = &self.settings.config;
 
@@ -144,7 +150,7 @@ impl RustorrentApp {
             mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
         download_events_sender
-            .send(RustorrentEvent::AddTorrent(torrent_file.as_ref().into()))
+            .send(RustorrentCommand::AddTorrent(torrent_file.as_ref().into()))
             .await?;
 
         self.processing_loop(download_events_sender, download_events_receiver)
@@ -167,7 +173,7 @@ where
 async fn accept_connections_loop(
     settings: Arc<Settings>,
     addr: SocketAddr,
-    sender: Sender<RustorrentEvent>,
+    sender: Sender<RustorrentCommand>,
 ) -> Result<(), RustorrentError> {
     debug!("listening on: {}", &addr);
     let mut listener = TcpListener::bind(addr).await?;
@@ -184,7 +190,7 @@ async fn accept_connections_loop(
 async fn peer_connection(
     settings: Arc<Settings>,
     mut socket: TcpStream,
-    mut sender: Sender<RustorrentEvent>,
+    mut sender: Sender<RustorrentCommand>,
 ) -> Result<(), RustorrentError> {
     let mut handshake_request = vec![0u8; 68];
 
@@ -195,7 +201,7 @@ async fn peer_connection(
     let (handshake_sender, handshake_receiver) = oneshot::channel();
 
     sender
-        .send(RustorrentEvent::TorrentHandshake {
+        .send(RustorrentCommand::TorrentHandshake {
             handshake_request,
             handshake_sender,
         })
@@ -228,14 +234,15 @@ async fn peer_connection(
 
 async fn download_events_loop(
     settings: Arc<Settings>,
-    mut sender: Sender<RustorrentEvent>,
-    mut events: Receiver<RustorrentEvent>,
+    mut sender: Sender<RustorrentCommand>,
+    mut events: Receiver<RustorrentCommand>,
 ) -> Result<(), RustorrentError> {
     let mut torrents = vec![];
+    let mut id = 0;
 
     while let Some(event) = events.next().await {
         match event {
-            RustorrentEvent::AddTorrent(filename) => {
+            RustorrentCommand::AddTorrent(filename) => {
                 debug!("we need to download {:?}", filename);
                 let torrent = parse_torrent(&filename)?;
                 let hash_id = torrent.info_sha1_hash();
@@ -251,8 +258,9 @@ async fn download_events_loop(
                 handshake.extend_from_slice(&PEER_ID);
 
                 let (broker_sender, broker_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
-
+                id += 1;
                 let torrent_process = Arc::new(TorrentProcess {
+                    id,
                     info,
                     hash_id,
                     torrent,
@@ -267,7 +275,7 @@ async fn download_events_loop(
                     || format!("download_events_loop: add torrent failed"),
                 );
             }
-            RustorrentEvent::TorrentHandshake {
+            RustorrentCommand::TorrentHandshake {
                 handshake_request,
                 handshake_sender,
             } => {
@@ -281,7 +289,7 @@ async fn download_events_loop(
                     error!("cannot send handshake, receiver is dropped");
                 }
             }
-            RustorrentEvent::TorrentList { sender } => {
+            RustorrentCommand::TorrentList { sender } => {
                 debug!("collecting torrent list");
                 if let Err(_) = sender.send(torrents.iter().cloned().collect()) {
                     error!("cannot send handshake, receiver is dropped");
