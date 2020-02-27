@@ -20,6 +20,7 @@ pub struct RustorrentApp {
 #[derive(Debug)]
 pub struct TorrentProcess {
     pub id: usize,
+    pub filename: String,
     pub(crate) torrent: Torrent,
     pub info: TorrentInfo,
     pub(crate) hash_id: [u8; SHA1_SIZE],
@@ -72,13 +73,17 @@ pub(crate) struct Block {
     pub length: u32,
 }
 
-pub struct WithOptionalResponse<T, R> {
-    request: T,
-    response: Option<R>,
+pub enum RequestResponse<T, R> {
+    RequestOnly(T),
+    ResponseOnly(R),
+    Full { request: T, response: R },
 }
 
 pub enum RustorrentCommand {
-    AddTorrent(PathBuf),
+    AddTorrent(
+        RequestResponse<Vec<u8>, Result<TorrentProcess, RustorrentError>>,
+        String,
+    ),
     TorrentHandshake {
         handshake_request: Handshake,
         handshake_sender: oneshot::Sender<Option<Arc<TorrentProcess>>>,
@@ -149,8 +154,19 @@ impl RustorrentApp {
         let (mut download_events_sender, download_events_receiver) =
             mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
+        let buf = std::fs::read(torrent_file.as_ref())?;
+
         download_events_sender
-            .send(RustorrentCommand::AddTorrent(torrent_file.as_ref().into()))
+            .send(RustorrentCommand::AddTorrent(
+                RequestResponse::RequestOnly(buf),
+                torrent_file
+                    .as_ref()
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_str()
+                    .unwrap_or_default()
+                    .into(),
+            ))
             .await?;
 
         self.processing_loop(download_events_sender, download_events_receiver)
@@ -242,9 +258,16 @@ async fn download_events_loop(
 
     while let Some(event) = events.next().await {
         match event {
-            RustorrentCommand::AddTorrent(filename) => {
+            RustorrentCommand::AddTorrent(request_response, filename) => {
                 debug!("we need to download {:?}", filename);
-                let torrent = parse_torrent(&filename)?;
+                let request = match request_response {
+                    RequestResponse::RequestOnly(request) => request,
+                    RequestResponse::ResponseOnly(response) => {
+                        continue;
+                    }
+                    RequestResponse::Full { request, response } => request,
+                };
+                let torrent = parse_torrent(request)?;
                 let hash_id = torrent.info_sha1_hash();
                 let info = torrent.info()?;
 
@@ -261,6 +284,7 @@ async fn download_events_loop(
                 id += 1;
                 let torrent_process = Arc::new(TorrentProcess {
                     id,
+                    filename,
                     info,
                     hash_id,
                     torrent,
@@ -360,7 +384,7 @@ async fn download_torrent(
     let mut peer_states = HashMap::new();
     let mut mode = TorrentDownloadMode::Normal;
 
-    let download_events_loop = async move {
+    let download_torrent_events_loop = async move {
         while let Some(event) = broker_receiver.next().await {
             debug!("received event: {}", event);
             match event {
@@ -558,7 +582,7 @@ async fn download_torrent(
         Ok::<(), RustorrentError>(())
     };
 
-    let _ = match try_join!(announce_loop, download_events_loop) {
+    let _ = match try_join!(announce_loop, download_torrent_events_loop) {
         Ok(_) | Err(RustorrentError::Aborted) => debug!("download torrent is done"),
         Err(e) => error!("download torrent finished with failure: {}", e),
     };

@@ -59,13 +59,7 @@ try_from_bencode!(TrackerAnnounce,
     failure: "failure reason"
 );
 
-pub fn parse_torrent(filename: impl AsRef<Path>) -> Result<Torrent, RustorrentError> {
-    let mut buf = vec![];
-
-    let mut f = File::open(filename)?;
-
-    f.read_to_end(&mut buf)?;
-
+pub fn parse_torrent(buf: Vec<u8>) -> Result<Torrent, RustorrentError> {
     let torrent = buf.try_into()?;
 
     Ok(torrent)
