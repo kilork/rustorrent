@@ -92,8 +92,15 @@ impl<T, R> RequestResponse<T, R> {
         }
     }
 
-    pub async fn response(&self, result: R) -> Result<(), RustorrentError> {
-        Ok(())
+    pub fn response(self, result: R) -> Result<(), RustorrentError> {
+        match self {
+            RequestResponse::ResponseOnly(response) | RequestResponse::Full { response, .. } => {
+                response
+                    .send(result)
+                    .map_err(|_| RustorrentError::FailureReason("Cannot send response".into()))
+            }
+            RequestResponse::RequestOnly(_) => Ok(()),
+        }
     }
 }
 
@@ -315,7 +322,7 @@ async fn download_events_loop(
                         || format!("download_events_loop: add torrent failed"),
                     );
 
-                    if let Err(err) = request_response.response(Ok(torrent_process)).await {
+                    if let Err(err) = request_response.response(Ok(torrent_process)) {
                         error!("cannot send response for add torrent: {}", err);
                     }
                 }
