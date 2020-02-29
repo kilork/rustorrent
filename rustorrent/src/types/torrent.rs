@@ -59,7 +59,7 @@ try_from_bencode!(TrackerAnnounce,
     failure: "failure reason"
 );
 
-pub fn parse_torrent(buf: Vec<u8>) -> Result<Torrent, RustorrentError> {
+pub fn parse_torrent(buf: &[u8]) -> Result<Torrent, RustorrentError> {
     let torrent = buf.try_into()?;
 
     Ok(torrent)

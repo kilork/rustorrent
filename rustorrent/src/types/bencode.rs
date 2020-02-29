@@ -17,6 +17,14 @@ impl TryFrom<Vec<u8>> for BencodeBlob {
     }
 }
 
+impl TryFrom<&[u8]> for BencodeBlob {
+    type Error = RustorrentError;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        parse_bencode(value)
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum BencodeValue {
     String(Vec<u8>),
@@ -201,6 +209,15 @@ macro_rules! try_from_bencode {
             type Error = RustorrentError;
 
             fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+                let bencode: BencodeBlob = value.try_into()?;
+                bencode.try_into().map_err(RustorrentError::from)
+            }
+        }
+
+        impl TryFrom<&[u8]> for $type {
+            type Error = RustorrentError;
+
+            fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
                 let bencode: BencodeBlob = value.try_into()?;
                 bencode.try_into().map_err(RustorrentError::from)
             }

@@ -75,13 +75,31 @@ pub(crate) struct Block {
 
 pub enum RequestResponse<T, R> {
     RequestOnly(T),
-    ResponseOnly(R),
-    Full { request: T, response: R },
+    ResponseOnly(oneshot::Sender<R>),
+    Full {
+        request: T,
+        response: oneshot::Sender<R>,
+    },
+}
+
+impl<T, R> RequestResponse<T, R> {
+    pub fn request(&self) -> Option<&T> {
+        match self {
+            RequestResponse::RequestOnly(request) | RequestResponse::Full { request, .. } => {
+                Some(request)
+            }
+            RequestResponse::ResponseOnly(_) => None,
+        }
+    }
+
+    pub async fn response(&self, result: R) -> Result<(), RustorrentError> {
+        Ok(())
+    }
 }
 
 pub enum RustorrentCommand {
     AddTorrent(
-        RequestResponse<Vec<u8>, Result<TorrentProcess, RustorrentError>>,
+        RequestResponse<Vec<u8>, Result<Arc<TorrentProcess>, RustorrentError>>,
         String,
     ),
     TorrentHandshake {
@@ -260,44 +278,47 @@ async fn download_events_loop(
         match event {
             RustorrentCommand::AddTorrent(request_response, filename) => {
                 debug!("we need to download {:?}", filename);
-                let request = match request_response {
-                    RequestResponse::RequestOnly(request) => request,
-                    RequestResponse::ResponseOnly(response) => {
-                        continue;
+                if let Some(request) = request_response.request() {
+                    let torrent = parse_torrent(request)?;
+                    let hash_id = torrent.info_sha1_hash();
+                    let info = torrent.info()?;
+
+                    debug!("torrent size: {}", info.len());
+                    debug!("piece length: {}", info.piece_length);
+                    debug!("total pieces: {}", info.pieces.len());
+
+                    let mut handshake = vec![];
+                    handshake.extend_from_slice(&crate::types::HANDSHAKE_PREFIX);
+                    handshake.extend_from_slice(&hash_id);
+                    handshake.extend_from_slice(&PEER_ID);
+
+                    let (broker_sender, broker_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
+                    id += 1;
+                    let torrent_process = Arc::new(TorrentProcess {
+                        id,
+                        filename,
+                        info,
+                        hash_id,
+                        torrent,
+                        handshake,
+                        broker_sender,
+                    });
+
+                    torrents.push(torrent_process.clone());
+
+                    let _ = spawn_and_log_error(
+                        download_torrent(
+                            settings.clone(),
+                            torrent_process.clone(),
+                            broker_receiver,
+                        ),
+                        || format!("download_events_loop: add torrent failed"),
+                    );
+
+                    if let Err(err) = request_response.response(Ok(torrent_process)).await {
+                        error!("cannot send response for add torrent: {}", err);
                     }
-                    RequestResponse::Full { request, response } => request,
-                };
-                let torrent = parse_torrent(request)?;
-                let hash_id = torrent.info_sha1_hash();
-                let info = torrent.info()?;
-
-                debug!("torrent size: {}", info.len());
-                debug!("piece length: {}", info.piece_length);
-                debug!("total pieces: {}", info.pieces.len());
-
-                let mut handshake = vec![];
-                handshake.extend_from_slice(&crate::types::HANDSHAKE_PREFIX);
-                handshake.extend_from_slice(&hash_id);
-                handshake.extend_from_slice(&PEER_ID);
-
-                let (broker_sender, broker_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
-                id += 1;
-                let torrent_process = Arc::new(TorrentProcess {
-                    id,
-                    filename,
-                    info,
-                    hash_id,
-                    torrent,
-                    handshake,
-                    broker_sender,
-                });
-
-                torrents.push(torrent_process.clone());
-
-                let _ = spawn_and_log_error(
-                    download_torrent(settings.clone(), torrent_process, broker_receiver),
-                    || format!("download_events_loop: add torrent failed"),
-                );
+                }
             }
             RustorrentCommand::TorrentHandshake {
                 handshake_request,

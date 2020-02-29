@@ -114,9 +114,9 @@ struct Failure {
 
 #[derive(Deserialize)]
 struct Paging {
-    page: usize,
-    size: usize,
-    sort: String,
+    page: Option<usize>,
+    size: Option<usize>,
+    sort: Option<String>,
 }
 
 #[get("/torrents")]
