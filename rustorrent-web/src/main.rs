@@ -15,9 +15,7 @@ use actix_web_static_files;
 use bytes::Bytes;
 use dotenv::dotenv;
 use exitfailure::ExitFailure;
-use inth_oauth2::token::Token;
 use log::{debug, error, info};
-use oidc;
 use reqwest;
 use rustorrent::{
     app::{RustorrentApp, RustorrentCommand},
@@ -104,7 +102,7 @@ impl FromRequest for User {
 }
 
 struct Sessions {
-    map: HashMap<String, (User, oidc::token::Token, oidc::Userinfo)>,
+    map: HashMap<String, (User, openid::token::Token, openid::client::Userinfo)>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -160,9 +158,14 @@ async fn torrent_list(
     }
 }
 
+type DiscoveredClient = openid::Client<openid::discovery::Discovered>;
+
 #[get("/oauth2/authorization/oidc")]
-async fn authorize(oidc_client: web::Data<oidc::Client>) -> impl Responder {
-    let auth_url = oidc_client.auth_url(&Default::default());
+async fn authorize(oidc_client: web::Data<DiscoveredClient>) -> impl Responder {
+    let auth_url = oidc_client.auth_url(&openid::client::Options {
+        scope: Some("email".into()),
+        ..Default::default()
+    });
 
     debug!("authorize: {}", auth_url);
 
@@ -181,30 +184,35 @@ struct LoginQuery {
     code: String,
 }
 
+async fn request_token(
+    oidc_client: web::Data<DiscoveredClient>,
+    query: web::Query<LoginQuery>,
+) -> Result<Option<(openid::token::Token, openid::client::Userinfo)>, ExitFailure> {
+    let mut token: openid::token::Token = oidc_client.request_token(&query.code).await?.into();
+    if let Some(mut id_token) = token.id_token.as_mut() {
+        oidc_client.decode_token(&mut id_token)?;
+        oidc_client.validate_token(&id_token, None, None)?;
+        debug!("token: {:?}", id_token);
+    } else {
+        return Ok(None);
+    }
+    let userinfo = oidc_client.request_userinfo(&token).await?;
+
+    debug!("user info: {:?}", userinfo);
+    Ok(Some((token, userinfo)))
+}
+
 #[get("/login/oauth2/code/oidc")]
 async fn login(
-    oidc_client: web::Data<oidc::Client>,
+    oidc_client: web::Data<DiscoveredClient>,
     query: web::Query<LoginQuery>,
     sessions: web::Data<RwLock<Sessions>>,
     identity: Identity,
 ) -> impl Responder {
     debug!("login: {:?}", query);
 
-    match task::spawn_blocking(move || {
-        let http = reqwest::blocking::Client::new();
-        let mut token = oidc_client.request_token(&http, &query.code)?;
-        oidc_client.decode_token(&mut token.id_token)?;
-        oidc_client.validate_token(&token.id_token, None, None)?;
-        let userinfo = oidc_client.request_userinfo(&http, &token)?;
-
-        debug!("user info: {:?}", userinfo);
-        debug!("token: {:?}", token.id_token);
-
-        Ok::<(oidc::token::Token, oidc::Userinfo), ExitFailure>((token, userinfo))
-    })
-    .await
-    {
-        Ok(Ok((token, userinfo))) => {
+    match request_token(oidc_client, query).await {
+        Ok(Some((token, userinfo))) => {
             let id = uuid::Uuid::new_v4().to_string();
 
             let login = userinfo.preferred_username.clone();
@@ -238,13 +246,13 @@ async fn login(
                 .header(http::header::LOCATION, host("/"))
                 .finish()
         }
-        Ok(Err(err)) => {
-            error!("login error in call: {:?}", err);
+        Ok(None) => {
+            error!("login error in call: no id_token found");
 
             HttpResponse::Unauthorized().finish()
         }
         Err(err) => {
-            error!("login error async: {:?}", err);
+            error!("login error in call: {:?}", err);
 
             HttpResponse::Unauthorized().finish()
         }
@@ -253,7 +261,7 @@ async fn login(
 
 #[post("/logout")]
 async fn logout(
-    oidc_client: web::Data<oidc::Client>,
+    oidc_client: web::Data<DiscoveredClient>,
     sessions: web::Data<RwLock<Sessions>>,
     identity: Identity,
 ) -> impl Responder {
@@ -262,7 +270,7 @@ async fn logout(
         if let Some((user, token, _userinfo)) = sessions.write().unwrap().map.remove(&id) {
             debug!("logout user: {:?}", user);
 
-            let id_token = token.access_token().into();
+            let id_token = token.bearer.access_token.into();
             let logout_url = oidc_client.config().end_session_endpoint.clone();
 
             return HttpResponse::Ok().json(Logout {
@@ -295,22 +303,17 @@ async fn main() -> Result<(), ExitFailure> {
 
     env_logger::init();
 
-    let client = web::Data::new(
-        task::spawn_blocking(move || {
-            let client_id = RUSTORRENT_OPENID_CLIENT_ID.to_string();
-            let client_secret = RUSTORRENT_OPENID_CLIENT_SECRET.to_string();
-            let redirect = reqwest::Url::parse(&host("/login/oauth2/code/oidc"))?;
-            let issuer = reqwest::Url::parse(RUSTORRENT_OPENID_ISSUER.as_str())?;
-            debug!("redirect: {}", redirect);
-            debug!("issuer: {}", issuer);
-            let client = oidc::Client::discover(client_id, client_secret, redirect, issuer)?;
+    let client_id = RUSTORRENT_OPENID_CLIENT_ID.to_string();
+    let client_secret = RUSTORRENT_OPENID_CLIENT_SECRET.to_string();
+    let redirect = Some(host("/login/oauth2/code/oidc"));
+    let issuer = reqwest::Url::parse(RUSTORRENT_OPENID_ISSUER.as_str())?;
+    debug!("redirect: {:?}", redirect);
+    debug!("issuer: {}", issuer);
+    let client = openid::Client::discover(client_id, client_secret, redirect, issuer).await?;
 
-            debug!("discovered config: {:?}", client.config());
+    debug!("discovered config: {:?}", client.config());
 
-            Ok::<oidc::Client, ExitFailure>(client)
-        })
-        .await??,
-    );
+    let client = web::Data::new(client);
 
     let settings = Settings::default();
     let rustorrent_app = web::Data::new(RustorrentApp::new(settings));

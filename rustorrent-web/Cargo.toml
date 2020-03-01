@@ -38,6 +38,8 @@ url = "2.1"
 # oxide-auth = { git = "https://github.com/gzp-crey/oxide-auth", branch = "ring_0.16_actix_web_2.0" }
 # oxide-auth-actix = { git = "https://github.com/gzp-crey/oxide-auth", branch = "ring_0.16_actix_web_2.0" }
 # oidc = { path = "../../oidc-reqwest" }
-oidc = { git = "https://github.com/kilork/oidc-reqwest" }
-inth-oauth2 = { git = "https://github.com/kilork/inth-oauth2" }
+# oidc = { git = "https://github.com/kilork/oidc-reqwest" }
+# inth-oauth2 = { git = "https://github.com/kilork/inth-oauth2" }
+# inth-oauth2 = { path = "../../inth-oauth2" }
 reqwest = { version = "0.10", features = ["json", "blocking"] }
+openid = "0.2"
