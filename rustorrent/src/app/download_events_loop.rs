@@ -2,7 +2,6 @@ use super::*;
 
 pub(crate) async fn download_events_loop(
     settings: Arc<Settings>,
-    mut sender: Sender<RustorrentCommand>,
     mut events: Receiver<RustorrentCommand>,
 ) -> Result<(), RustorrentError> {
     let mut torrents = vec![];

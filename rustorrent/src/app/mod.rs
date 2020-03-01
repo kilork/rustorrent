@@ -205,10 +205,9 @@ impl RustorrentApp {
 
         let addr = SocketAddr::new(listen.into(), config.port);
 
-        let download_events = download_events_loop(self.settings.clone(), sender.clone(), receiver);
+        let download_events = download_events_loop(self.settings.clone(), receiver);
 
-        let accept_incoming_connections =
-            accept_connections_loop(self.settings.clone(), addr, sender.clone());
+        let accept_incoming_connections = accept_connections_loop(addr, sender.clone());
 
         if let Err(err) = try_join(accept_incoming_connections, download_events).await {
             return Err(err);
@@ -366,10 +365,6 @@ mod tests {
         let result = collect_pieces_and_update(&mut current_pieces, &[0b1010_1010], &[0b1101_0101]);
         assert_eq!(result, vec![2, 4, 6]);
         assert_eq!(current_pieces, vec![0b1010_1010]);
-    }
-
-    fn test_settings() -> Arc<Settings> {
-        Arc::new(Default::default())
     }
 
     #[tokio::test]

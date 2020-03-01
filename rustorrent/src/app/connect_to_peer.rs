@@ -1,7 +1,6 @@
 use super::*;
 
 pub(crate) async fn connect_to_peer(
-    settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,
     peer_id: Uuid,
     peer: Peer,

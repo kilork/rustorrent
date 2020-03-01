@@ -1,7 +1,6 @@
 use super::*;
 use crate::types::udp_tracker::{
-    UdpTrackerCodec, UdpTrackerRequest, UdpTrackerRequestData, UdpTrackerResponse,
-    UdpTrackerResponseData,
+    UdpTrackerCodec, UdpTrackerRequest, UdpTrackerResponse, UdpTrackerResponseData,
 };
 use tokio::{net::lookup_host, time};
 

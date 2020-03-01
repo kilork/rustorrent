@@ -1,16 +1,9 @@
 use super::*;
-use crate::{errors::RustorrentError, types::torrent::parse_torrent, PEER_ID};
+use crate::{errors::RustorrentError, PEER_ID};
 
 use crate::{
     app::{DownloadTorrentEvent, TorrentProcess},
-    types::{
-        info::TorrentInfo,
-        message::{Message, MessageCodec},
-        peer::{Handshake, Peer},
-        torrent::{Torrent, TrackerAnnounce},
-        Settings,
-    },
-    {count_parts, SHA1_SIZE},
+    types::{torrent::TrackerAnnounce, Settings},
 };
 
 mod http;

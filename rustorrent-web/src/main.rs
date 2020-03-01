@@ -11,11 +11,10 @@ use actix_web::{
     dev::Payload, error::ErrorUnauthorized, http, middleware, web, App, Error, FromRequest,
     HttpRequest, HttpResponse, HttpServer, Responder,
 };
-use actix_web_static_files;
 use bytes::Bytes;
 use dotenv::dotenv;
 use exitfailure::ExitFailure;
-use log::{debug, error, info};
+use log::{debug, error};
 use reqwest;
 use rustorrent::{
     app::{RustorrentApp, RustorrentCommand},
@@ -29,12 +28,10 @@ use std::{
     task::{Context, Poll},
 };
 use tokio::{
-    prelude::*,
     sync::{
         mpsc::{self, Receiver, Sender},
         oneshot,
     },
-    task,
     time::{interval_at, Duration, Instant},
 };
 use url::Url;
@@ -343,7 +340,7 @@ async fn main() -> Result<(), ExitFailure> {
     };
     Arbiter::spawn(task);
 
-    let (mut download_events_sender, download_events_receiver) =
+    let (download_events_sender, download_events_receiver) =
         mpsc::channel(rustorrent::DEFAULT_CHANNEL_BUFFER);
 
     let rustorrent_app_clone = rustorrent_app.clone();
@@ -379,7 +376,7 @@ async fn main() -> Result<(), ExitFailure> {
                     .wrap_fn(|req, srv| {
                         let fut = srv.call(req);
                         async {
-                            let mut res = fut.await?;
+                            let res = fut.await?;
                             Ok(res)
                         }
                     })

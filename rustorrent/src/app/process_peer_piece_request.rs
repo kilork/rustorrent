@@ -1,8 +1,6 @@
 use super::*;
 
 pub(crate) async fn process_peer_piece_request(
-    settings: Arc<Settings>,
-    torrent_process: Arc<TorrentProcess>,
     peer_states: &mut HashMap<Uuid, PeerState>,
     peer_id: Uuid,
     index: u32,

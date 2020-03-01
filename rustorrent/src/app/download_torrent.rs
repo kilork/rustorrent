@@ -30,15 +30,13 @@ pub(crate) async fn download_torrent(
             match event {
                 DownloadTorrentEvent::Announce(peers) => {
                     debug!("we got announce, what now?");
-                    spawn_and_log_error(
-                        process_announce(settings.clone(), torrent_process.clone(), peers),
-                        || format!("process announce failed"),
-                    );
+                    spawn_and_log_error(process_announce(torrent_process.clone(), peers), || {
+                        format!("process announce failed")
+                    });
                 }
                 DownloadTorrentEvent::PeerAnnounced(peer) => {
                     debug!("peer announced: {:?}", peer);
                     if let Err(err) = process_peer_announced(
-                        settings.clone(),
                         torrent_process.clone(),
                         &mut peer_states,
                         peer.clone(),
@@ -61,7 +59,6 @@ pub(crate) async fn download_torrent(
                 DownloadTorrentEvent::PeerForwarded(stream) => {
                     debug!("peer forwarded");
                     if let Err(err) = process_peer_forwarded(
-                        settings.clone(),
                         torrent_process.clone(),
                         &mut peer_states,
                         stream,
@@ -75,7 +72,6 @@ pub(crate) async fn download_torrent(
                 DownloadTorrentEvent::PeerConnected(peer_id, stream) => {
                     debug!("[{}] peer connected", peer_id);
                     if let Err(err) = process_peer_connected(
-                        settings.clone(),
                         torrent_process.clone(),
                         &mut peer_states,
                         peer_id,
@@ -89,8 +85,6 @@ pub(crate) async fn download_torrent(
                 DownloadTorrentEvent::PeerPiece(peer_id, piece) => {
                     debug!("[{}] peer piece: {}", peer_id, piece);
                     if let Err(err) = process_peer_piece(
-                        settings.clone(),
-                        torrent_process.clone(),
                         &mut peer_states,
                         &mode,
                         peer_id,
@@ -105,8 +99,6 @@ pub(crate) async fn download_torrent(
                 DownloadTorrentEvent::PeerPieces(peer_id, pieces) => {
                     debug!("[{}] peer pieces", peer_id);
                     if let Err(err) = process_peer_pieces(
-                        settings.clone(),
-                        torrent_process.clone(),
                         &mut peer_states,
                         &mode,
                         peer_id,
@@ -120,35 +112,19 @@ pub(crate) async fn download_torrent(
                 }
                 DownloadTorrentEvent::PeerUnchoke(peer_id) => {
                     debug!("[{}] peer unchoke", peer_id);
-                    if let Err(err) = process_peer_unchoke(
-                        settings.clone(),
-                        torrent_process.clone(),
-                        &mut peer_states,
-                        peer_id,
-                    )
-                    .await
-                    {
+                    if let Err(err) = process_peer_unchoke(&mut peer_states, peer_id).await {
                         error!("[{}] cannot process peer unchoke: {}", peer_id, err);
                     }
                 }
                 DownloadTorrentEvent::PeerInterested(peer_id) => {
                     debug!("[{}] peer interested", peer_id);
-                    if let Err(err) = process_peer_interested(
-                        settings.clone(),
-                        torrent_process.clone(),
-                        &mut peer_states,
-                        peer_id,
-                    )
-                    .await
-                    {
+                    if let Err(err) = process_peer_interested(&mut peer_states, peer_id).await {
                         error!("[{}] cannot process peer interested: {}", peer_id, err);
                     }
                 }
                 DownloadTorrentEvent::PeerPieceCanceled(peer_id) => {
                     debug!("[{}] canceled piece for peer", peer_id);
                     if let Err(err) = process_peer_piece_canceled(
-                        settings.clone(),
-                        torrent_process.clone(),
                         &mut peer_states,
                         &mode,
                         peer_id,
@@ -162,8 +138,6 @@ pub(crate) async fn download_torrent(
                 DownloadTorrentEvent::PeerPieceDownloaded(peer_id, piece) => {
                     debug!("[{}] downloaded piece for peer", peer_id);
                     if let Err(err) = process_peer_piece_downloaded(
-                        settings.clone(),
-                        torrent_process.clone(),
                         &mut peer_states,
                         &mode,
                         peer_id,
@@ -198,8 +172,6 @@ pub(crate) async fn download_torrent(
                 } => {
                     debug!("[{}] request piece to peer", peer_id);
                     if let Err(err) = process_peer_piece_request(
-                        settings.clone(),
-                        torrent_process.clone(),
                         &mut peer_states,
                         peer_id,
                         index,

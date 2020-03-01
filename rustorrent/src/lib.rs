@@ -6,7 +6,7 @@ use futures::{
 };
 use http_body::Body;
 use hyper::Client;
-use log::{debug, error, info, warn};
+use log::{debug, error};
 use percent_encoding::{percent_encode, percent_encode_byte, NON_ALPHANUMERIC};
 use sha1::{Digest, Sha1};
 use std::{
@@ -15,8 +15,8 @@ use std::{
     fmt::{Display, Formatter},
     net::{IpAddr, Ipv4Addr, SocketAddr},
     ops::Deref,
-    path::{Path, PathBuf},
-    sync::{Arc, Mutex, RwLock},
+    path::Path,
+    sync::Arc,
     time::{Duration, Instant},
 };
 use tokio::{
@@ -49,11 +49,11 @@ pub(crate) const BLOCK_SIZE: usize = 1 << 14;
 
 pub(crate) const PEER_ID: [u8; 20] = *b"-rs0001-zzzzxxxxyyyy";
 
-pub(crate) const PEER_MAX_CONNECTIONS: usize = 50;
+//FIXME: pub(crate) const PEER_MAX_CONNECTIONS: usize = 50;
 
 pub const DEFAULT_CHANNEL_BUFFER: usize = 256;
 
-pub(crate) const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(110);
+//FIXME: pub(crate) const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(110);
 
 pub(crate) fn count_parts(total: usize, part_size: usize) -> usize {
     total / part_size + if total % part_size != 0 { 1 } else { 0 }

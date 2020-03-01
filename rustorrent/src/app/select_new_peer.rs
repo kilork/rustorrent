@@ -5,7 +5,6 @@ pub(crate) async fn select_new_peer(
     peer_states: &mut HashMap<Uuid, PeerState>,
     mode: &TorrentDownloadMode,
     peer_id: Uuid,
-    storage: &mut TorrentStorage,
 ) -> Result<(), RustorrentError> {
     for &new_piece in new_pieces {
         if let TorrentDownloadMode::Normal = mode {

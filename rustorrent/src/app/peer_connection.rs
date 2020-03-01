@@ -1,7 +1,6 @@
 use super::*;
 
 pub(crate) async fn peer_connection(
-    settings: Arc<Settings>,
     mut socket: TcpStream,
     mut sender: Sender<RustorrentCommand>,
 ) -> Result<(), RustorrentError> {

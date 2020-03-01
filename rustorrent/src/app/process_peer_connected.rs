@@ -1,7 +1,6 @@
 use super::*;
 
 pub(crate) async fn process_peer_connected(
-    settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,
     peer_states: &mut HashMap<Uuid, PeerState>,
     peer_id: Uuid,
@@ -13,14 +12,7 @@ pub(crate) async fn process_peer_connected(
         let (sender, receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
         let _ = spawn_and_log_error(
-            peer_loop(
-                settings,
-                torrent_process,
-                peer_id,
-                sender.clone(),
-                receiver,
-                stream,
-            ),
+            peer_loop(torrent_process, peer_id, sender.clone(), receiver, stream),
             move || format!("[{}] existing peer loop failed", peer_id),
         );
 

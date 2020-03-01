@@ -1,7 +1,6 @@
 use super::*;
 
 pub(crate) async fn process_peer_announced(
-    settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,
     peer_states: &mut HashMap<Uuid, PeerState>,
     peer: Peer,
@@ -13,7 +12,7 @@ pub(crate) async fn process_peer_announced(
         match existing_peer.state {
             TorrentPeerState::Idle => {
                 let handler = spawn_and_log_error(
-                    connect_to_peer(settings, torrent_process, peer_id, peer),
+                    connect_to_peer(torrent_process, peer_id, peer),
                     move || format!("connect to existing peer {} {:?} failed", peer_id, peer_err),
                 );
                 existing_peer.state = TorrentPeerState::Connecting(handler);
@@ -31,9 +30,7 @@ pub(crate) async fn process_peer_announced(
             PeerState {
                 peer: peer.clone(),
                 state: TorrentPeerState::Connecting(tokio::spawn(async move {
-                    if let Err(err) =
-                        connect_to_peer(settings, torrent_process, peer_id, peer).await
-                    {
+                    if let Err(err) = connect_to_peer(torrent_process, peer_id, peer).await {
                         error!(
                             "[{}] connect to new peer {:?} failed: {}",
                             peer_id, peer_err, err

@@ -3,8 +3,7 @@ use log::debug;
 use memmap::MmapMut;
 use std::{
     fs::{create_dir_all, OpenOptions},
-    future::Future,
-    path::{Path, PathBuf},
+    path::Path,
     sync::Mutex,
 };
 
@@ -50,7 +49,7 @@ impl MmapFlatStorage {
 fn load_files<P: AsRef<Path>>(
     download_path: P,
     files: &[FlatStorageFile],
-    downloaded: &[u8],
+    _downloaded: &[u8],
 ) -> Result<Vec<Mutex<FileHandle>>, std::io::Error> {
     let mut result = vec![];
     for file in files {

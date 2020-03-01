@@ -1,8 +1,6 @@
 use super::*;
 
 pub(crate) async fn process_peer_piece_canceled(
-    settings: Arc<Settings>,
-    torrent_process: Arc<TorrentProcess>,
     peer_states: &mut HashMap<Uuid, PeerState>,
     mode: &TorrentDownloadMode,
     peer_id: Uuid,
@@ -37,7 +35,7 @@ pub(crate) async fn process_peer_piece_canceled(
         return Ok(());
     };
 
-    select_new_peer(&new_pieces, peer_states, mode, peer_id, storage).await?;
+    select_new_peer(&new_pieces, peer_states, mode, peer_id).await?;
 
     Ok(())
 }

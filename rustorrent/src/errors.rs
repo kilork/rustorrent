@@ -107,7 +107,7 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for RustorrentError {
 }
 
 impl<'a> From<nom::Err<&'a [u8]>> for RustorrentError {
-    fn from(value: nom::Err<&'a [u8]>) -> Self {
+    fn from(_: nom::Err<&'a [u8]>) -> Self {
         RustorrentError::Parser
     }
 }

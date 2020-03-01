@@ -4,10 +4,7 @@ use bytes::{Buf, BufMut, BytesMut};
 use failure::Fail;
 use nom::Offset;
 use rand::prelude::*;
-use std::{
-    fmt::{Display, Formatter},
-    sync::Arc,
-};
+use std::sync::Arc;
 use tokio_util::codec::{Decoder, Encoder};
 
 /// Bittorrent UDP-tracker protocol extension.
@@ -246,8 +243,7 @@ impl Encoder for UdpTrackerCodec {
             connection_id,
             transaction_id,
             data,
-            authentication,
-            request_string,
+            ..
         } = frame;
         match data {
             UdpTrackerRequestData::Connect => {

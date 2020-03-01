@@ -1,7 +1,6 @@
 use super::*;
 
 pub(crate) async fn process_announce(
-    settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,
     peers: Vec<Peer>,
 ) -> Result<(), RustorrentError> {

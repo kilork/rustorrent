@@ -8,8 +8,8 @@ mod cli;
 /// Port for client to listen for peer connections
 ///
 /// If port is not available - took up to `PEER_PORT_MAX`
-const PEER_PORT: u16 = 6881;
-const PEER_PORT_MAX: u16 = 6889;
+// FIXME:const PEER_PORT: u16 = 6881;
+// FIXME:const PEER_PORT_MAX: u16 = 6889;
 
 #[tokio::main]
 async fn main() -> Result<(), ExitFailure> {

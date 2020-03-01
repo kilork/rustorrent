@@ -1,8 +1,6 @@
 use super::*;
 
 pub(crate) async fn process_peer_piece_downloaded(
-    settings: Arc<Settings>,
-    torrent_process: Arc<TorrentProcess>,
     peer_states: &mut HashMap<Uuid, PeerState>,
     mode: &TorrentDownloadMode,
     peer_id: Uuid,
@@ -19,7 +17,8 @@ pub(crate) async fn process_peer_piece_downloaded(
             ..
         } = existing_peer.state
         {
-            if let (Some(index), Some(since)) = (downloading_piece.take(), downloading_since.take())
+            if let (Some(index), Some(_since)) =
+                (downloading_piece.take(), downloading_since.take())
             {
                 storage.save(index, piece).await?;
 
@@ -48,7 +47,6 @@ pub(crate) async fn process_peer_piece_downloaded(
             ref mut sender,
             ref pieces,
             ref mut downloading_piece,
-            ref mut downloading_since,
             ..
         } = peer_state.state
         {
@@ -76,7 +74,7 @@ pub(crate) async fn process_peer_piece_downloaded(
         }
     }
 
-    select_new_peer(&new_pieces, peer_states, mode, peer_id, storage).await?;
+    select_new_peer(&new_pieces, peer_states, mode, peer_id).await?;
 
     Ok(())
 }

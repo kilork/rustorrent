@@ -3,7 +3,7 @@ use crate::types::Settings;
 use app::TorrentProcess;
 use flat_storage::FlatStorage;
 use flat_storage_mmap::MmapFlatStorage;
-use std::{ops::Range, thread};
+use std::thread;
 use tokio::runtime::Builder;
 
 #[derive(Debug)]

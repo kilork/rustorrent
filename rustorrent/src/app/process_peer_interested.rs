@@ -1,8 +1,6 @@
 use super::*;
 
 pub(crate) async fn process_peer_interested(
-    settings: Arc<Settings>,
-    torrent_process: Arc<TorrentProcess>,
     peer_states: &mut HashMap<Uuid, PeerState>,
     peer_id: Uuid,
 ) -> Result<(), RustorrentError> {

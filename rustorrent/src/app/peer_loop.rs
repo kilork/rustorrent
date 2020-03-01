@@ -1,7 +1,6 @@
 use super::*;
 
 pub(crate) async fn peer_loop(
-    settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,
     peer_id: Uuid,
     mut sender: Sender<PeerMessage>,
