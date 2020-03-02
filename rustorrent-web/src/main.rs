@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate actix_web;
 
-#[cfg(ui)]
+#[cfg(feature = "ui")]
 use rustorrent_web_resources::*;
 
 use actix::prelude::*;
@@ -356,7 +356,7 @@ async fn main() -> Result<(), ExitFailure> {
     let sender = web::Data::new(Mutex::new(download_events_sender));
 
     HttpServer::new(move || {
-        let app = App::new()
+        let mut app = App::new()
             .wrap(middleware::Logger::default())
             .wrap(IdentityService::new(
                 CookieIdentityPolicy::new(&[0; 32])
@@ -384,10 +384,11 @@ async fn main() -> Result<(), ExitFailure> {
                     .service(logout)
                     .service(stream),
             );
-        #[cfg(ui)]
+        #[cfg(feature = "ui")]
         {
+            debug!("serving frontend files...");
             let generated_files = generate_files();
-            app.service(actix_web_static_files::ResourceFiles::new(
+            app = app.service(actix_web_static_files::ResourceFiles::new(
                 "/",
                 generated_files,
             ));
