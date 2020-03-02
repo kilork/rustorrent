@@ -33,7 +33,7 @@ pub(crate) struct UdpTrackerRequest {
 impl UdpTrackerRequest {
     pub(crate) fn connect() -> Self {
         Self {
-            connection_id: 0x41727101980,
+            connection_id: 0x0417_2710_1980,
             transaction_id: random(),
             data: UdpTrackerRequestData::Connect,
             authentication: None,

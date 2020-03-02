@@ -8,7 +8,7 @@ pub(crate) async fn process_peer_announced(
     let mut peer_states_iter = peer_states.iter_mut();
     let peer_err = peer.clone();
     if let Some((peer_id, existing_peer)) = peer_states_iter.find(|x| x.1.peer == peer) {
-        let peer_id = peer_id.clone();
+        let peer_id = *peer_id;
         match existing_peer.state {
             TorrentPeerState::Idle => {
                 let handler = spawn_and_log_error(

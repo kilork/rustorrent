@@ -45,7 +45,7 @@ pub(crate) async fn download_events_loop(
                             torrent_process.clone(),
                             broker_receiver,
                         ),
-                        || format!("download_events_loop: add torrent failed"),
+                        || "download_events_loop: add torrent failed".to_string(),
                     );
 
                     if let Err(err) = request_response.response(Ok(torrent_process)) {
@@ -61,15 +61,16 @@ pub(crate) async fn download_events_loop(
 
                 let hash_id = handshake_request.info_hash;
 
-                if let Err(_) =
-                    handshake_sender.send(torrents.iter().find(|x| x.hash_id == hash_id).cloned())
+                if handshake_sender
+                    .send(torrents.iter().find(|x| x.hash_id == hash_id).cloned())
+                    .is_err()
                 {
                     error!("cannot send handshake, receiver is dropped");
                 }
             }
             RustorrentCommand::TorrentList { sender } => {
                 debug!("collecting torrent list");
-                if let Err(_) = sender.send(torrents.iter().cloned().collect()) {
+                if sender.send(torrents.to_vec()).is_err() {
                     error!("cannot send handshake, receiver is dropped");
                 }
             }

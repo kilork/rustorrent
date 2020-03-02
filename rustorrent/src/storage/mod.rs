@@ -82,7 +82,7 @@ impl TorrentStorage {
                                 Ok(()) => (),
                                 Err(err) => {
                                     error!("cannot write piece: {}", err);
-                                    if let Err(_) = sender.send(Err(err.into())) {
+                                    if sender.send(Err(err.into())).is_err() {
                                         error!("cannot send piece with oneshot message");
                                     }
                                     continue;
@@ -105,7 +105,7 @@ impl TorrentStorage {
                                 error!("cannot notify watchers: {}", err);
                             }
 
-                            if let Err(_) = sender.send(Ok(())) {
+                            if sender.send(Ok(())).is_err() {
                                 error!("cannot send oneshot");
                             }
                         }
@@ -117,17 +117,17 @@ impl TorrentStorage {
                             })
                             .await?
                             {
-                                Ok(data) => data.map(|x| TorrentPiece(x)),
+                                Ok(data) => data.map(TorrentPiece),
                                 Err(err) => {
                                     error!("cannot read piece: {}", err);
-                                    if let Err(_) = sender.send(Err(err.into())) {
+                                    if sender.send(Err(err.into())).is_err() {
                                         error!("cannot send piece with oneshot message");
                                     }
                                     continue;
                                 }
                             };
 
-                            if let Err(_) = sender.send(Ok(piece)) {
+                            if sender.send(Ok(piece)).is_err() {
                                 error!("cannot send piece with oneshot message");
                             }
                         }

@@ -17,7 +17,7 @@ fn parse_plan_9_torrent() -> Result<(), RustorrentError> {
         files,
         &vec![
             TorrentInfoFile {
-                length: 383971,
+                length: 383_971,
                 path: "Plan_9_from_Outer_Space_1959.asr.js".into(),
             },
             TorrentInfoFile {
@@ -25,19 +25,19 @@ fn parse_plan_9_torrent() -> Result<(), RustorrentError> {
                 path: "Plan_9_from_Outer_Space_1959.asr.srt".into(),
             },
             TorrentInfoFile {
-                length: 346429,
+                length: 346_429,
                 path: "Plan_9_from_Outer_Space_1959.gif".into(),
             },
             TorrentInfoFile {
-                length: 56478797,
+                length: 56_478_797,
                 path: "Plan_9_from_Outer_Space_1959.mp3".into(),
             },
             TorrentInfoFile {
-                length: 758756235,
+                length: 758_756_235,
                 path: "Plan_9_from_Outer_Space_1959.mp4".into(),
             },
             TorrentInfoFile {
-                length: 390383680,
+                length: 390_383_680,
                 path: "Plan_9_from_Outer_Space_1959.ogv".into(),
             },
             TorrentInfoFile {
@@ -45,7 +45,7 @@ fn parse_plan_9_torrent() -> Result<(), RustorrentError> {
                 path: "Plan_9_from_Outer_Space_1959.png".into(),
             },
             TorrentInfoFile {
-                length: 293299508,
+                length: 293_299_508,
                 path: "Plan_9_from_Outer_Space_1959_512kb.mp4".into(),
             },
             TorrentInfoFile {
@@ -59,14 +59,14 @@ fn parse_plan_9_torrent() -> Result<(), RustorrentError> {
         ]
     );
 
-    let total_len = 383971
+    let total_len = 383_971
         + 51637
-        + 346429
-        + 56478797
-        + 758756235
-        + 390383680
+        + 346_429
+        + 56_478_797
+        + 758_756_235
+        + 390_383_680
         + 11287
-        + 293299508
+        + 293_299_508
         + 4675
         + 3209;
 
@@ -84,7 +84,7 @@ fn parse_ferris_torrent() -> Result<(), RustorrentError> {
 
     let info = torrent.info()?;
 
-    assert_eq!(349133, info.len());
+    assert_eq!(349_133, info.len());
     assert_eq!(
         Some(&PathBuf::from("ferris.gif")),
         info.files.iter().next().map(|x| &x.path)

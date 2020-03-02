@@ -140,18 +140,18 @@ async fn torrent_list(
 
     match receiver.await {
         Ok(torrents) => {
-            return HttpResponse::Ok().json::<Vec<_>>(
+            HttpResponse::Ok().json::<Vec<_>>(
                 torrents
                     .iter()
                     .map(|torrent| torrent.info.files.clone())
                     .collect(),
-            );
+            )
         }
         Err(err) => {
             error!("error in receiver: {}", err);
-            return HttpResponse::InternalServerError().json(Failure {
+            HttpResponse::InternalServerError().json(Failure {
                 error: format!("cannot receive from torrent process: {}", err),
-            });
+            })
         }
     }
 }
@@ -266,7 +266,7 @@ async fn logout(
         if let Some((user, token, _userinfo)) = sessions.write().unwrap().map.remove(&id) {
             debug!("logout user: {:?}", user);
 
-            let id_token = token.bearer.access_token.into();
+            let id_token = token.bearer.access_token;
             let logout_url = oidc_client.config().end_session_endpoint.clone();
 
             return HttpResponse::Ok().json(Logout {

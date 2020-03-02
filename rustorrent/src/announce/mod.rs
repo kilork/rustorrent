@@ -2,7 +2,7 @@ use super::*;
 use crate::{errors::RustorrentError, PEER_ID};
 
 use crate::{
-    app::{DownloadTorrentEvent, TorrentProcess},
+    app::{download_torrent::DownloadTorrentEvent, TorrentProcess},
     types::{torrent::TrackerAnnounce, Settings},
 };
 

@@ -17,7 +17,7 @@ pub(crate) async fn udp_announce(
         .listen
         .unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
 
-    let addr = SocketAddr::new(listen.into(), config.port);
+    let addr = SocketAddr::new(listen, config.port);
     let udp_socket = UdpSocket::bind(addr).await?;
 
     let announce_url = &announce_url[UDP_PREFIX.len()..];

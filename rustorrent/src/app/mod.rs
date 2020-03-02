@@ -17,7 +17,7 @@ mod accept_connections_loop;
 mod connect_to_peer;
 mod determine_download_mode;
 mod download_events_loop;
-mod download_torrent;
+pub(crate) mod download_torrent;
 mod peer_connection;
 mod peer_loop;
 mod peer_loop_message;
@@ -27,7 +27,7 @@ use accept_connections_loop::accept_connections_loop;
 use connect_to_peer::connect_to_peer;
 use determine_download_mode::determine_download_mode;
 use download_events_loop::download_events_loop;
-use download_torrent::download_torrent;
+use download_torrent::{download_torrent, DownloadTorrentEvent};
 use peer_connection::peer_connection;
 use peer_loop::peer_loop;
 use peer_loop_message::PeerLoopMessage;
@@ -68,29 +68,6 @@ impl Default for TorrentPeerState {
     fn default() -> Self {
         TorrentPeerState::Idle
     }
-}
-
-#[derive(Debug)]
-pub(crate) struct TorrentProcessStats {
-    pub(crate) downloaded: usize,
-    pub(crate) uploaded: usize,
-    pub(crate) left: usize,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum TorrentProcessState {
-    Init,
-    Download,
-    DownloadUpload,
-    Upload,
-    Finished,
-}
-
-#[derive(Debug, PartialEq, Hash, Eq)]
-pub(crate) struct Block {
-    pub piece: u32,
-    pub begin: u32,
-    pub length: u32,
 }
 
 pub enum RequestResponse<T, R> {
@@ -181,7 +158,7 @@ impl RustorrentApp {
             .listen
             .unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
 
-        let addr = SocketAddr::new(listen.into(), config.port);
+        let addr = SocketAddr::new(listen, config.port);
 
         let download_events = download_events_loop(self.settings.clone(), receiver);
 
@@ -230,39 +207,6 @@ where
     })
 }
 
-#[derive(Debug)]
-pub(crate) enum DownloadTorrentEvent {
-    Announce(Vec<Peer>),
-    PeerAnnounced(Peer),
-    PeerConnected(Uuid, TcpStream),
-    PeerForwarded(TcpStream),
-    PeerConnectFailed(Uuid),
-    PeerDisconnect(Uuid),
-    PeerPieces(Uuid, Vec<u8>),
-    PeerPiece(Uuid, usize),
-    PeerUnchoke(Uuid),
-    PeerInterested(Uuid),
-    PeerPieceDownloaded(Uuid, Vec<u8>),
-    PeerPieceCanceled(Uuid),
-    PeerPieceRequest {
-        peer_id: Uuid,
-        index: u32,
-        begin: u32,
-        length: u32,
-    },
-}
-
-impl Display for DownloadTorrentEvent {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            DownloadTorrentEvent::PeerPieceDownloaded(uuid, data) => {
-                write!(f, "PeerPieceDownloaded({}, [{}])", uuid, data.len())
-            }
-            _ => write!(f, "{:?}", self),
-        }
-    }
-}
-
 fn request_message(buffer: &[u8], piece: usize, piece_length: usize) -> (u32, u32, u32) {
     let index = piece as u32;
     let begin = buffer.len() as u32;
@@ -302,7 +246,7 @@ fn match_pieces(pieces: &mut Vec<usize>, downloaded_pieces: &[u8], i: usize, a: 
     };
 
     for j in 0..8 {
-        if new & (0b10000000 >> j) != 0 {
+        if new & (0b1000_0000 >> j) != 0 {
             pieces.push(i * 8 + j);
         }
     }

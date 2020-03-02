@@ -24,6 +24,39 @@ use process_peer_piece_request::process_peer_piece_request;
 use process_peer_pieces::process_peer_pieces;
 use process_peer_unchoke::process_peer_unchoke;
 
+#[derive(Debug)]
+pub(crate) enum DownloadTorrentEvent {
+    Announce(Vec<Peer>),
+    PeerAnnounced(Peer),
+    PeerConnected(Uuid, TcpStream),
+    PeerForwarded(TcpStream),
+    PeerConnectFailed(Uuid),
+    PeerDisconnect(Uuid),
+    PeerPieces(Uuid, Vec<u8>),
+    PeerPiece(Uuid, usize),
+    PeerUnchoke(Uuid),
+    PeerInterested(Uuid),
+    PeerPieceDownloaded(Uuid, Vec<u8>),
+    PeerPieceCanceled(Uuid),
+    PeerPieceRequest {
+        peer_id: Uuid,
+        index: u32,
+        begin: u32,
+        length: u32,
+    },
+}
+
+impl Display for DownloadTorrentEvent {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            DownloadTorrentEvent::PeerPieceDownloaded(uuid, data) => {
+                write!(f, "PeerPieceDownloaded({}, [{}])", uuid, data.len())
+            }
+            _ => write!(f, "{:?}", self),
+        }
+    }
+}
+
 pub(crate) async fn download_torrent(
     settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,
@@ -55,7 +88,7 @@ pub(crate) async fn download_torrent(
                 DownloadTorrentEvent::Announce(peers) => {
                     debug!("we got announce, what now?");
                     spawn_and_log_error(process_announce(torrent_process.clone(), peers), || {
-                        format!("process announce failed")
+                        "process announce failed".to_string()
                     });
                 }
                 DownloadTorrentEvent::PeerAnnounced(peer) => {
@@ -218,7 +251,7 @@ pub(crate) async fn download_torrent(
         Ok::<(), RustorrentError>(())
     };
 
-    let _ = match try_join!(announce_loop, download_torrent_events_loop) {
+    match try_join!(announce_loop, download_torrent_events_loop) {
         Ok(_) | Err(RustorrentError::Aborted) => debug!("download torrent is done"),
         Err(e) => error!("download torrent finished with failure: {}", e),
     };
