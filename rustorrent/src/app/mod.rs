@@ -21,17 +21,6 @@ mod download_torrent;
 mod peer_connection;
 mod peer_loop;
 mod peer_loop_message;
-mod process_announce;
-mod process_peer_announced;
-mod process_peer_connected;
-mod process_peer_forwarded;
-mod process_peer_interested;
-mod process_peer_piece;
-mod process_peer_piece_canceled;
-mod process_peer_piece_downloaded;
-mod process_peer_piece_request;
-mod process_peer_pieces;
-mod process_peer_unchoke;
 mod select_new_peer;
 
 use accept_connections_loop::accept_connections_loop;
@@ -42,17 +31,6 @@ use download_torrent::download_torrent;
 use peer_connection::peer_connection;
 use peer_loop::peer_loop;
 use peer_loop_message::PeerLoopMessage;
-use process_announce::process_announce;
-use process_peer_announced::process_peer_announced;
-use process_peer_connected::process_peer_connected;
-use process_peer_forwarded::process_peer_forwarded;
-use process_peer_interested::process_peer_interested;
-use process_peer_piece::process_peer_piece;
-use process_peer_piece_canceled::process_peer_piece_canceled;
-use process_peer_piece_downloaded::process_peer_piece_downloaded;
-use process_peer_piece_request::process_peer_piece_request;
-use process_peer_pieces::process_peer_pieces;
-use process_peer_unchoke::process_peer_unchoke;
 use select_new_peer::select_new_peer;
 
 pub struct RustorrentApp {

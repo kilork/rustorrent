@@ -1,5 +1,29 @@
 use super::*;
 
+mod process_announce;
+mod process_peer_announced;
+mod process_peer_forwarded;
+mod process_peer_connected;
+mod process_peer_piece;
+mod process_peer_pieces;
+mod process_peer_interested;
+mod process_peer_piece_canceled;
+mod process_peer_piece_downloaded;
+mod process_peer_piece_request;
+mod process_peer_unchoke;
+
+use process_announce::process_announce;
+use process_peer_announced::process_peer_announced;
+use process_peer_forwarded::process_peer_forwarded;
+use process_peer_connected::process_peer_connected;
+use process_peer_piece::process_peer_piece;
+use process_peer_pieces::process_peer_pieces;
+use process_peer_interested::process_peer_interested;
+use process_peer_piece_canceled::process_peer_piece_canceled;
+use process_peer_piece_downloaded::process_peer_piece_downloaded;
+use process_peer_piece_request::process_peer_piece_request;
+use process_peer_unchoke::process_peer_unchoke;
+
 pub(crate) async fn download_torrent(
     settings: Arc<Settings>,
     torrent_process: Arc<TorrentProcess>,
@@ -43,7 +67,7 @@ pub(crate) async fn download_torrent(
                     )
                     .await
                     {
-                        error!("cannot process peerannounced {:?}: {}", peer, err);
+                        error!("cannot process peer announced {:?}: {}", peer, err);
                     }
                 }
                 DownloadTorrentEvent::PeerDisconnect(peer_id) => {

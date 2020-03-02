@@ -15,6 +15,7 @@ use bytes::Bytes;
 use dotenv::dotenv;
 use exitfailure::ExitFailure;
 use log::{debug, error};
+use openid::{DiscoveredClient, Options, Token, Userinfo};
 use reqwest;
 use rustorrent::{
     app::{RustorrentApp, RustorrentCommand},
@@ -99,7 +100,7 @@ impl FromRequest for User {
 }
 
 struct Sessions {
-    map: HashMap<String, (User, openid::token::Token, openid::client::Userinfo)>,
+    map: HashMap<String, (User, Token, Userinfo)>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -155,11 +156,9 @@ async fn torrent_list(
     }
 }
 
-type DiscoveredClient = openid::Client<openid::discovery::Discovered>;
-
 #[get("/oauth2/authorization/oidc")]
 async fn authorize(oidc_client: web::Data<DiscoveredClient>) -> impl Responder {
-    let auth_url = oidc_client.auth_url(&openid::client::Options {
+    let auth_url = oidc_client.auth_url(&Options {
         scope: Some("email".into()),
         ..Default::default()
     });
@@ -184,8 +183,8 @@ struct LoginQuery {
 async fn request_token(
     oidc_client: web::Data<DiscoveredClient>,
     query: web::Query<LoginQuery>,
-) -> Result<Option<(openid::token::Token, openid::client::Userinfo)>, ExitFailure> {
-    let mut token: openid::token::Token = oidc_client.request_token(&query.code).await?.into();
+) -> Result<Option<(Token, Userinfo)>, ExitFailure> {
+    let mut token: Token = oidc_client.request_token(&query.code).await?.into();
     if let Some(mut id_token) = token.id_token.as_mut() {
         oidc_client.decode_token(&mut id_token)?;
         oidc_client.validate_token(&id_token, None, None)?;
