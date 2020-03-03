@@ -139,14 +139,12 @@ async fn torrent_list(
     }
 
     match receiver.await {
-        Ok(torrents) => {
-            HttpResponse::Ok().json::<Vec<_>>(
-                torrents
-                    .iter()
-                    .map(|torrent| torrent.info.files.clone())
-                    .collect(),
-            )
-        }
+        Ok(torrents) => HttpResponse::Ok().json::<Vec<_>>(
+            torrents
+                .iter()
+                .map(|torrent| torrent.info.files.clone())
+                .collect(),
+        ),
         Err(err) => {
             error!("error in receiver: {}", err);
             HttpResponse::InternalServerError().json(Failure {
