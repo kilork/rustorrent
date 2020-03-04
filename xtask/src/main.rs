@@ -1,10 +1,9 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use pico_args::Arguments;
 use std::{
     env,
-    io::Write,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::Command,
     thread::spawn,
 };
 
@@ -28,6 +27,11 @@ fn run_cargo_watch_rustorrent_web() -> Result<()> {
         .current_dir(project_root())
         .args(&["watch", "-x", "run --bin rustorrent-web"])
         .status()?;
+
+    if !status.success() {
+        return Err(anyhow!("'cargo watch' failed"));
+    }
+
     Ok(())
 }
 
@@ -46,8 +50,8 @@ fn main() -> Result<()> {
 
             let cargo_task = spawn(run_cargo_watch_rustorrent_web);
 
-            npm_task.join().expect("cannot join npm");
-            cargo_task.join().expect("cannot join cargo");
+            npm_task.join().expect("cannot join npm")?;
+            cargo_task.join().expect("cannot join cargo")?;
         }
         _ => {
             eprintln!(
