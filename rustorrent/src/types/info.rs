@@ -25,6 +25,10 @@ impl TorrentInfo {
         self.length
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Returns piece length and blocks count from piece index.
     /// For last piece information can differ, for that reason we need piece index.
     pub fn sizes(&self, index: usize) -> (usize, usize) {
@@ -128,6 +132,10 @@ impl TorrentInfoRaw {
         } else {
             panic!("Wrong torrent info block");
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     /// Count of pieces in torrent.
