@@ -5,7 +5,7 @@
         "title": "Torrents",
         "createLabel": "Torrent erstellen",
         "createOrEditLabel": "Torrent erstellen oder bearbeiten",
-        "notFound": "No Torrents found"
+        "notFound": "Keine Torrents gefunden"
       },
       "created": "Torrent erstellt mit ID {{ param }}",
       "updated": "Torrent aktualisiert mit ID {{ param }}",
