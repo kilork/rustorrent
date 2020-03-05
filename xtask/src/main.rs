@@ -21,8 +21,12 @@ fn run_npm() -> Result<()> {
     Ok(())
 }
 
+fn cargo() -> String {
+    env::var("CARGO").unwrap_or_else(|_| "cargo".to_string())
+}
+
 fn run_cargo_watch_rustorrent_web() -> Result<()> {
-    let cargo = env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+    let cargo = cargo();
     let status = Command::new(cargo)
         .current_dir(project_root())
         .args(&["watch", "-x", "run --bin rustorrent-web"])
@@ -35,15 +39,30 @@ fn run_cargo_watch_rustorrent_web() -> Result<()> {
     Ok(())
 }
 
+fn install_cargo_watch() -> Result<()> {
+    let cargo_cmd = cargo();
+    let status = Command::new(cargo_cmd)
+        .args(&["watch", "--version"])
+        .status()?;
+
+    if status.success() {
+        return Ok(());
+    }
+
+    let status = Command::new(cargo()).args(&["install", "watch"]).status()?;
+
+    if status.success() {
+        return Ok(());
+    }
+
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let mut args = Arguments::from_env();
     let subcommand = args.subcommand()?.unwrap_or_default();
 
     match subcommand.as_str() {
-        "ui-dev" => {
-            args.finish()?;
-            run_npm()?;
-        }
         "dev" => {
             args.finish()?;
             let npm_task = spawn(run_npm);
@@ -52,6 +71,14 @@ fn main() -> Result<()> {
 
             npm_task.join().expect("cannot join npm")?;
             cargo_task.join().expect("cannot join cargo")?;
+        }
+        "install" => {
+            args.finish()?;
+            install_cargo_watch()?;
+        }
+        "ui-dev" => {
+            args.finish()?;
+            run_npm()?;
         }
         _ => {
             eprintln!(
@@ -63,8 +90,9 @@ USAGE:
     cargo xtask <SUBCOMMAND>
 
 SUBCOMMANDS:
-    ui-dev
-    dev"
+    dev
+    install
+    ui-dev"
             );
         }
     }
