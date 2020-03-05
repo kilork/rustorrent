@@ -10,7 +10,27 @@ Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org/).
 
 - Implements bittorrent client.
 
-## Usage
+## Installation
+
+    cargo install --features ui --path .
+
+## Development
+
+Install dependencies:
+
+    cargo xtask install
+
+Start dev Rust+Webpack server in watch mode:
+
+    cargo xtask dev
+
+Start only Webpack server in dev mode:
+
+    cargo xtask ui-dev
+
+Clean build directories:
+
+    cargo xtask clean
 
 ## Configuration
 

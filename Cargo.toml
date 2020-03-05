@@ -6,6 +6,7 @@ members = [
     "rustorrent",
     "rustorrent-web",
     "rustorrent-web-resources",
+    "xtask",
 ]
 
 [profile.release]
