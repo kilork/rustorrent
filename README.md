@@ -12,11 +12,17 @@ Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org/).
 
 ## Installation
 
-    cargo install --features ui --path .
+CLI (not really useful):
+
+    cargo install --path rustorrent
+
+WEB UI (requires npm to build):
+
+    cargo install --features ui --path rustorrent-web
 
 ## Development
 
-Install dependencies:
+Install dependencies (requires npm):
 
     cargo xtask install
 
@@ -31,6 +37,10 @@ Start only Webpack server in dev mode:
 Clean build directories:
 
     cargo xtask clean
+
+Run rustorrent cli in Docker to check interaction with popular torrent clients:
+
+    docker-compose up
 
 ## Configuration
 

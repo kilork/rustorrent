@@ -1,9 +1,8 @@
-FROM alpine
+FROM rust:latest as builder
+WORKDIR /usr/src/myapp
+COPY . .
+RUN cargo install --path rustorrent
 
-VOLUME ["/app"]
-
-RUN mkdir /download
-
-WORKDIR /download
-
-CMD sleep 30 && /app/rustorrent -vvv /data/linux-5.1.16.tar.xz.torrent
+FROM debian:buster-slim
+COPY --from=builder /usr/local/cargo/bin/rustorrent /usr/local/bin/rustorrent
+CMD sleep 30 && rustorrent -vvv /data/linux-5.1.16.tar.xz.torrent

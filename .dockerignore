@@ -1,1 +1,4 @@
+.git/
 target/
+rustorrent-web-resources/www/target
+rustorrent-web-resources/www/node_modules
