@@ -43,6 +43,20 @@ fn run_cargo_watch_rustorrent_web() -> Result<()> {
     Ok(())
 }
 
+fn cargo_build() -> Result<()> {
+    let cargo = cargo();
+    let status = Command::new(cargo)
+        .current_dir(project_root())
+        .arg("build")
+        .status()?;
+
+    if !status.success() {
+        return Err(anyhow!("'cargo build' failed"));
+    }
+
+    Ok(())
+}
+
 fn npm_install() -> Result<()> {
     let npm = npm();
     let status = Command::new(npm)
@@ -123,6 +137,11 @@ fn main() -> Result<()> {
         }
         "dev" => {
             args.finish()?;
+
+            if let Err(err) = spawn(cargo_build).join() {
+                eprintln!("Cannot build, ignore for now: {:?}", err);
+            }
+
             let npm_task = spawn(run_npm);
 
             let cargo_task = spawn(run_cargo_watch_rustorrent_web);
