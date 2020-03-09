@@ -1,0 +1,12 @@
+[package]
+name = "rsbt-web-resources"
+version = "0.1.0"
+authors = ["Alexander Korolev <kilork@yandex.ru>"]
+edition = "2018"
+build = "build.rs"
+
+[dependencies]
+actix-web-static-files = "2"
+
+[build-dependencies]
+actix-web-static-files = "2"

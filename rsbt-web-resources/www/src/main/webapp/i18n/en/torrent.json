@@ -1,0 +1,22 @@
+{
+  "rsbt": {
+    "torrent": {
+      "home": {
+        "title": "Torrents",
+        "createLabel": "Create a new Torrent",
+        "createOrEditLabel": "Create or edit a Torrent",
+        "notFound": "No Torrents found"
+      },
+      "created": "A new Torrent is created with identifier {{ param }}",
+      "updated": "A Torrent is updated with identifier {{ param }}",
+      "deleted": "A Torrent is deleted with identifier {{ param }}",
+      "delete": {
+        "question": "Are you sure you want to delete Torrent {{ id }}?"
+      },
+      "detail": {
+        "title": "Torrent"
+      },
+      "name": "Name"
+    }
+  }
+}

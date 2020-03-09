@@ -3,9 +3,9 @@
 members = [
     "flat-storage-mmap",
     "flat-storage",
-    "rustorrent",
-    "rustorrent-web",
-    "rustorrent-web-resources",
+    "rsbt",
+    "rsbt-web",
+    "rsbt-web-resources",
     "xtask",
 ]
 

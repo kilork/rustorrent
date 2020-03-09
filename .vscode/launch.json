@@ -7,16 +7,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'rustorrent'",
+            "name": "Debug unit tests in library 'rsbt'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=rustorrent"
+                    "--package=rsbt"
                 ],
                 "filter": {
-                    "name": "rustorrent",
+                    "name": "rsbt",
                     "kind": "lib"
                 }
             },
@@ -26,34 +26,34 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'rustorrent'",
+            "name": "Debug executable 'rsbt'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=rustorrent",
-                    "--package=rustorrent"
+                    "--bin=rsbt",
+                    "--package=rsbt"
                 ],
                 "filter": {
-                    "name": "rustorrent",
+                    "name": "rsbt",
                     "kind": "bin"
                 }
             },
-            "args": ["-vvv", "${workspaceFolder}/rustorrent/tests/ferris.gif.torrent"],
+            "args": ["-vvv", "${workspaceFolder}/rsbt/tests/ferris.gif.torrent"],
             "cwd": "${workspaceFolder}"
         },
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'rustorrent'",
+            "name": "Debug unit tests in executable 'rsbt'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=rustorrent",
-                    "--package=rustorrent"
+                    "--bin=rsbt",
+                    "--package=rsbt"
                 ],
                 "filter": {
-                    "name": "rustorrent",
+                    "name": "rsbt",
                     "kind": "bin"
                 }
             },
@@ -69,7 +69,7 @@
                     "test",
                     "--no-run",
                     "--test=samples_parse",
-                    "--package=rustorrent"
+                    "--package=rsbt"
                 ],
                 "filter": {
                     "name": "samples_parse",

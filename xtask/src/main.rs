@@ -29,11 +29,11 @@ fn cargo() -> String {
     env::var("CARGO").unwrap_or_else(|_| "cargo".to_string())
 }
 
-fn run_cargo_watch_rustorrent_web() -> Result<()> {
+fn run_cargo_watch_rsbt_web() -> Result<()> {
     let cargo = cargo();
     let status = Command::new(cargo)
         .current_dir(project_root())
-        .args(&["watch", "-x", "run --bin rustorrent-web"])
+        .args(&["watch", "-x", "run --bin rsbt-web"])
         .status()?;
 
     if !status.success() {
@@ -121,7 +121,7 @@ pub fn project_root() -> PathBuf {
 }
 
 fn frontend_dir() -> PathBuf {
-    project_root().join("rustorrent-web-resources/www")
+    project_root().join("rsbt-web-resources/www")
 }
 
 fn main() -> Result<()> {
@@ -144,7 +144,7 @@ fn main() -> Result<()> {
 
             let npm_task = spawn(run_npm);
 
-            let cargo_task = spawn(run_cargo_watch_rustorrent_web);
+            let cargo_task = spawn(run_cargo_watch_rsbt_web);
 
             npm_task.join().expect("cannot join npm")?;
             cargo_task.join().expect("cannot join cargo")?;

@@ -14,11 +14,11 @@ Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org/).
 
 CLI (not really useful):
 
-    cargo install --path rustorrent
+    cargo install --path rsbt
 
 WEB UI (requires npm to build):
 
-    cargo install --features ui --path rustorrent-web
+    cargo install --features ui --path rsbt-web
 
 ## Development
 
@@ -38,7 +38,7 @@ Clean build directories:
 
     cargo xtask clean
 
-Run rustorrent cli in Docker to check interaction with popular torrent clients:
+Run rsbt cli in Docker to check interaction with popular torrent clients:
 
     docker-compose up
 
@@ -50,4 +50,4 @@ Locations:
 
 | OS  | Location                                                       |
 |-----|----------------------------------------------------------------|
-| Mac | ~/Library/Preferences/rs.rustorrent.rustorrent/rustorrent.toml |
+| Mac | ~/Library/Preferences/rs.rsbt.rsbt/rsbt.toml |

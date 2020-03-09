@@ -6,12 +6,12 @@ services:
     ports:
       - 6969:6969
   transmission:
-    image: kilork/rustorrent-transmission
+    image: kilork/rsbt-transmission
     build: docker/transmission
     volumes:
       - "data:/data"
   qbittorrent:
-    image: kilork/rustorrent-qbittorrent
+    image: kilork/rsbt-qbittorrent
     build: docker/qbittorrent
     volumes:
       # - "config:/config"
@@ -19,12 +19,12 @@ services:
         #    ports:
         #      - 8080:8080
   bittorrent-file:
-    image: kilork/rustorrent-bittorent-file
+    image: kilork/rsbt-bittorent-file
     build: docker/bittorent-file
     volumes:
       - "data:/data"
   app:
-    image: kilork/rustorrent-app
+    image: kilork/rsbt-app
     build: .
     volumes:
       - "data:/data"
