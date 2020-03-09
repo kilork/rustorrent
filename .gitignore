@@ -1,6 +1,6 @@
 **/target
 **/*.rs.bk
 .ENV.md
-rsbt-web-resources/www/node_modules
-rsbt-web-resources/www/package-lock.json
+frontend/www/node_modules
+frontend/www/package-lock.json
 .env

@@ -1,7 +1,7 @@
 use env_logger::Builder as LoggerBuilder;
 use exitfailure::ExitFailure;
 use log::{debug, info, Level};
-use rsbt::{app::RsbtApp, types::Settings};
+use rsbt_service::{app::RsbtApp, types::Settings};
 
 mod cli;
 

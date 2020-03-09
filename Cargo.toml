@@ -3,9 +3,9 @@
 members = [
     "flat-storage-mmap",
     "flat-storage",
-    "rsbt",
-    "rsbt-web",
-    "rsbt-web-resources",
+    "service",
+    "backend",
+    "frontend",
     "xtask",
 ]
 

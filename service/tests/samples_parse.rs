@@ -1,6 +1,6 @@
 use flat_storage::FlatStorageFile as TorrentInfoFile;
-use rsbt::types::torrent::Torrent;
-use rsbt::RsbtError;
+use rsbt_service::types::torrent::Torrent;
+use rsbt_service::RsbtError;
 
 use std::convert::TryInto;
 use std::path::PathBuf;

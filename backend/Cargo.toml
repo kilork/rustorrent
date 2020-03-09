@@ -1,5 +1,5 @@
 [package]
-name = "rsbt-web"
+name = "rsbt"
 version = "0.1.0"
 authors = ["Alexander Korolev <kilork@yandex.ru>"]
 edition = "2018"
@@ -8,7 +8,7 @@ edition = "2018"
 
 default = []
 
-ui = ["rsbt-web-resources"]
+ui = ["rsbt-frontend"]
 
 [dependencies]
 actix = "0.9"
@@ -27,8 +27,8 @@ exitfailure = "0.5"
 log = "0.4"
 env_logger = "0.7"
 rand = "0.7"
-rsbt = { path = "../rsbt" }
-rsbt-web-resources = { path = "../rsbt-web-resources", optional = true }
+rsbt-service = { path = "../service" }
+rsbt-frontend = { path = "../frontend", optional = true }
 actix-web-static-files = "2"
 lazy_static = "1.4"
 uuid = { version = "0.8", features = [ "v4" ] }

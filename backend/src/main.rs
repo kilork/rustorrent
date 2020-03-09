@@ -17,7 +17,7 @@ use exitfailure::ExitFailure;
 use log::{debug, error};
 use openid::{DiscoveredClient, Options, Token, Userinfo};
 use reqwest;
-use rsbt::{
+use rsbt_service::{
     app::{RsbtApp, RsbtCommand},
     types::Settings,
 };
@@ -334,7 +334,7 @@ async fn main() -> Result<(), ExitFailure> {
     Arbiter::spawn(task);
 
     let (download_events_sender, download_events_receiver) =
-        mpsc::channel(rsbt::DEFAULT_CHANNEL_BUFFER);
+        mpsc::channel(rsbt_service::DEFAULT_CHANNEL_BUFFER);
 
     let rsbt_app_clone = rsbt_app.clone();
     let download_events_task_sender = download_events_sender.clone();

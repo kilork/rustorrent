@@ -1,4 +1,4 @@
 .git/
 target/
-rsbt-web-resources/www/target
-rsbt-web-resources/www/node_modules
+frontend/www/target
+frontend/www/node_modules

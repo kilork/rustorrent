@@ -29,11 +29,11 @@ fn cargo() -> String {
     env::var("CARGO").unwrap_or_else(|_| "cargo".to_string())
 }
 
-fn run_cargo_watch_rsbt_web() -> Result<()> {
+fn run_cargo_watch_rsbt() -> Result<()> {
     let cargo = cargo();
     let status = Command::new(cargo)
         .current_dir(project_root())
-        .args(&["watch", "-x", "run --bin rsbt-web"])
+        .args(&["watch", "-x", "run --bin rsbt"])
         .status()?;
 
     if !status.success() {
@@ -121,7 +121,7 @@ pub fn project_root() -> PathBuf {
 }
 
 fn frontend_dir() -> PathBuf {
-    project_root().join("rsbt-web-resources/www")
+    project_root().join("frontend/www")
 }
 
 fn main() -> Result<()> {
@@ -144,7 +144,7 @@ fn main() -> Result<()> {
 
             let npm_task = spawn(run_npm);
 
-            let cargo_task = spawn(run_cargo_watch_rsbt_web);
+            let cargo_task = spawn(run_cargo_watch_rsbt);
 
             npm_task.join().expect("cannot join npm")?;
             cargo_task.join().expect("cannot join cargo")?;

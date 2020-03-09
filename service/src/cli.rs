@@ -1,5 +1,5 @@
 use clap_verbosity_flag::Verbosity;
-use rsbt::types::Config;
+use rsbt_service::types::Config;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
