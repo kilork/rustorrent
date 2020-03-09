@@ -25,13 +25,12 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     pin::Pin,
-    sync::{Mutex, RwLock},
     task::{Context, Poll},
 };
 use tokio::{
     sync::{
         mpsc::{self, Receiver, Sender},
-        oneshot,
+        oneshot, Mutex, RwLock,
     },
     time::{interval_at, Duration, Instant},
 };
@@ -85,7 +84,7 @@ impl FromRequest for User {
             if let Some(identity) = fut.await?.identity() {
                 if let Some(user) = sessions
                     .read()
-                    .unwrap()
+                    .await
                     .map
                     .get(&identity)
                     .map(|x| x.0.clone())
@@ -123,10 +122,7 @@ async fn torrent_list(
     let (sender, receiver) = oneshot::channel();
 
     {
-        let mut event_sender = match event_sender.lock() {
-            Ok(lock) => lock,
-            Err(err) => err.into_inner(),
-        };
+        let mut event_sender = event_sender.lock().await;
         if let Err(err) = event_sender
             .send(RustorrentCommand::TorrentList { sender })
             .await
@@ -232,7 +228,7 @@ async fn login(
             identity.remember(id.clone());
             sessions
                 .write()
-                .unwrap()
+                .await
                 .map
                 .insert(id, (user, token, userinfo));
 
@@ -261,7 +257,7 @@ async fn logout(
 ) -> impl Responder {
     if let Some(id) = identity.identity() {
         identity.forget();
-        if let Some((user, token, _userinfo)) = sessions.write().unwrap().map.remove(&id) {
+        if let Some((user, token, _userinfo)) = sessions.write().await.map.remove(&id) {
             debug!("logout user: {:?}", user);
 
             let id_token = token.bearer.access_token;
@@ -283,7 +279,7 @@ fn host(path: &str) -> String {
 
 #[get("/stream")]
 async fn stream(broadcaster: web::Data<RwLock<Broadcaster>>) -> impl Responder {
-    let rx = broadcaster.write().unwrap().new_client();
+    let rx = broadcaster.write().await.new_client();
     HttpResponse::Ok()
         .content_type("text/event-stream")
         .keep_alive()
@@ -327,7 +323,7 @@ async fn main() -> Result<(), ExitFailure> {
 
             debug!("timer event");
 
-            let mut me = broadcaster_timer.write().unwrap();
+            let mut me = broadcaster_timer.write().await;
 
             if let Err(ok_clients) = me.message("ping") {
                 debug!("refresh client list");
