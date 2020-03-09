@@ -83,9 +83,7 @@ named!(
 );
 
 pub fn parse_bencode(bytes: &[u8]) -> Result<BencodeBlob, RsbtError> {
-    parser_bencode(bytes)
-        .map(|x| x.1)
-        .map_err(RsbtError::from)
+    parser_bencode(bytes).map(|x| x.1).map_err(RsbtError::from)
 }
 
 #[cfg(test)]

@@ -123,10 +123,7 @@ async fn torrent_list(
 
     {
         let mut event_sender = event_sender.lock().await;
-        if let Err(err) = event_sender
-            .send(RsbtCommand::TorrentList { sender })
-            .await
-        {
+        if let Err(err) = event_sender.send(RsbtCommand::TorrentList { sender }).await {
             error!("cannot send to torrent process: {}", err);
             return HttpResponse::InternalServerError().json(Failure {
                 error: format!("cannot send to torrent process: {}", err),

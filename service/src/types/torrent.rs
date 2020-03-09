@@ -74,21 +74,21 @@ mod tests {
 
     #[test]
     fn parse_peer() {
-        let peer_bytes = b"d2:ip9:127.0.0.17:peer id20:rsbt          4:porti6970ee";
+        let peer_bytes = b"d2:ip9:127.0.0.17:peer id20:rsbt                4:porti6970ee";
         let peer: Peer = peer_bytes.to_vec().try_into().unwrap();
         assert_eq!(
             peer,
             Peer {
                 ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                 port: 6970,
-                peer_id: Some("rsbt          ".into())
+                peer_id: Some("rsbt                ".into())
             }
         );
     }
 
     #[test]
     fn parse_compact_0() {
-        let tracker_response = b"d8:completei1e10:incompletei1e8:intervali600e5:peersld2:ip9:127.0.0.17:peer id20:-TR2940-pm2sh9i76t4d4:porti62437eed2:ip9:127.0.0.17:peer id20:rsbt          4:porti6970eeee";
+        let tracker_response = b"d8:completei1e10:incompletei1e8:intervali600e5:peersld2:ip9:127.0.0.17:peer id20:-TR2940-pm2sh9i76t4d4:porti62437eed2:ip9:127.0.0.17:peer id20:rsbt                4:porti6970eeee";
         let tracker_announce_response: TrackerAnnounce =
             tracker_response.to_vec().try_into().unwrap();
         assert_eq!(
@@ -104,7 +104,7 @@ mod tests {
                     Peer {
                         ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                         port: 6970,
-                        peer_id: Some("rsbt          ".into())
+                        peer_id: Some("rsbt                ".into())
                     }
                 ],
             }
