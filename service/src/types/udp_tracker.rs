@@ -234,11 +234,10 @@ impl Decoder for UdpTrackerCodec {
     }
 }
 
-impl Encoder for UdpTrackerCodec {
-    type Item = UdpTrackerRequest;
+impl Encoder<UdpTrackerRequest> for UdpTrackerCodec {
     type Error = UdpTrackerCodecError;
 
-    fn encode(&mut self, frame: Self::Item, buf: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, frame: UdpTrackerRequest, buf: &mut BytesMut) -> Result<(), Self::Error> {
         let UdpTrackerRequest {
             connection_id,
             transaction_id,

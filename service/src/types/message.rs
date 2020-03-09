@@ -146,8 +146,7 @@ impl Decoder for MessageCodec {
     }
 }
 
-impl Encoder for MessageCodec {
-    type Item = Message;
+impl Encoder<Message> for MessageCodec {
     type Error = MessageCodecError;
 
     fn encode(&mut self, frame: Message, buf: &mut BytesMut) -> Result<(), Self::Error> {
