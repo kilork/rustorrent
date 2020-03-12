@@ -6,6 +6,7 @@ use rsbt_web_resources::*;
 
 use actix::prelude::*;
 use actix_identity::{CookieIdentityPolicy, Identity, IdentityService};
+use actix_multipart::Multipart;
 use actix_service::Service;
 use actix_web::{
     dev::Payload, error::ErrorUnauthorized, http, middleware, web, App, Error, FromRequest,
@@ -14,11 +15,12 @@ use actix_web::{
 use bytes::Bytes;
 use dotenv::dotenv;
 use exitfailure::ExitFailure;
+use futures::StreamExt;
 use log::{debug, error};
 use openid::{DiscoveredClient, Options, Token, Userinfo};
 use reqwest;
 use rsbt_service::{
-    app::{RsbtApp, RsbtCommand},
+    app::{RequestResponse, RsbtApp, RsbtCommand},
     types::Settings,
 };
 use serde::{Deserialize, Serialize};
@@ -116,8 +118,9 @@ struct Paging {
 
 #[get("/torrents")]
 async fn torrent_list(
-    paging: web::Query<Paging>,
+    _paging: web::Query<Paging>,
     event_sender: web::Data<Mutex<Sender<RsbtCommand>>>,
+    _user: User,
 ) -> impl Responder {
     let (sender, receiver) = oneshot::channel();
 
@@ -145,6 +148,47 @@ async fn torrent_list(
             })
         }
     }
+}
+
+#[get("/upload")]
+async fn upload_form(_user: User) -> impl Responder {
+    HttpResponse::Ok()
+        .content_type("text/html")
+        .body(include_str!("../static/upload.html"))
+}
+
+#[post("/upload")]
+async fn upload(
+    _user: User,
+    event_sender: web::Data<Mutex<Sender<RsbtCommand>>>,
+    mut payload: Multipart,
+) -> Result<HttpResponse, Error> {
+    while let Some(item) = payload.next().await {
+        let mut field = item?;
+        let content_type = field.content_disposition().unwrap();
+        let filename = content_type.get_filename().unwrap();
+
+        let mut torrent: Vec<u8> = vec![];
+        while let Some(chunk) = field.next().await {
+            let data = chunk?;
+            torrent.extend(&data);
+        }
+
+        let mut event_sender = event_sender.lock().await;
+        if let Err(err) = event_sender
+            .send(RsbtCommand::AddTorrent(
+                RequestResponse::RequestOnly(torrent),
+                filename.to_string(),
+            ))
+            .await
+        {
+            error!("cannot send to torrent process: {}", err);
+            return Ok(HttpResponse::InternalServerError().json(Failure {
+                error: format!("cannot send to torrent process: {}", err),
+            }));
+        }
+    }
+    Ok(HttpResponse::Ok().into())
 }
 
 #[get("/oauth2/authorization/oidc")]
@@ -371,6 +415,8 @@ async fn main() -> Result<(), ExitFailure> {
                         }
                     })
                     .service(torrent_list)
+                    .service(upload_form)
+                    .service(upload)
                     .service(account)
                     .service(logout)
                     .service(stream),
