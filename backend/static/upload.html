@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload torrent</title>
+</head>
+
+<body>
+    <form action="/api/upload" method="post" enctype="multipart/form-data">
+        <div>
+            <label for="torrent">Choose file to upload</label>
+            <input type="file" id="torrent" name="torrent" accept=".torrent">
+        </div>
+        <div><button type="submit">Submit</button></div>
+    </form>
+</body>
+
+</html>
