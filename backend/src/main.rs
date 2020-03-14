@@ -168,7 +168,7 @@ async fn upload(
         let content_type = field.content_disposition().unwrap();
         let filename = content_type.get_filename().unwrap();
 
-        let mut torrent: Vec<u8> = vec![];
+        let mut torrent = vec![];
         while let Some(chunk) = field.next().await {
             let data = chunk?;
             torrent.extend(&data);

@@ -1,0 +1,17 @@
+[package]
+name = "rsbt-cli"
+version = "0.1.0"
+authors = ["Alexander Korolev <kilork@yandex.ru>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rsbt-service = { path = "../service" }
+structopt = "0.3"
+exitfailure = "0.5"
+clap-verbosity-flag = "0.3"
+tokio = { version = "0.2", features = ["full"] }
+confy = "0.3"
+log = "0.4"
+env_logger = "0.7"

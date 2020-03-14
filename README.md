@@ -14,11 +14,11 @@ Dual-licensed under MIT or the [UNLICENSE](http://unlicense.org/).
 
 CLI (not really useful):
 
-    cargo install --path rsbt
+    cargo install --path cli
 
 WEB UI (requires npm to build):
 
-    cargo install --features ui --path rsbt-web
+    cargo install --features ui --path backend
 
 ## Development
 
