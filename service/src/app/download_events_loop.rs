@@ -1,4 +1,5 @@
 use super::*;
+use std::path::PathBuf;
 
 pub(crate) async fn download_events_loop(
     settings: Arc<Settings>,
@@ -12,6 +13,12 @@ pub(crate) async fn download_events_loop(
             RsbtCommand::AddTorrent(request_response, filename) => {
                 debug!("we need to download {:?}", filename);
                 if let Some(request) = request_response.request() {
+                    let name = PathBuf::from(filename)
+                        .file_stem()
+                        .unwrap()
+                        .to_string_lossy()
+                        .into_owned();
+
                     let torrent = parse_torrent(request)?;
                     let hash_id = torrent.info_sha1_hash();
                     let info = torrent.info()?;
@@ -28,8 +35,6 @@ pub(crate) async fn download_events_loop(
                     let (broker_sender, broker_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
                     id += 1;
                     let torrent_process = Arc::new(TorrentProcess {
-                        id,
-                        filename,
                         info,
                         hash_id,
                         torrent,
@@ -37,7 +42,13 @@ pub(crate) async fn download_events_loop(
                         broker_sender,
                     });
 
-                    torrents.push(torrent_process.clone());
+                    let torrent_download = TorrentDownload {
+                        id,
+                        name,
+                        active: true,
+                        process: torrent_process.clone(),
+                    };
+                    torrents.push(torrent_download);
 
                     let _ = spawn_and_log_error(
                         download_torrent(
@@ -62,7 +73,13 @@ pub(crate) async fn download_events_loop(
                 let hash_id = handshake_request.info_hash;
 
                 if handshake_sender
-                    .send(torrents.iter().find(|x| x.hash_id == hash_id).cloned())
+                    .send(
+                        torrents
+                            .iter()
+                            .map(|x| &x.process)
+                            .find(|x| x.hash_id == hash_id)
+                            .cloned(),
+                    )
                     .is_err()
                 {
                     error!("cannot send handshake, receiver is dropped");

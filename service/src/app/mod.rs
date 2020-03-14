@@ -37,10 +37,16 @@ pub struct RsbtApp {
     pub settings: Arc<Settings>,
 }
 
+#[derive(Clone)]
+pub struct TorrentDownload {
+    pub id: usize,
+    pub name: String,
+    pub active: bool,
+    pub process: Arc<TorrentProcess>,
+}
+
 #[derive(Debug)]
 pub struct TorrentProcess {
-    pub id: usize,
-    pub filename: String,
     pub(crate) torrent: Torrent,
     pub info: TorrentInfo,
     pub(crate) hash_id: [u8; SHA1_SIZE],
@@ -111,7 +117,7 @@ pub enum RsbtCommand {
         handshake_sender: oneshot::Sender<Option<Arc<TorrentProcess>>>,
     },
     TorrentList {
-        sender: oneshot::Sender<Vec<Arc<TorrentProcess>>>,
+        sender: oneshot::Sender<Vec<TorrentDownload>>,
     },
 }
 

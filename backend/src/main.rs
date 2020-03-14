@@ -38,6 +38,10 @@ use tokio::{
 };
 use url::Url;
 
+mod model;
+
+use model::*;
+
 lazy_static::lazy_static! {
 static ref RSBT_UI_HOST: String = std::env::var("RSBT_UI_HOST").unwrap_or_else(|_| "http://localhost:8080".to_string());
 static ref RSBT_BIND: String = std::env::var("RSBT_BIND").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
@@ -138,7 +142,14 @@ async fn torrent_list(
         Ok(torrents) => HttpResponse::Ok().json::<Vec<_>>(
             torrents
                 .iter()
-                .map(|torrent| torrent.info.files.clone())
+                .map(|torrent| TorrentDownload {
+                    id: torrent.id,
+                    name: torrent.name.as_str().into(),
+                    received: 0,
+                    uploaded: 0,
+                    length: torrent.process.info.length,
+                    active: true,
+                })
                 .collect(),
         ),
         Err(err) => {
