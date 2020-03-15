@@ -3,11 +3,11 @@
     "torrent": {
       "home": {
         "title": "Torrents",
-        "createLabel": "Create a new Torrent",
-        "createOrEditLabel": "Create or edit a Torrent",
+        "createLabel": "Host a new Torrent",
+        "createOrEditLabel": "Host or edit a Torrent",
         "notFound": "No Torrents found"
       },
-      "created": "A new Torrent is created with identifier {{ param }}",
+      "created": "A new Torrent is hosted with identifier {{ param }}",
       "updated": "A Torrent is updated with identifier {{ param }}",
       "deleted": "A Torrent is deleted with identifier {{ param }}",
       "delete": {
@@ -16,7 +16,8 @@
       "detail": {
         "title": "Torrent"
       },
-      "name": "Name"
+      "name": "Name",
+      "file": "Torrent File"
     }
   }
 }

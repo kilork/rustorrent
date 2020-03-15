@@ -3,11 +3,11 @@
     "torrent": {
       "home": {
         "title": "Torrents",
-        "createLabel": "Torrent erstellen",
-        "createOrEditLabel": "Torrent erstellen oder bearbeiten",
+        "createLabel": "Torrent aufnehmen",
+        "createOrEditLabel": "Torrent aufnehmen oder bearbeiten",
         "notFound": "Keine Torrents gefunden"
       },
-      "created": "Torrent erstellt mit ID {{ param }}",
+      "created": "Torrent gehostet mit ID {{ param }}",
       "updated": "Torrent aktualisiert mit ID {{ param }}",
       "deleted": "Torrent gelöscht mit ID {{ param }}",
       "delete": {
@@ -16,7 +16,8 @@
       "detail": {
         "title": "Torrent"
       },
-      "name": "Name"
+      "name": "Name",
+      "file": "Torrent Datei"
     }
   }
 }

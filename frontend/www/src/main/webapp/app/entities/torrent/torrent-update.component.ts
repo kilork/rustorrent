@@ -17,9 +17,12 @@ import { TorrentService } from './torrent.service';
 export class TorrentUpdateComponent implements OnInit {
   isSaving = false;
 
+  fileToUpload: File | null = null;
+
   editForm = this.fb.group({
     id: [],
-    name: []
+    name: [],
+    file: []
   });
 
   constructor(protected torrentService: TorrentService, protected activatedRoute: ActivatedRoute, private fb: FormBuilder) {}
@@ -47,8 +50,12 @@ export class TorrentUpdateComponent implements OnInit {
     if (torrent.id !== undefined) {
       this.subscribeToSaveResponse(this.torrentService.update(torrent));
     } else {
-      this.subscribeToSaveResponse(this.torrentService.create(torrent));
+      this.subscribeToSaveResponse(this.torrentService.upload(this.fileToUpload!));
     }
+  }
+
+  updateFile(files: FileList): void {
+    this.fileToUpload = files.item(0);
   }
 
   private createFromForm(): ITorrent {

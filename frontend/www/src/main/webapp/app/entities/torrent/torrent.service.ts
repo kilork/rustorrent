@@ -14,6 +14,7 @@ type EntityArrayResponseType = HttpResponse<ITorrent[]>;
 @Injectable({ providedIn: 'root' })
 export class TorrentService {
   public resourceUrl = SERVER_API_URL + 'api/torrents';
+  public uploadUrl = SERVER_API_URL + 'api/upload';
 
   constructor(protected http: HttpClient) {}
 
@@ -36,5 +37,11 @@ export class TorrentService {
 
   delete(id: string): Observable<HttpResponse<{}>> {
     return this.http.delete(`${this.resourceUrl}/${id}`, { observe: 'response' });
+  }
+
+  upload(torrent: File): Observable<EntityResponseType> {
+    const formData: FormData = new FormData();
+    formData.append('torrent', torrent, torrent.name);
+    return this.http.post(this.uploadUrl, formData, { observe: 'response' });
   }
 }
