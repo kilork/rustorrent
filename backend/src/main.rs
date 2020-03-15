@@ -45,11 +45,13 @@ mod cli;
 mod event_stream;
 mod login;
 mod model;
+mod torrents;
 mod uploads;
 
 use event_stream::*;
 use login::*;
 use model::*;
+use torrents::*;
 use uploads::*;
 
 lazy_static::lazy_static! {
