@@ -16,6 +16,7 @@ use bytes::Bytes;
 use dotenv::dotenv;
 use exitfailure::ExitFailure;
 use futures::StreamExt;
+use log::info;
 use log::{debug, error};
 use openid::{DiscoveredClient, Options, Token, Userinfo};
 use reqwest;
@@ -25,6 +26,7 @@ use rsbt_service::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    cmp::Ordering,
     collections::HashMap,
     pin::Pin,
     task::{Context, Poll},
@@ -113,16 +115,63 @@ struct Failure {
     error: String,
 }
 
-#[derive(Deserialize)]
 struct Paging {
     page: Option<usize>,
     size: Option<usize>,
-    sort: Option<String>,
+    sort: Vec<String>,
+}
+
+impl FromRequest for Paging {
+    type Config = ();
+    type Error = Error;
+    type Future = Pin<Box<dyn Future<Output = Result<Paging, Error>>>>;
+
+    fn from_request(req: &HttpRequest, _pl: &mut Payload) -> Self::Future {
+        let query_string = req.query_string().as_bytes().to_vec();
+
+        Box::pin(async move {
+            let mut page = None;
+            let mut size = None;
+            let mut sort = vec![];
+            for (key, value) in url::form_urlencoded::parse(&query_string).into_owned() {
+                match key.as_str() {
+                    "page" => match value.parse() {
+                        Ok(page_value) => page = Some(page_value),
+                        Err(err) => {
+                            return Err(actix_web::error::ErrorUnprocessableEntity(format!(
+                                "{}",
+                                err
+                            )))
+                        }
+                    },
+                    "size" => match value.parse() {
+                        Ok(size_value) => size = Some(size_value),
+                        Err(err) => {
+                            return Err(actix_web::error::ErrorUnprocessableEntity(format!(
+                                "{}",
+                                err
+                            )))
+                        }
+                    },
+                    "sort" => {
+                        sort.push(value);
+                    }
+                    other => {
+                        return Err(actix_web::error::ErrorUnprocessableEntity(format!(
+                            "Unexpected key: {}",
+                            other
+                        )))
+                    }
+                }
+            }
+            Ok(Paging { page, size, sort })
+        })
+    }
 }
 
 #[get("/torrents")]
 async fn torrent_list(
-    _paging: web::Query<Paging>,
+    paging: Paging,
     event_sender: web::Data<Mutex<Sender<RsbtCommand>>>,
     _user: User,
 ) -> impl Responder {
@@ -139,8 +188,8 @@ async fn torrent_list(
     }
 
     match receiver.await {
-        Ok(torrents) => HttpResponse::Ok().json::<Vec<_>>(
-            torrents
+        Ok(torrents) => {
+            let mut torrents: Vec<_> = torrents
                 .iter()
                 .map(|torrent| TorrentDownload {
                     id: torrent.id,
@@ -150,8 +199,44 @@ async fn torrent_list(
                     length: torrent.process.info.length,
                     active: true,
                 })
-                .collect(),
-        ),
+                .collect();
+            {
+                let mut fields_order: Box<dyn Fn(&TorrentDownload, &TorrentDownload) -> Ordering> =
+                    Box::new(|_, _| Ordering::Equal);
+
+                let mut sorted_fields = paging
+                    .sort
+                    .iter()
+                    .map(|x| x.split(','))
+                    .map(|mut x| (x.next(), x.next()));
+                while let Some((Some(field), order)) = sorted_fields.next() {
+                    info!("order by field {} {:?}", field, order);
+
+                    let mut field_order: Box<
+                        dyn Fn(&TorrentDownload, &TorrentDownload) -> Ordering,
+                    > = match field {
+                        "id" => Box::new(|a, b| a.id.cmp(&b.id)),
+                        "name" => Box::new(|a, b| a.name.cmp(&b.name)),
+                        _ => panic!(),
+                    };
+
+                    let descending = order == Some("desc");
+                    if descending {
+                        field_order = Box::new(move |a, b| field_order(a, b).reverse());
+                    }
+
+                    fields_order = Box::new(move |a, b| fields_order(a, b).then(field_order(a, b)));
+                }
+
+                torrents.sort_by(|a, b| fields_order(a, b));
+            }
+
+            let page = paging.page.unwrap_or_default();
+            let size = paging.size.unwrap_or(20);
+
+            HttpResponse::Ok()
+                .json::<Vec<_>>(torrents.iter().skip(page * size).take(size).collect())
+        }
         Err(err) => {
             error!("error in receiver: {}", err);
             HttpResponse::InternalServerError().json(Failure {
