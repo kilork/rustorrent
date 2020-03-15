@@ -31,6 +31,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use structopt::StructOpt;
 use tokio::{
     sync::{
         mpsc::{self, Receiver, Sender},
@@ -40,9 +41,14 @@ use tokio::{
 };
 use url::Url;
 
+mod cli;
+mod login;
 mod model;
+mod uploads;
 
+use login::*;
 use model::*;
+use uploads::*;
 
 lazy_static::lazy_static! {
 static ref RSBT_UI_HOST: String = std::env::var("RSBT_UI_HOST").unwrap_or_else(|_| "http://localhost:8080".to_string());
@@ -51,59 +57,6 @@ static ref RSBT_OPENID_CLIENT_ID: String = std::env::var("RSBT_OPENID_CLIENT_ID"
 static ref RSBT_OPENID_CLIENT_SECRET: String = std::env::var("RSBT_OPENID_CLIENT_SECRET").unwrap_or_else(|_| "web_app".to_string());
 static ref RSBT_OPENID_ISSUER: String = std::env::var("RSBT_OPENID_ISSUER").unwrap_or_else(|_| "http://keycloak:9080/auth/realms/jhipster".to_string());
 static ref RSBT_ALLOW: String = std::env::var("RSBT_ALLOW").unwrap_or_else(|_| "user@localhost".to_string());
-}
-
-#[derive(Serialize, Deserialize, Debug, Default, Clone)]
-#[serde(rename_all = "camelCase")]
-struct User {
-    id: String,
-    login: Option<String>,
-    first_name: Option<String>,
-    last_name: Option<String>,
-    email: Option<String>,
-    image_url: Option<String>,
-    activated: bool,
-    lang_key: Option<String>,
-    authorities: Vec<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-struct Logout {
-    id_token: String,
-    logout_url: Option<Url>,
-}
-
-impl FromRequest for User {
-    type Config = ();
-    type Error = Error;
-    type Future = Pin<Box<dyn Future<Output = Result<User, Error>>>>;
-
-    fn from_request(req: &HttpRequest, pl: &mut Payload) -> Self::Future {
-        let fut = Identity::from_request(req, pl);
-        let sessions: Option<&web::Data<RwLock<Sessions>>> = req.app_data();
-        if sessions.is_none() {
-            error!("sessions is none!");
-            return Box::pin(async { Err(ErrorUnauthorized("unauthorized")) });
-        }
-        let sessions = sessions.unwrap().clone();
-
-        Box::pin(async move {
-            if let Some(identity) = fut.await?.identity() {
-                if let Some(user) = sessions
-                    .read()
-                    .await
-                    .map
-                    .get(&identity)
-                    .map(|x| x.0.clone())
-                {
-                    return Ok(user);
-                }
-            };
-
-            Err(ErrorUnauthorized("unauthorized"))
-        })
-    }
 }
 
 struct Sessions {
@@ -246,170 +199,6 @@ async fn torrent_list(
     }
 }
 
-#[get("/upload")]
-async fn upload_form(_user: User) -> impl Responder {
-    HttpResponse::Ok()
-        .content_type("text/html")
-        .body(include_str!("../static/upload.html"))
-}
-
-#[post("/upload")]
-async fn upload(
-    _user: User,
-    event_sender: web::Data<Mutex<Sender<RsbtCommand>>>,
-    mut payload: Multipart,
-) -> Result<HttpResponse, Error> {
-    while let Some(item) = payload.next().await {
-        let mut field = item?;
-        let content_type = field.content_disposition().unwrap();
-        let filename = content_type.get_filename().unwrap();
-
-        let mut torrent = vec![];
-        while let Some(chunk) = field.next().await {
-            let data = chunk?;
-            torrent.extend(&data);
-        }
-
-        let mut event_sender = event_sender.lock().await;
-        if let Err(err) = event_sender
-            .send(RsbtCommand::AddTorrent(
-                RequestResponse::RequestOnly(torrent),
-                filename.to_string(),
-            ))
-            .await
-        {
-            error!("cannot send to torrent process: {}", err);
-            return Ok(HttpResponse::InternalServerError().json(Failure {
-                error: format!("cannot send to torrent process: {}", err),
-            }));
-        }
-    }
-    Ok(HttpResponse::Ok().into())
-}
-
-#[get("/oauth2/authorization/oidc")]
-async fn authorize(oidc_client: web::Data<DiscoveredClient>) -> impl Responder {
-    let auth_url = oidc_client.auth_url(&Options {
-        scope: Some("email".into()),
-        ..Default::default()
-    });
-
-    debug!("authorize: {}", auth_url);
-
-    HttpResponse::Found()
-        .header(http::header::LOCATION, auth_url.to_string())
-        .finish()
-}
-
-#[get("/account")]
-async fn account(user: User) -> impl Responder {
-    web::Json(user)
-}
-
-#[derive(Deserialize, Debug)]
-struct LoginQuery {
-    code: String,
-}
-
-async fn request_token(
-    oidc_client: web::Data<DiscoveredClient>,
-    query: web::Query<LoginQuery>,
-) -> Result<Option<(Token, Userinfo)>, ExitFailure> {
-    let mut token: Token = oidc_client.request_token(&query.code).await?.into();
-    if let Some(mut id_token) = token.id_token.as_mut() {
-        oidc_client.decode_token(&mut id_token)?;
-        oidc_client.validate_token(&id_token, None, None)?;
-        debug!("token: {:?}", id_token);
-    } else {
-        return Ok(None);
-    }
-    let userinfo = oidc_client.request_userinfo(&token).await?;
-
-    debug!("user info: {:?}", userinfo);
-    Ok(Some((token, userinfo)))
-}
-
-#[get("/login/oauth2/code/oidc")]
-async fn login(
-    oidc_client: web::Data<DiscoveredClient>,
-    query: web::Query<LoginQuery>,
-    sessions: web::Data<RwLock<Sessions>>,
-    identity: Identity,
-) -> impl Responder {
-    debug!("login: {:?}", query);
-
-    match request_token(oidc_client, query).await {
-        Ok(Some((token, userinfo))) => {
-            let id = uuid::Uuid::new_v4().to_string();
-
-            let login = userinfo.preferred_username.clone();
-            let email = userinfo.email.clone();
-
-            if email != Some(RSBT_ALLOW.to_string()) {
-                error!("email {:?} is not allowed", email);
-                return HttpResponse::Unauthorized().finish();
-            }
-
-            let user = User {
-                id: userinfo.sub.clone(),
-                login,
-                last_name: userinfo.family_name.clone(),
-                first_name: userinfo.name.clone(),
-                email,
-                activated: userinfo.email_verified,
-                image_url: userinfo.picture.clone().map(|x| x.to_string()),
-                lang_key: Some("en".to_string()),
-                authorities: vec!["ROLE_USER".to_string()], //FIXME: read from token
-            };
-
-            identity.remember(id.clone());
-            sessions
-                .write()
-                .await
-                .map
-                .insert(id, (user, token, userinfo));
-
-            HttpResponse::Found()
-                .header(http::header::LOCATION, host("/"))
-                .finish()
-        }
-        Ok(None) => {
-            error!("login error in call: no id_token found");
-
-            HttpResponse::Unauthorized().finish()
-        }
-        Err(err) => {
-            error!("login error in call: {:?}", err);
-
-            HttpResponse::Unauthorized().finish()
-        }
-    }
-}
-
-#[post("/logout")]
-async fn logout(
-    oidc_client: web::Data<DiscoveredClient>,
-    sessions: web::Data<RwLock<Sessions>>,
-    identity: Identity,
-) -> impl Responder {
-    if let Some(id) = identity.identity() {
-        identity.forget();
-        if let Some((user, token, _userinfo)) = sessions.write().await.map.remove(&id) {
-            debug!("logout user: {:?}", user);
-
-            let id_token = token.bearer.access_token;
-            let logout_url = oidc_client.config().end_session_endpoint.clone();
-
-            return HttpResponse::Ok().json(Logout {
-                id_token,
-                logout_url,
-            });
-        }
-    }
-
-    HttpResponse::Unauthorized().finish()
-}
-
 fn host(path: &str) -> String {
     RSBT_UI_HOST.clone() + path
 }
@@ -426,6 +215,8 @@ async fn stream(broadcaster: web::Data<RwLock<Broadcaster>>) -> impl Responder {
 
 #[actix_rt::main]
 async fn main() -> Result<(), ExitFailure> {
+    let cli = cli::Cli::from_args();
+
     dotenv().ok();
 
     env_logger::init();
@@ -500,7 +291,7 @@ async fn main() -> Result<(), ExitFailure> {
             .app_data(rsbt_app.clone())
             .app_data(sender.clone())
             .service(authorize)
-            .service(login)
+            .service(login_get)
             .service(
                 web::scope("/api")
                     .wrap_fn(|req, srv| {

@@ -30,6 +30,9 @@ pub struct Config {
     /// Download path
     #[structopt(long)]
     pub save_to: Option<String>,
+    /// Storage path
+    #[structopt(long)]
+    pub storage: Option<String>,
 }
 
 /// Global application settings
