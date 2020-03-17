@@ -28,10 +28,10 @@ pub struct Config {
     pub port_max: u16,
 
     /// Download path
-    #[structopt(long)]
+    #[structopt(long, env = "RSBT_PATH_DOWNLOAD")]
     pub save_to: Option<String>,
     /// Storage path
-    #[structopt(long)]
+    #[structopt(long, env = "RSBT_PATH_STORAGE")]
     pub storage: Option<String>,
 }
 

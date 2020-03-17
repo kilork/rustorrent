@@ -78,9 +78,9 @@ fn host(path: &str) -> String {
 
 #[actix_rt::main]
 async fn main() -> Result<(), ExitFailure> {
-    let cli = cli::Cli::from_args();
-
     dotenv().ok();
+
+    let cli = cli::Cli::from_args();
 
     env_logger::init();
 
