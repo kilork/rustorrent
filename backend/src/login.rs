@@ -42,7 +42,7 @@ impl FromRequest for User {
                     .await
                     .map
                     .get(&identity)
-                    .map(|x| x.0.clone())
+                    .map(|x| x.user.clone())
                 {
                     return Ok(user);
                 }
@@ -129,11 +129,14 @@ async fn login_get(
             };
 
             identity.remember(id.clone());
-            sessions
-                .write()
-                .await
-                .map
-                .insert(id, (user, token, userinfo));
+            sessions.write().await.map.insert(
+                id,
+                SessionUser {
+                    user,
+                    access_token: token.bearer.access_token.clone(),
+                    info: userinfo,
+                },
+            );
 
             HttpResponse::Found()
                 .header(http::header::LOCATION, host("/"))
@@ -160,10 +163,15 @@ async fn logout(
 ) -> impl Responder {
     if let Some(id) = identity.identity() {
         identity.forget();
-        if let Some((user, token, _userinfo)) = sessions.write().await.map.remove(&id) {
+        if let Some(SessionUser {
+            user,
+            access_token,
+            info,
+        }) = sessions.write().await.map.remove(&id)
+        {
             debug!("logout user: {:?}", user);
 
-            let id_token = token.bearer.access_token;
+            let id_token = access_token.clone();
             let logout_url = oidc_client.config().end_session_endpoint.clone();
 
             return HttpResponse::Ok().json(Logout {
@@ -174,4 +182,18 @@ async fn logout(
     }
 
     HttpResponse::Unauthorized().finish()
+}
+
+pub(crate) async fn connect_to_openid_provider() -> Result<DiscoveredClient, ExitFailure> {
+    let client_id = RSBT_OPENID_CLIENT_ID.to_string();
+    let client_secret = RSBT_OPENID_CLIENT_SECRET.to_string();
+    let redirect = Some(host("/login/oauth2/code/oidc"));
+    let issuer = reqwest::Url::parse(RSBT_OPENID_ISSUER.as_str())?;
+    debug!("redirect: {:?}", redirect);
+    debug!("issuer: {}", issuer);
+    let client = openid::Client::discover(client_id, client_secret, redirect, issuer).await?;
+
+    debug!("discovered config: {:?}", client.config());
+
+    Ok(client)
 }

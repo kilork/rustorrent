@@ -16,8 +16,7 @@ use bytes::Bytes;
 use dotenv::dotenv;
 use exitfailure::ExitFailure;
 use futures::StreamExt;
-use log::info;
-use log::{debug, error};
+use log::{debug, error, info};
 use openid::{DiscoveredClient, Options, Token, Userinfo};
 use reqwest;
 use rsbt_service::{
@@ -28,6 +27,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
     collections::HashMap,
+    path::PathBuf,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -45,12 +45,14 @@ mod cli;
 mod event_stream;
 mod login;
 mod model;
+mod session;
 mod torrents;
 mod uploads;
 
 use event_stream::*;
 use login::*;
 use model::*;
+use session::*;
 use torrents::*;
 use uploads::*;
 
@@ -61,10 +63,6 @@ static ref RSBT_OPENID_CLIENT_ID: String = std::env::var("RSBT_OPENID_CLIENT_ID"
 static ref RSBT_OPENID_CLIENT_SECRET: String = std::env::var("RSBT_OPENID_CLIENT_SECRET").unwrap_or_else(|_| "web_app".to_string());
 static ref RSBT_OPENID_ISSUER: String = std::env::var("RSBT_OPENID_ISSUER").unwrap_or_else(|_| "http://keycloak:9080/auth/realms/jhipster".to_string());
 static ref RSBT_ALLOW: String = std::env::var("RSBT_ALLOW").unwrap_or_else(|_| "user@localhost".to_string());
-}
-
-struct Sessions {
-    map: HashMap<String, (User, Token, Userinfo)>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -84,28 +82,18 @@ async fn main() -> Result<(), ExitFailure> {
 
     env_logger::init();
 
-    let client_id = RSBT_OPENID_CLIENT_ID.to_string();
-    let client_secret = RSBT_OPENID_CLIENT_SECRET.to_string();
-    let redirect = Some(host("/login/oauth2/code/oidc"));
-    let issuer = reqwest::Url::parse(RSBT_OPENID_ISSUER.as_str())?;
-    debug!("redirect: {:?}", redirect);
-    debug!("issuer: {}", issuer);
-    let client = openid::Client::discover(client_id, client_secret, redirect, issuer).await?;
-
-    debug!("discovered config: {:?}", client.config());
-
-    let client = web::Data::new(client);
-
     let settings = Settings::default().override_with(cli.config);
+
+    let client = connect_to_openid_provider().await?;
+    let client = web::Data::new(client);
 
     debug!("starting torrents process with settings: {:?}", settings);
 
-    let rsbt_app = web::Data::new(RsbtApp::new(settings));
     let broadcaster = web::Data::new(RwLock::new(Broadcaster::new()));
 
-    let sessions = web::Data::new(RwLock::new(Sessions {
-        map: HashMap::new(),
-    }));
+    let sessions = web::Data::new(RwLock::new(Sessions::new(&settings).await?));
+
+    let rsbt_app = web::Data::new(RsbtApp::new(settings));
 
     let broadcaster_timer = broadcaster.clone();
 
