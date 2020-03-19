@@ -105,6 +105,7 @@ async fn main() -> Result<(), ExitFailure> {
 
     debug!("starting torrents process with settings: {:?}", settings);
     let properties = settings.into();
+    debug!("properties: {:?}", properties);
 
     let broadcaster = web::Data::new(RwLock::new(Broadcaster::new()));
 

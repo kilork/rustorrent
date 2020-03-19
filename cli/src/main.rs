@@ -33,7 +33,7 @@ async fn main() -> Result<(), ExitFailure> {
 
     let properties: Properties = load_settings()?.override_with(cli.config).into();
 
-    debug!("calculated settings {:#?}", properties);
+    debug!("calculated properties {:#?}", properties);
 
     let app = RsbtApp::new(properties);
 
