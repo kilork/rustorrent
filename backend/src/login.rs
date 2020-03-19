@@ -35,7 +35,7 @@ impl FromRequest for User {
 
     fn from_request(req: &HttpRequest, pl: &mut Payload) -> Self::Future {
         let fut = Identity::from_request(req, pl);
-        let sessions: Option<&web::Data<RwLock<Sessions>>> = req.app_data();
+        let sessions: Option<&web::Data<Sessions>> = req.app_data();
 
         if sessions.is_none() {
             error!("sessions is none!");
@@ -47,9 +47,9 @@ impl FromRequest for User {
         Box::pin(async move {
             if let Some(identity) = fut.await?.identity() {
                 if let Some(user) = sessions
+                    .map
                     .read()
                     .await
-                    .map
                     .get(&identity)
                     .map(|x| x.user.clone())
                 {
@@ -108,7 +108,7 @@ async fn request_token(
 async fn login_get(
     oidc_client: web::Data<DiscoveredClient>,
     query: web::Query<LoginQuery>,
-    sessions: web::Data<RwLock<Sessions>>,
+    sessions: web::Data<Sessions>,
     identity: Identity,
 ) -> impl Responder {
     debug!("login: {:?}", query);
@@ -138,7 +138,7 @@ async fn login_get(
             };
 
             identity.remember(id.clone());
-            sessions.write().await.map.insert(
+            sessions.map.write().await.insert(
                 id,
                 SessionUser {
                     user,
@@ -167,7 +167,7 @@ async fn login_get(
 #[post("/logout")]
 async fn logout(
     oidc_client: web::Data<DiscoveredClient>,
-    sessions: web::Data<RwLock<Sessions>>,
+    sessions: web::Data<Sessions>,
     identity: Identity,
 ) -> impl Responder {
     if let Some(id) = identity.identity() {
@@ -176,7 +176,7 @@ async fn logout(
             user,
             access_token,
             info,
-        }) = sessions.write().await.map.remove(&id)
+        }) = sessions.map.write().await.remove(&id)
         {
             debug!("logout user: {:?}", user);
 

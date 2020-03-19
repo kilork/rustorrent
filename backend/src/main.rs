@@ -100,8 +100,14 @@ async fn main() -> Result<(), ExitFailure> {
 
     let settings = load_settings(&config_path).await?.override_with(cli.config);
 
-    let client = connect_to_openid_provider().await?;
-    let client = web::Data::new(client);
+    let local = cli.local;
+
+    let client = if !local {
+        let client = connect_to_openid_provider().await?;
+        Some(web::Data::new(client))
+    } else {
+        None
+    };
 
     debug!("starting torrents process with settings: {:?}", settings);
     let properties = settings.into();
@@ -109,7 +115,7 @@ async fn main() -> Result<(), ExitFailure> {
 
     let broadcaster = web::Data::new(RwLock::new(Broadcaster::new()));
 
-    let sessions = web::Data::new(RwLock::new(Sessions::new(&properties).await?));
+    let sessions = web::Data::new(Sessions::new(&properties, local).await?);
 
     let rsbt_app = web::Data::new(RsbtApp::new(properties));
 
@@ -158,7 +164,6 @@ async fn main() -> Result<(), ExitFailure> {
                     .secure(false),
             ))
             .app_data(broadcaster.clone())
-            .app_data(client.clone())
             .app_data(sessions.clone())
             .app_data(rsbt_app.clone())
             .app_data(sender.clone())
@@ -180,6 +185,9 @@ async fn main() -> Result<(), ExitFailure> {
                     .service(logout)
                     .service(stream),
             );
+        if let Some(client) = &client {
+            app = app.app_data(client.clone());
+        }
         #[cfg(feature = "ui")]
         {
             debug!("serving frontend files...");
