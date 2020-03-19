@@ -15,7 +15,7 @@ use std::{
     fmt::{Display, Formatter},
     net::{IpAddr, Ipv4Addr, SocketAddr},
     ops::Deref,
-    path::Path,
+    path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -57,4 +57,8 @@ pub const DEFAULT_CHANNEL_BUFFER: usize = 256;
 
 pub(crate) fn count_parts(total: usize, part_size: usize) -> usize {
     total / part_size + if total % part_size != 0 { 1 } else { 0 }
+}
+
+pub fn default_app_dir() -> PathBuf {
+    dirs::home_dir().unwrap().join(".rsbt")
 }

@@ -3,7 +3,7 @@ use crate::{errors::RsbtError, PEER_ID};
 
 use crate::{
     app::{download_torrent::DownloadTorrentEvent, TorrentProcess},
-    types::{torrent::TrackerAnnounce, Settings},
+    types::{torrent::TrackerAnnounce, Properties},
 };
 
 mod http;
@@ -16,7 +16,7 @@ enum Announce {
 }
 
 pub async fn announce_loop(
-    settings: Arc<Settings>,
+    properties: Arc<Properties>,
     torrent_process: Arc<TorrentProcess>,
 ) -> Result<(), RsbtError> {
     let announce_url = &torrent_process.torrent.announce_url;
@@ -34,10 +34,10 @@ pub async fn announce_loop(
     loop {
         let try_interval_to_query_tracker = match proto {
             Announce::Http => {
-                http::http_announce(settings.clone(), torrent_process.clone(), announce_url).await
+                http::http_announce(properties.clone(), torrent_process.clone(), announce_url).await
             }
             Announce::Udp => {
-                udp::udp_announce(settings.clone(), torrent_process.clone(), announce_url).await
+                udp::udp_announce(properties.clone(), torrent_process.clone(), announce_url).await
             }
             _ => return Ok(()),
         };

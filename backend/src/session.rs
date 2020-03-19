@@ -1,4 +1,5 @@
 use super::*;
+use rsbt_service::types::Properties;
 
 pub(crate) struct Sessions {
     storage_path: Option<PathBuf>,
@@ -6,7 +7,7 @@ pub(crate) struct Sessions {
 }
 
 impl Sessions {
-    pub(crate) async fn new(settings: &Settings) -> Result<Self, ExitFailure> {
+    pub(crate) async fn new(properties: &Properties) -> Result<Self, ExitFailure> {
         Ok(Self {
             storage_path: None,
             map: HashMap::new(),

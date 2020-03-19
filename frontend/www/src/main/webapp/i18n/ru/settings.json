@@ -1,5 +1,5 @@
 {
-  "settings": {
+  "properties": {
     "title": "Настройки пользователя для [<strong>{{username}}</strong>]",
     "form": {
       "firstname": "Имя",

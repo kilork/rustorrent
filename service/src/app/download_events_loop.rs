@@ -2,7 +2,7 @@ use super::*;
 use std::path::PathBuf;
 
 pub(crate) async fn download_events_loop(
-    settings: Arc<Settings>,
+    properties: Arc<Properties>,
     mut events: Receiver<RsbtCommand>,
 ) -> Result<(), RsbtError> {
     let mut torrents = vec![];
@@ -52,7 +52,7 @@ pub(crate) async fn download_events_loop(
 
                     let _ = spawn_and_log_error(
                         download_torrent(
-                            settings.clone(),
+                            properties.clone(),
                             torrent_process.clone(),
                             broker_receiver,
                         ),

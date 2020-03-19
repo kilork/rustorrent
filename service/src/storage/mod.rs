@@ -1,5 +1,5 @@
 use super::*;
-use crate::types::Settings;
+use crate::types::Properties;
 use app::TorrentProcess;
 use flat_storage::FlatStorage;
 use flat_storage_mmap::MmapFlatStorage;
@@ -33,7 +33,7 @@ pub struct TorrentStorageState {
 }
 
 impl TorrentStorage {
-    pub fn new(settings: Arc<Settings>, torrent_process: Arc<TorrentProcess>) -> Self {
+    pub fn new(properties: Arc<Properties>, torrent_process: Arc<TorrentProcess>) -> Self {
         let (sender, mut channel_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
         let mut pieces_left = torrent_process.info.pieces.len();
 
@@ -49,11 +49,7 @@ impl TorrentStorage {
             let mut rt = Builder::new().basic_scheduler().enable_io().build()?;
             let mut downloaded = vec![];
             let mmap_storage = Arc::new(MmapFlatStorage::create(
-                settings
-                    .config
-                    .save_to
-                    .clone()
-                    .unwrap_or_else(|| ".".into()),
+                properties.save_to.clone(),
                 info.piece_length,
                 info.files.clone(),
                 &downloaded,

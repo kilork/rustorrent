@@ -22,17 +22,19 @@ use reqwest;
 use rsbt_service::{
     app::{RequestResponse, RsbtApp, RsbtCommand},
     types::Settings,
+    RsbtError,
 };
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
     collections::HashMap,
-    path::PathBuf,
+    path::{Path, PathBuf},
     pin::Pin,
     task::{Context, Poll},
 };
 use structopt::StructOpt;
 use tokio::{
+    fs,
     sync::{
         mpsc::{self, Receiver, Sender},
         oneshot, Mutex, RwLock,
@@ -74,6 +76,15 @@ fn host(path: &str) -> String {
     RSBT_UI_HOST.clone() + path
 }
 
+async fn load_settings<P: AsRef<Path>>(config_path: P) -> Result<Settings, std::io::Error> {
+    let config_file = config_path.as_ref().join("rsbt.toml");
+    if !config_file.is_file() {
+        return Ok(Settings::default());
+    }
+    let config_file = fs::read_to_string(config_file).await?;
+    Ok(toml::from_str(&config_file)?)
+}
+
 #[actix_rt::main]
 async fn main() -> Result<(), ExitFailure> {
     dotenv().ok();
@@ -82,18 +93,24 @@ async fn main() -> Result<(), ExitFailure> {
 
     env_logger::init();
 
-    let settings = Settings::default().override_with(cli.config);
+    let config_path = cli
+        .config_path
+        .map(PathBuf::from)
+        .unwrap_or_else(rsbt_service::default_app_dir);
+
+    let settings = load_settings(&config_path).await?.override_with(cli.config);
 
     let client = connect_to_openid_provider().await?;
     let client = web::Data::new(client);
 
     debug!("starting torrents process with settings: {:?}", settings);
+    let properties = settings.into();
 
     let broadcaster = web::Data::new(RwLock::new(Broadcaster::new()));
 
-    let sessions = web::Data::new(RwLock::new(Sessions::new(&settings).await?));
+    let sessions = web::Data::new(RwLock::new(Sessions::new(&properties).await?));
 
-    let rsbt_app = web::Data::new(RsbtApp::new(settings));
+    let rsbt_app = web::Data::new(RsbtApp::new(properties));
 
     let broadcaster_timer = broadcaster.clone();
 

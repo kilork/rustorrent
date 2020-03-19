@@ -8,7 +8,7 @@ use crate::{
         message::{Message, MessageCodec},
         peer::{Handshake, Peer},
         torrent::Torrent,
-        Settings,
+        Properties,
     },
     SHA1_SIZE,
 };
@@ -34,7 +34,7 @@ use peer_loop_message::PeerLoopMessage;
 use select_new_peer::select_new_peer;
 
 pub struct RsbtApp {
-    pub settings: Arc<Settings>,
+    pub properties: Arc<Properties>,
 }
 
 #[derive(Clone)]
@@ -148,9 +148,9 @@ pub(crate) enum TorrentDownloadMode {
 }
 
 impl RsbtApp {
-    pub fn new(settings: Settings) -> Self {
-        let settings = Arc::new(settings);
-        Self { settings }
+    pub fn new(properties: Properties) -> Self {
+        let properties = Arc::new(properties);
+        Self { properties }
     }
 
     pub async fn processing_loop(
@@ -158,15 +158,9 @@ impl RsbtApp {
         sender: Sender<RsbtCommand>,
         receiver: Receiver<RsbtCommand>,
     ) -> Result<(), RsbtError> {
-        let config = &self.settings.config;
+        let addr = SocketAddr::new(self.properties.listen, self.properties.port);
 
-        let listen = config
-            .listen
-            .unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
-
-        let addr = SocketAddr::new(listen, config.port);
-
-        let download_events = download_events_loop(self.settings.clone(), receiver);
+        let download_events = download_events_loop(self.properties.clone(), receiver);
 
         let accept_incoming_connections = accept_connections_loop(addr, sender.clone());
 

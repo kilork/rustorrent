@@ -38,3 +38,4 @@ structopt = "0.3"
 tokio = { version = "0.2", features = ["full"] }
 url = "2.1"
 uuid = { version = "0.8", features = [ "v4" ] }
+toml = "0.5"
