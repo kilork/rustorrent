@@ -15,6 +15,10 @@ impl Sessions {
             map: RwLock::new(HashMap::new()),
         })
     }
+
+    pub(crate) fn is_local(&self) -> bool {
+        self.local
+    }
 }
 #[derive(Serialize, Deserialize)]
 pub(crate) struct SessionUser {

@@ -17,7 +17,9 @@ pub(crate) struct User {
 lazy_static::lazy_static! {
     static ref LOCAL_USER: User = User {
         id: "0".into(),
-        login: Some("root".into()),..Default::default()
+        login: Some("root".into()),
+        email: Some("root@localhost".into()),
+        ..Default::default()
     };
 }
 
@@ -34,7 +36,6 @@ impl FromRequest for User {
     type Future = Pin<Box<dyn Future<Output = Result<User, Error>>>>;
 
     fn from_request(req: &HttpRequest, pl: &mut Payload) -> Self::Future {
-        let fut = Identity::from_request(req, pl);
         let sessions: Option<&web::Data<Sessions>> = req.app_data();
 
         if sessions.is_none() {
@@ -43,6 +44,12 @@ impl FromRequest for User {
         }
 
         let sessions = sessions.cloned().unwrap();
+
+        if sessions.is_local() {
+            return Box::pin(async { Ok(LOCAL_USER.clone()) });
+        }
+
+        let fut = Identity::from_request(req, pl);
 
         Box::pin(async move {
             if let Some(identity) = fut.await?.identity() {
