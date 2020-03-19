@@ -86,22 +86,24 @@ async fn torrent_list(
                 })
                 .collect();
             {
-                let mut fields_order: Box<dyn Fn(&TorrentDownload, &TorrentDownload) -> Ordering> =
+                type TD<'a> = &'a TorrentDownload<'a>;
+                let mut fields_order: Box<dyn Fn(TD, TD) -> Ordering> =
                     Box::new(|_, _| Ordering::Equal);
-
                 let mut sorted_fields = paging
                     .sort
                     .iter()
                     .map(|x| x.split(','))
                     .map(|mut x| (x.next(), x.next()));
+
+                let id_comparator = |a: TD, b: TD| a.id.cmp(&b.id);
+                let name_comparator = |a: TD, b: TD| a.name.cmp(&b.name);
+
                 while let Some((Some(field), order)) = sorted_fields.next() {
                     info!("order by field {} {:?}", field, order);
 
-                    let mut field_order: Box<
-                        dyn Fn(&TorrentDownload, &TorrentDownload) -> Ordering,
-                    > = match field {
-                        "id" => Box::new(|a, b| a.id.cmp(&b.id)),
-                        "name" => Box::new(|a, b| a.name.cmp(&b.name)),
+                    let mut field_order: Box<dyn Fn(TD, TD) -> Ordering> = match field {
+                        "id" => Box::new(id_comparator),
+                        "name" => Box::new(name_comparator),
                         _ => panic!(),
                     };
 

@@ -14,6 +14,13 @@ pub(crate) struct User {
     pub(crate) authorities: Vec<String>,
 }
 
+lazy_static::lazy_static! {
+    static ref LOCAL_USER: User = User {
+        id: "0".into(),
+        login: Some("root".into()),..Default::default()
+    };
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Logout {
@@ -29,11 +36,13 @@ impl FromRequest for User {
     fn from_request(req: &HttpRequest, pl: &mut Payload) -> Self::Future {
         let fut = Identity::from_request(req, pl);
         let sessions: Option<&web::Data<RwLock<Sessions>>> = req.app_data();
+
         if sessions.is_none() {
             error!("sessions is none!");
             return Box::pin(async { Err(ErrorUnauthorized("unauthorized")) });
         }
-        let sessions = sessions.unwrap().clone();
+
+        let sessions = sessions.cloned().unwrap();
 
         Box::pin(async move {
             if let Some(identity) = fut.await?.identity() {

@@ -12,4 +12,7 @@ pub(crate) struct Cli {
     /// Do not save session cookie to storage.
     #[structopt(long)]
     pub(crate) no_session_cookie: bool,
+    /// Local run without oauth2.
+    #[structopt(long)]
+    pub(crate) local: bool,
 }
