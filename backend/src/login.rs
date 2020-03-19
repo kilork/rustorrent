@@ -19,6 +19,9 @@ lazy_static::lazy_static! {
         id: "0".into(),
         login: Some("root".into()),
         email: Some("root@localhost".into()),
+        lang_key: Some("en".into()),
+        activated: true,
+        authorities: vec!["ROLE_USER".into(), "ROLE_LOCAL".into()],
         ..Default::default()
     };
 }
