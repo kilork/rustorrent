@@ -1,16 +1,15 @@
 use super::*;
-use crate::{errors::RsbtError, types::torrent::parse_torrent, PEER_ID};
-
 use crate::{
+    errors::RsbtError,
     messages::{bit_by_index, index_in_bitarray},
     types::{
         info::TorrentInfo,
         message::{Message, MessageCodec},
         peer::{Handshake, Peer},
-        torrent::Torrent,
+        torrent::{parse_torrent, Torrent},
         Properties,
     },
-    SHA1_SIZE,
+    PEER_ID, SHA1_SIZE,
 };
 
 mod accept_connections_loop;
@@ -164,9 +163,7 @@ impl RsbtApp {
 
         let accept_incoming_connections = accept_connections_loop(addr, sender.clone());
 
-        if let Err(err) = try_join(accept_incoming_connections, download_events).await {
-            return Err(err);
-        }
+        join(accept_incoming_connections, download_events).await;
 
         Ok(())
     }
