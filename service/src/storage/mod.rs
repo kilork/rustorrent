@@ -68,8 +68,24 @@ impl TorrentStorageState {
     }
 
     async fn save<P: AsRef<Path>>(&self, state_file: P) -> Result<(), RsbtError> {
-        let f = File::create(state_file).await?;
-        self.write_to_file(f).await
+        let state_file_ref = &state_file.as_ref();
+        let f = File::create(&state_file).await.with_context(|err| {
+            format!(
+                "cannot create state file {}: {}",
+                state_file_ref.to_string_lossy(),
+                err
+            )
+        })?;
+        self.write_to_file(f)
+            .await
+            .with_context(|err| {
+                format!(
+                    "cannot write state file {}: {}",
+                    state_file.as_ref().to_string_lossy(),
+                    err
+                )
+            })
+            .map_err(|x| x.into())
     }
 }
 
@@ -96,7 +112,15 @@ async fn prepare_storage_state<P: AsRef<Path>>(
     torrent_storage_state_file.set_extension("torrent.state");
 
     let torrent_storage_state = if torrent_storage_state_file.is_file() {
-        let data = fs::read(&torrent_storage_state_file).await?;
+        let data = fs::read(&torrent_storage_state_file)
+            .await
+            .with_context(|err| {
+                format!(
+                    "cannot read torrent state file {}: {}",
+                    storage_torrent_file.to_string_lossy(),
+                    err
+                )
+            })?;
         TorrentStorageState::from_reader(data.as_slice())?
     } else {
         let state = TorrentStorageState {
