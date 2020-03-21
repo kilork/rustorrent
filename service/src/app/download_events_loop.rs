@@ -50,7 +50,6 @@ pub(crate) async fn download_events_loop(
                         active: true,
                         process: torrent_process.clone(),
                     };
-                    torrents.push(torrent_download.clone());
 
                     let torrent_storage = match TorrentStorage::new(
                         properties.clone(),
@@ -68,16 +67,17 @@ pub(crate) async fn download_events_loop(
                         }
                     };
 
+                    if let Err(err) = request_response.response(Ok(torrent_download.clone())) {
+                        error!("cannot send response for add torrent: {}", err);
+                    }
+
+                    torrents.push(torrent_download);
                     tokio::spawn(download_torrent(
                         properties.clone(),
                         torrent_storage,
                         torrent_process.clone(),
                         broker_receiver,
                     ));
-
-                    if let Err(err) = request_response.response(Ok(torrent_download)) {
-                        error!("cannot send response for add torrent: {}", err);
-                    }
                 }
             }
             RsbtCommand::TorrentHandshake {

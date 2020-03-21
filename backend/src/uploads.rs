@@ -56,7 +56,7 @@ async fn upload(
             Ok(Err(err)) => {
                 error!("error in update call: {}", err);
                 HttpResponse::InternalServerError().json(Failure {
-                    error: format!("cannot add torrent torrent process: {}", err),
+                    error: format!("cannot add torrent process: {}", err),
                 })
             }
             Err(err) => {
