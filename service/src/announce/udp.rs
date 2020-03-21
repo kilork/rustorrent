@@ -7,17 +7,11 @@ use tokio::{net::lookup_host, time};
 const UDP_PREFIX: &str = "udp://";
 
 pub(crate) async fn udp_announce(
-    settings: Arc<Settings>,
+    properties: Arc<Properties>,
     torrent_process: Arc<TorrentProcess>,
     announce_url: &str,
 ) -> Result<Duration, RsbtError> {
-    let config = &settings.config;
-
-    let listen = config
-        .listen
-        .unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
-
-    let addr = SocketAddr::new(listen, config.port);
+    let addr = SocketAddr::new(properties.listen, properties.port);
     let udp_socket = UdpSocket::bind(addr).await?;
 
     let announce_url = &announce_url[UDP_PREFIX.len()..];
@@ -50,7 +44,7 @@ pub(crate) async fn udp_announce(
                 {
                     let request = UdpTrackerRequest::announce(
                         connection_id,
-                        settings,
+                        properties,
                         torrent_process.clone(),
                     );
                     debug!("sending udp tracker announce request: {:?}", request);

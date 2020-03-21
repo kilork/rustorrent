@@ -1,16 +1,23 @@
 use super::*;
+use rsbt_service::types::Properties;
 
 pub(crate) struct Sessions {
+    local: bool,
     storage_path: Option<PathBuf>,
-    pub(crate) map: HashMap<String, SessionUser>,
+    pub(crate) map: RwLock<HashMap<String, SessionUser>>,
 }
 
 impl Sessions {
-    pub(crate) async fn new(settings: &Settings) -> Result<Self, ExitFailure> {
+    pub(crate) async fn new(properties: &Properties, local: bool) -> Result<Self, ExitFailure> {
         Ok(Self {
+            local,
             storage_path: None,
-            map: HashMap::new(),
+            map: RwLock::new(HashMap::new()),
         })
+    }
+
+    pub(crate) fn is_local(&self) -> bool {
+        self.local
     }
 }
 #[derive(Serialize, Deserialize)]

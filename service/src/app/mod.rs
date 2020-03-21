@@ -1,16 +1,15 @@
 use super::*;
-use crate::{errors::RsbtError, types::torrent::parse_torrent, PEER_ID};
-
 use crate::{
+    errors::RsbtError,
     messages::{bit_by_index, index_in_bitarray},
     types::{
         info::TorrentInfo,
         message::{Message, MessageCodec},
         peer::{Handshake, Peer},
-        torrent::Torrent,
-        Settings,
+        torrent::{parse_torrent, Torrent},
+        Properties,
     },
-    SHA1_SIZE,
+    PEER_ID, SHA1_SIZE,
 };
 
 mod accept_connections_loop;
@@ -33,8 +32,10 @@ use peer_loop::peer_loop;
 use peer_loop_message::PeerLoopMessage;
 use select_new_peer::select_new_peer;
 
+const TORRENTS_TOML: &str = "torrents.toml";
+
 pub struct RsbtApp {
-    pub settings: Arc<Settings>,
+    pub properties: Arc<Properties>,
 }
 
 #[derive(Clone)]
@@ -109,7 +110,7 @@ impl<T, R> RequestResponse<T, R> {
 
 pub enum RsbtCommand {
     AddTorrent(
-        RequestResponse<Vec<u8>, Result<Arc<TorrentProcess>, RsbtError>>,
+        RequestResponse<Vec<u8>, Result<TorrentDownload, RsbtError>>,
         String,
     ),
     TorrentHandshake {
@@ -147,10 +148,15 @@ pub(crate) enum TorrentDownloadMode {
     Final,
 }
 
+#[derive(Serialize, Deserialize, Default)]
+pub struct CurrentTorrents {
+    pub torrents: Vec<String>,
+}
+
 impl RsbtApp {
-    pub fn new(settings: Settings) -> Self {
-        let settings = Arc::new(settings);
-        Self { settings }
+    pub fn new(properties: Properties) -> Self {
+        let properties = Arc::new(properties);
+        Self { properties }
     }
 
     pub async fn processing_loop(
@@ -158,23 +164,34 @@ impl RsbtApp {
         sender: Sender<RsbtCommand>,
         receiver: Receiver<RsbtCommand>,
     ) -> Result<(), RsbtError> {
-        let config = &self.settings.config;
+        let addr = SocketAddr::new(self.properties.listen, self.properties.port);
 
-        let listen = config
-            .listen
-            .unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)));
-
-        let addr = SocketAddr::new(listen, config.port);
-
-        let download_events = download_events_loop(self.settings.clone(), receiver);
+        let download_events = download_events_loop(self.properties.clone(), receiver);
 
         let accept_incoming_connections = accept_connections_loop(addr, sender.clone());
 
-        if let Err(err) = try_join(accept_incoming_connections, download_events).await {
-            return Err(err);
-        }
+        join(accept_incoming_connections, download_events).await;
 
         Ok(())
+    }
+
+    pub async fn init_storage(&self) -> Result<CurrentTorrents, RsbtError> {
+        let properties = &self.properties;
+        if !properties.save_to.exists() {
+            fs::create_dir_all(&properties.save_to).await?;
+        }
+        if !properties.storage.exists() {
+            fs::create_dir_all(&properties.storage).await?;
+        }
+
+        let torrents_path = properties.storage.join(TORRENTS_TOML);
+
+        if torrents_path.is_file() {
+            let torrents_toml = fs::read_to_string(torrents_path).await?;
+            return Ok(toml::from_str(&torrents_toml)?);
+        }
+
+        Ok(Default::default())
     }
 
     pub async fn download<P: AsRef<Path>>(&self, torrent_file: P) -> Result<(), RsbtError> {

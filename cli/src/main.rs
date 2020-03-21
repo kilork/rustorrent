@@ -1,7 +1,10 @@
 use env_logger::Builder as LoggerBuilder;
 use exitfailure::ExitFailure;
 use log::{debug, info, Level};
-use rsbt_service::{app::RsbtApp, types::Settings};
+use rsbt_service::{
+    app::RsbtApp,
+    types::{Properties, Settings},
+};
 
 mod cli;
 
@@ -28,11 +31,11 @@ async fn main() -> Result<(), ExitFailure> {
 
     info!("starting torrent client");
 
-    let settings = load_settings()?.override_with(cli.config);
+    let properties: Properties = load_settings()?.override_with(cli.config).into();
 
-    debug!("calculated settings {:#?}", settings);
+    debug!("calculated properties {:#?}", properties);
 
-    let app = RsbtApp::new(settings);
+    let app = RsbtApp::new(properties);
 
     app.download(cli.torrent).await?;
 

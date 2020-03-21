@@ -7,14 +7,13 @@ fn url_encode(data: &[u8]) -> String {
 }
 
 pub(crate) async fn http_announce(
-    settings: Arc<Settings>,
+    properties: Arc<Properties>,
     torrent_process: Arc<TorrentProcess>,
     announce_url: &str,
 ) -> Result<Duration, RsbtError> {
     let client: Client<_> = Client::new();
 
     let left = torrent_process.info.len();
-    let config = &settings.config;
     let mut url = {
         format!(
             "{}?info_hash={}&peer_id={}&left={}&port={}",
@@ -22,11 +21,11 @@ pub(crate) async fn http_announce(
             url_encode(&torrent_process.hash_id[..]),
             url_encode(&PEER_ID[..]),
             left,
-            config.port,
+            properties.port,
         )
     };
 
-    if let Some(compact) = config.compact {
+    if let Some(compact) = properties.compact {
         url += &format!("&compact={}", if compact { 1 } else { 0 });
     }
 

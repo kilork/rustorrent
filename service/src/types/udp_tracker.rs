@@ -43,7 +43,7 @@ impl UdpTrackerRequest {
 
     pub(crate) fn announce(
         connection_id: i64,
-        settings: Arc<Settings>,
+        properties: Arc<Properties>,
         torrent_process: Arc<TorrentProcess>,
     ) -> Self {
         let left = torrent_process.info.len() as i64;
@@ -62,7 +62,7 @@ impl UdpTrackerRequest {
                 extensions: 0,
                 num_want: -1,
                 key: random(),
-                port: settings.config.port,
+                port: properties.port,
             },
             authentication: None,
             request_string: None,

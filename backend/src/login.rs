@@ -14,6 +14,18 @@ pub(crate) struct User {
     pub(crate) authorities: Vec<String>,
 }
 
+lazy_static::lazy_static! {
+    static ref LOCAL_USER: User = User {
+        id: "0".into(),
+        login: Some("root".into()),
+        email: Some("root@localhost".into()),
+        lang_key: Some("en".into()),
+        activated: true,
+        authorities: vec!["ROLE_USER".into(), "ROLE_LOCAL".into()],
+        ..Default::default()
+    };
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Logout {
@@ -27,20 +39,27 @@ impl FromRequest for User {
     type Future = Pin<Box<dyn Future<Output = Result<User, Error>>>>;
 
     fn from_request(req: &HttpRequest, pl: &mut Payload) -> Self::Future {
-        let fut = Identity::from_request(req, pl);
-        let sessions: Option<&web::Data<RwLock<Sessions>>> = req.app_data();
+        let sessions: Option<&web::Data<Sessions>> = req.app_data();
+
         if sessions.is_none() {
             error!("sessions is none!");
             return Box::pin(async { Err(ErrorUnauthorized("unauthorized")) });
         }
-        let sessions = sessions.unwrap().clone();
+
+        let sessions = sessions.cloned().unwrap();
+
+        if sessions.is_local() {
+            return Box::pin(async { Ok(LOCAL_USER.clone()) });
+        }
+
+        let fut = Identity::from_request(req, pl);
 
         Box::pin(async move {
             if let Some(identity) = fut.await?.identity() {
                 if let Some(user) = sessions
+                    .map
                     .read()
                     .await
-                    .map
                     .get(&identity)
                     .map(|x| x.user.clone())
                 {
@@ -99,7 +118,7 @@ async fn request_token(
 async fn login_get(
     oidc_client: web::Data<DiscoveredClient>,
     query: web::Query<LoginQuery>,
-    sessions: web::Data<RwLock<Sessions>>,
+    sessions: web::Data<Sessions>,
     identity: Identity,
 ) -> impl Responder {
     debug!("login: {:?}", query);
@@ -129,7 +148,7 @@ async fn login_get(
             };
 
             identity.remember(id.clone());
-            sessions.write().await.map.insert(
+            sessions.map.write().await.insert(
                 id,
                 SessionUser {
                     user,
@@ -158,7 +177,7 @@ async fn login_get(
 #[post("/logout")]
 async fn logout(
     oidc_client: web::Data<DiscoveredClient>,
-    sessions: web::Data<RwLock<Sessions>>,
+    sessions: web::Data<Sessions>,
     identity: Identity,
 ) -> impl Responder {
     if let Some(id) = identity.identity() {
@@ -167,7 +186,7 @@ async fn logout(
             user,
             access_token,
             info,
-        }) = sessions.write().await.map.remove(&id)
+        }) = sessions.map.write().await.remove(&id)
         {
             debug!("logout user: {:?}", user);
 

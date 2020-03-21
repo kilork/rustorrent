@@ -1,5 +1,5 @@
 use futures::{
-    future::{try_join, AbortHandle, Abortable},
+    future::{join, AbortHandle, Abortable},
     prelude::*,
     stream::SplitSink,
     try_join,
@@ -8,6 +8,7 @@ use http_body::Body;
 use hyper::Client;
 use log::{debug, error};
 use percent_encoding::{percent_encode, percent_encode_byte, NON_ALPHANUMERIC};
+use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
 use std::{
     collections::HashMap,
@@ -15,11 +16,12 @@ use std::{
     fmt::{Display, Formatter},
     net::{IpAddr, Ipv4Addr, SocketAddr},
     ops::Deref,
-    path::Path,
+    path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, Instant},
 };
 use tokio::{
+    fs,
     net::{TcpListener, TcpStream, UdpSocket},
     prelude::*,
     sync::{
@@ -57,4 +59,8 @@ pub const DEFAULT_CHANNEL_BUFFER: usize = 256;
 
 pub(crate) fn count_parts(total: usize, part_size: usize) -> usize {
     total / part_size + if total % part_size != 0 { 1 } else { 0 }
+}
+
+pub fn default_app_dir() -> PathBuf {
+    dirs::home_dir().unwrap().join(".rsbt")
 }
