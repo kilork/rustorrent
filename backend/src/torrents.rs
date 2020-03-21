@@ -76,7 +76,7 @@ async fn torrent_list(
         Ok(torrents) => {
             let mut torrents: Vec<_> = torrents
                 .iter()
-                .map(|torrent| TorrentDownload {
+                .map(|torrent| BackendTorrentDownload {
                     id: torrent.id,
                     name: torrent.name.as_str().into(),
                     received: 0,
@@ -86,7 +86,7 @@ async fn torrent_list(
                 })
                 .collect();
             {
-                type TD<'a> = &'a TorrentDownload<'a>;
+                type TD<'a> = &'a BackendTorrentDownload<'a>;
                 let mut fields_order: Box<dyn Fn(TD, TD) -> Ordering> =
                     Box::new(|_, _| Ordering::Equal);
                 let mut sorted_fields = paging

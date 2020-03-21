@@ -2,7 +2,7 @@ use serde::Serialize;
 use std::borrow::Cow;
 
 #[derive(Serialize)]
-pub struct TorrentDownload<'a> {
+pub struct BackendTorrentDownload<'a> {
     pub id: usize,
     pub name: Cow<'a, str>,
     pub received: usize,
@@ -12,4 +12,4 @@ pub struct TorrentDownload<'a> {
 }
 
 #[derive(Serialize)]
-pub struct TorrentDownloadDetail {}
+pub struct BackendTorrentDownloadDetail {}

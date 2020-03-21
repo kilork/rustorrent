@@ -45,7 +45,7 @@ async fn upload(
         }
 
         return Ok(match receiver.await {
-            Ok(Ok(torrent)) => HttpResponse::Ok().json(TorrentDownload {
+            Ok(Ok(torrent)) => HttpResponse::Ok().json(BackendTorrentDownload {
                 id: torrent.id,
                 name: torrent.name.as_str().into(),
                 received: 0,
