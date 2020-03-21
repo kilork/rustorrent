@@ -33,7 +33,9 @@ pub(crate) async fn download_events_loop(
                     handshake.extend_from_slice(&PEER_ID);
 
                     let (broker_sender, broker_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
+
                     id += 1;
+
                     let torrent_process = Arc::new(TorrentProcess {
                         info,
                         hash_id,
@@ -44,22 +46,36 @@ pub(crate) async fn download_events_loop(
 
                     let torrent_download = TorrentDownload {
                         id,
-                        name,
+                        name: name.clone(),
                         active: true,
                         process: torrent_process.clone(),
                     };
-                    torrents.push(torrent_download);
+                    torrents.push(torrent_download.clone());
 
-                    let _ = spawn_and_log_error(
-                        download_torrent(
-                            properties.clone(),
-                            torrent_process.clone(),
-                            broker_receiver,
-                        ),
-                        || "download_events_loop: add torrent failed".to_string(),
-                    );
+                    let torrent_storage = match TorrentStorage::new(
+                        properties.clone(),
+                        name,
+                        torrent_process.clone(),
+                    )
+                    .await
+                    {
+                        Ok(torrent_storage) => torrent_storage,
+                        Err(err) => {
+                            if let Err(err) = request_response.response(Err(err)) {
+                                error!("cannot send response for add torrent: {}", err);
+                            }
+                            continue;
+                        }
+                    };
 
-                    if let Err(err) = request_response.response(Ok(torrent_process)) {
+                    tokio::spawn(download_torrent(
+                        properties.clone(),
+                        torrent_storage,
+                        torrent_process.clone(),
+                        broker_receiver,
+                    ));
+
+                    if let Err(err) = request_response.response(Ok(torrent_download)) {
                         error!("cannot send response for add torrent: {}", err);
                     }
                 }

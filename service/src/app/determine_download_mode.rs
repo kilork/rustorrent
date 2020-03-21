@@ -15,7 +15,7 @@ pub(crate) fn determine_download_mode(
         })
         .count();
 
-    let final_mode = pieces_left < connected_count;
+    let final_mode = (pieces_left as usize) < connected_count;
 
     if final_mode {
         debug!("[{}] select piece in final mode", peer_id);

@@ -59,11 +59,10 @@ impl Display for DownloadTorrentEvent {
 
 pub(crate) async fn download_torrent(
     properties: Arc<Properties>,
+    mut torrent_storage: TorrentStorage,
     torrent_process: Arc<TorrentProcess>,
     mut broker_receiver: Receiver<DownloadTorrentEvent>,
-) -> Result<(), RsbtError> {
-    let mut torrent_storage = TorrentStorage::new(properties.clone(), torrent_process.clone());
-
+) {
     let (abort_handle, abort_registration) = AbortHandle::new_pair();
 
     let announce_loop = Abortable::new(
@@ -257,6 +256,4 @@ pub(crate) async fn download_torrent(
     };
 
     debug!("download_torrent done");
-
-    Ok(())
 }

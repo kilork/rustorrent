@@ -30,15 +30,14 @@
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=rsbt",
-                    "--package=rsbt"
+                    "--bin=rsbt"
                 ],
                 "filter": {
                     "name": "rsbt",
                     "kind": "bin"
                 }
             },
-            "args": ["-vvv", "${workspaceFolder}/rsbt/tests/ferris.gif.torrent"],
+            "args": ["--local"],
             "cwd": "${workspaceFolder}"
         },
         {

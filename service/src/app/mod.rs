@@ -109,7 +109,7 @@ impl<T, R> RequestResponse<T, R> {
 
 pub enum RsbtCommand {
     AddTorrent(
-        RequestResponse<Vec<u8>, Result<Arc<TorrentProcess>, RsbtError>>,
+        RequestResponse<Vec<u8>, Result<TorrentDownload, RsbtError>>,
         String,
     ),
     TorrentHandshake {

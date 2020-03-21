@@ -1,10 +1,17 @@
 use super::*;
 use crate::types::Properties;
 use app::TorrentProcess;
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use flat_storage::FlatStorage;
 use flat_storage_mmap::MmapFlatStorage;
-use std::thread;
-use tokio::runtime::Builder;
+use std::{
+    io::{Read, Write},
+    thread,
+};
+use tokio::{
+    fs::{self, File},
+    runtime::Builder,
+};
 
 #[derive(Debug)]
 pub struct TorrentStorage {
@@ -29,35 +36,98 @@ enum TorrentStorageMessage {
 #[derive(Clone, Debug)]
 pub struct TorrentStorageState {
     pub downloaded: Vec<u8>,
-    pub pieces_left: usize,
+    pub bytes_downloaded: u64,
+    pub bytes_uploaded: u64,
+    pub pieces_left: u32,
+}
+
+impl TorrentStorageState {
+    fn from_reader(mut rdr: impl Read) -> Result<Self, RsbtError> {
+        let version = rdr.read_u8()?;
+        let bytes_downloaded: u64 = rdr.read_u64::<BigEndian>()?;
+        let bytes_uploaded = rdr.read_u64::<BigEndian>()?;
+        let pieces_left = rdr.read_u32::<BigEndian>()?;
+        let mut downloaded = vec![];
+        rdr.read_to_end(&mut downloaded)?;
+        Ok(Self {
+            downloaded,
+            bytes_downloaded: bytes_downloaded,
+            bytes_uploaded: bytes_uploaded,
+            pieces_left: pieces_left,
+        })
+    }
+
+    async fn write_to_file(&self, mut f: File) -> Result<(), RsbtError> {
+        f.write_u8(0).await?;
+        f.write_u64(self.bytes_downloaded.try_into()?).await?;
+        f.write_u64(self.bytes_uploaded.try_into()?).await?;
+        f.write_u32(self.pieces_left.try_into()?).await?;
+        f.write_all(&self.downloaded).await?;
+        Ok(())
+    }
+
+    async fn save<P: AsRef<Path>>(&self, state_file: P) -> Result<(), RsbtError> {
+        let f = File::create(state_file).await?;
+        self.write_to_file(f).await
+    }
+}
+
+async fn prepare_storage_state<P: AsRef<Path>>(
+    properties: Arc<Properties>,
+    torrent_name: P,
+    torrent_process: Arc<TorrentProcess>,
+) -> Result<(PathBuf, TorrentStorageState), RsbtError> {
+    let storage_torrent_file = properties.storage.join(torrent_name.as_ref());
+
+    if !storage_torrent_file.is_file() {
+        fs::write(&storage_torrent_file, &torrent_process.torrent.raw).await?;
+    }
+
+    let mut torrent_storage_state_file = storage_torrent_file.clone();
+    torrent_storage_state_file.set_extension("torrent.state");
+
+    let torrent_storage_state = if torrent_storage_state_file.is_file() {
+        let data = fs::read(&torrent_storage_state_file).await?;
+        TorrentStorageState::from_reader(data.as_slice())?
+    } else {
+        let state = TorrentStorageState {
+            downloaded: vec![],
+            bytes_downloaded: 0,
+            bytes_uploaded: 0,
+            pieces_left: torrent_process.info.pieces.len() as u32,
+        };
+        state.save(&torrent_storage_state_file).await?;
+        state
+    };
+    Ok((torrent_storage_state_file, torrent_storage_state))
 }
 
 impl TorrentStorage {
-    pub fn new(properties: Arc<Properties>, torrent_process: Arc<TorrentProcess>) -> Self {
+    pub async fn new<P: AsRef<Path>>(
+        properties: Arc<Properties>,
+        torrent_name: P,
+        torrent_process: Arc<TorrentProcess>,
+    ) -> Result<Self, RsbtError> {
+        let (state_file, mut state) =
+            prepare_storage_state(properties.clone(), torrent_name, torrent_process.clone())
+                .await?;
         let (sender, mut channel_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
         let mut pieces_left = torrent_process.info.pieces.len();
 
-        let (watch_sender, receiver) = tokio::sync::watch::channel(TorrentStorageState {
-            downloaded: vec![],
-            pieces_left,
-        });
+        let (watch_sender, receiver) = tokio::sync::watch::channel(state.clone());
 
         let thread_torrent_process = torrent_process.clone();
 
         let handle = thread::spawn(move || {
             let info = &thread_torrent_process.info;
             let mut rt = Builder::new().basic_scheduler().enable_io().build()?;
-            let mut downloaded = vec![];
             let mmap_storage = Arc::new(MmapFlatStorage::create(
                 properties.save_to.clone(),
                 info.piece_length,
                 info.files.clone(),
-                &downloaded,
+                &state.downloaded,
             )?);
             rt.block_on(async move {
-                let mut bytes_downloaded = 0;
-                // let mut bytes_uploaded = 0;
-
                 while let Some(message) = channel_receiver.next().await {
                     match message {
                         TorrentStorageMessage::SavePiece {
@@ -85,19 +155,19 @@ impl TorrentStorage {
                                 }
                             }
 
-                            while downloaded.len() <= index {
-                                downloaded.push(0);
+                            while state.downloaded.len() <= index {
+                                state.downloaded.push(0);
                             }
-                            if downloaded[block_index] & bit == 0 {
+                            if state.downloaded[block_index] & bit == 0 {
                                 pieces_left -= 1;
-                                bytes_downloaded += len;
+                                state.bytes_downloaded += len as u64;
                             }
-                            downloaded[block_index] |= bit;
+                            state.downloaded[block_index] |= bit;
 
-                            if let Err(err) = watch_sender.broadcast(TorrentStorageState {
-                                downloaded: downloaded.clone(),
-                                pieces_left,
-                            }) {
+                            if let Err(err) = state.save(&state_file).await {
+                                error!("cannot save state: {}", err);
+                            }
+                            if let Err(err) = watch_sender.broadcast(state.clone()) {
                                 error!("cannot notify watchers: {}", err);
                             }
 
@@ -123,6 +193,17 @@ impl TorrentStorage {
                                 }
                             };
 
+                            if let Some(piece) = &piece {
+                                state.bytes_uploaded += piece.as_ref().len() as u64;
+                            }
+
+                            if let Err(err) = state.save(&state_file).await {
+                                error!("cannot save state: {}", err);
+                            }
+                            if let Err(err) = watch_sender.broadcast(state.clone()) {
+                                error!("cannot notify watchers: {}", err);
+                            }
+
                             if sender.send(Ok(piece)).is_err() {
                                 error!("cannot send piece with oneshot message");
                             }
@@ -135,12 +216,12 @@ impl TorrentStorage {
             Ok(())
         });
 
-        Self {
+        Ok(Self {
             handle,
             torrent_process,
             sender,
             receiver,
-        }
+        })
     }
 
     pub async fn save(&mut self, index: usize, data: Vec<u8>) -> Result<(), RsbtError> {
