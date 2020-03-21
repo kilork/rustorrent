@@ -8,6 +8,7 @@ use http_body::Body;
 use hyper::Client;
 use log::{debug, error};
 use percent_encoding::{percent_encode, percent_encode_byte, NON_ALPHANUMERIC};
+use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
 use std::{
     collections::HashMap,
@@ -20,6 +21,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::{
+    fs,
     net::{TcpListener, TcpStream, UdpSocket},
     prelude::*,
     sync::{

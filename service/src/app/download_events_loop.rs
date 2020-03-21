@@ -65,11 +65,8 @@ async fn add_torrent(
 ) -> Result<TorrentDownload, RsbtError> {
     debug!("we need to download {:?}", filename);
     if let Some(request) = request_response.request() {
-        let name = PathBuf::from(&filename)
-            .file_stem()
-            .unwrap()
-            .to_string_lossy()
-            .into_owned();
+        let filepath = PathBuf::from(&filename);
+        let name = filepath.file_stem().unwrap().to_string_lossy().into_owned();
 
         let torrent = parse_torrent(request)?;
         let hash_id = torrent.info_sha1_hash();
@@ -103,8 +100,24 @@ async fn add_torrent(
             process: torrent_process.clone(),
         };
 
-        let torrent_storage =
-            TorrentStorage::new(properties.clone(), filename, torrent_process.clone()).await?;
+        let torrent_storage = TorrentStorage::new(
+            properties.clone(),
+            filename.clone(),
+            torrent_process.clone(),
+        )
+        .await?;
+
+        let torrents_toml = properties.storage.join(TORRENTS_TOML);
+        let mut current_torrents: CurrentTorrents = if torrents_toml.exists() {
+            toml::from_str(&fs::read_to_string(&torrents_toml).await?)?
+        } else {
+            Default::default()
+        };
+
+        if !current_torrents.torrents.contains(&filename) {
+            current_torrents.torrents.push(filename);
+            fs::write(torrents_toml, toml::to_string(&current_torrents)?).await?;
+        }
 
         torrents.push(torrent_download.clone());
         tokio::spawn(download_torrent(

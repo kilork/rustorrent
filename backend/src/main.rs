@@ -21,7 +21,7 @@ use openid::{DiscoveredClient, Options, Token, Userinfo};
 use reqwest;
 use rsbt_service::{
     app::{RequestResponse, RsbtApp, RsbtCommand},
-    types::Settings,
+    types::{Properties, Settings},
     RsbtError,
 };
 use serde::{Deserialize, Serialize};
@@ -115,11 +115,15 @@ async fn main() -> Result<(), ExitFailure> {
 
     let sessions = web::Data::new(Sessions::new(&properties, local).await?);
 
+    let storage_path = properties.storage.clone();
+
     let rsbt_app = web::Data::new(RsbtApp::new(properties));
+
+    let current_torrents = rsbt_app.init_storage().await?;
 
     let broadcaster = init_broadcaster();
 
-    let (download_events_sender, download_events_receiver) =
+    let (mut download_events_sender, download_events_receiver) =
         mpsc::channel(rsbt_service::DEFAULT_CHANNEL_BUFFER);
 
     let rsbt_app_clone = rsbt_app.clone();
@@ -133,6 +137,28 @@ async fn main() -> Result<(), ExitFailure> {
         }
     };
     Arbiter::spawn(rsbt_app_task);
+
+    for torrent in current_torrents.torrents {
+        let torrent_path = storage_path.join(&torrent);
+
+        if torrent_path.exists() {
+            let data = fs::read(&torrent_path).await?;
+
+            let (sender, receiver) = oneshot::channel();
+            download_events_sender
+                .send(RsbtCommand::AddTorrent(
+                    RequestResponse::Full {
+                        request: data,
+                        response: sender,
+                    },
+                    torrent,
+                ))
+                .await
+                .map_err(RsbtError::from)?;
+            let _ = receiver.await?;
+        }
+    }
+
     let sender = web::Data::new(Mutex::new(download_events_sender));
 
     HttpServer::new(move || {

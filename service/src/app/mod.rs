@@ -32,6 +32,8 @@ use peer_loop::peer_loop;
 use peer_loop_message::PeerLoopMessage;
 use select_new_peer::select_new_peer;
 
+const TORRENTS_TOML: &str = "torrents.toml";
+
 pub struct RsbtApp {
     pub properties: Arc<Properties>,
 }
@@ -146,6 +148,11 @@ pub(crate) enum TorrentDownloadMode {
     Final,
 }
 
+#[derive(Serialize, Deserialize, Default)]
+pub struct CurrentTorrents {
+    pub torrents: Vec<String>,
+}
+
 impl RsbtApp {
     pub fn new(properties: Properties) -> Self {
         let properties = Arc::new(properties);
@@ -166,6 +173,25 @@ impl RsbtApp {
         join(accept_incoming_connections, download_events).await;
 
         Ok(())
+    }
+
+    pub async fn init_storage(&self) -> Result<CurrentTorrents, RsbtError> {
+        let properties = &self.properties;
+        if !properties.save_to.exists() {
+            fs::create_dir_all(&properties.save_to).await?;
+        }
+        if !properties.storage.exists() {
+            fs::create_dir_all(&properties.storage).await?;
+        }
+
+        let torrents_path = properties.storage.join(TORRENTS_TOML);
+
+        if torrents_path.is_file() {
+            let torrents_toml = fs::read_to_string(torrents_path).await?;
+            return Ok(toml::from_str(&torrents_toml)?);
+        }
+
+        Ok(Default::default())
     }
 
     pub async fn download<P: AsRef<Path>>(&self, torrent_file: P) -> Result<(), RsbtError> {

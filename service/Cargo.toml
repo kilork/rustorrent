@@ -31,3 +31,5 @@ serde = { version = "1.0", features = ["derive"] }
 flat-storage = { path = "../flat-storage" }
 flat-storage-mmap = { path = "../flat-storage-mmap" }
 byteorder = "1.3"
+
+toml = "0.5"
