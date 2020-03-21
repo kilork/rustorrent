@@ -145,7 +145,6 @@ impl TorrentStorage {
             prepare_storage_state(properties.clone(), torrent_name, torrent_process.clone())
                 .await?;
         let (sender, mut channel_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
-        let mut pieces_left = torrent_process.info.pieces.len();
 
         let (watch_sender, receiver) = tokio::sync::watch::channel(state.clone());
 
@@ -192,7 +191,7 @@ impl TorrentStorage {
                                 state.downloaded.push(0);
                             }
                             if state.downloaded[block_index] & bit == 0 {
-                                pieces_left -= 1;
+                                state.pieces_left -= 1;
                                 state.bytes_downloaded += len as u64;
                             }
                             state.downloaded[block_index] |= bit;
