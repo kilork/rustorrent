@@ -2,7 +2,7 @@ use super::*;
 
 #[get("/stream")]
 async fn stream(broadcaster: web::Data<RwLock<Broadcaster>>) -> impl Responder {
-    let rx = broadcaster.write().await.new_client();
+    let rx = broadcaster.write().await.new_client().await;
     HttpResponse::Ok()
         .content_type("text/event-stream")
         .keep_alive()
@@ -11,15 +11,17 @@ async fn stream(broadcaster: web::Data<RwLock<Broadcaster>>) -> impl Responder {
 }
 
 pub(crate) struct Broadcaster {
-    pub(crate) clients: Vec<Sender<Bytes>>,
+    pub(crate) clients: RwLock<Vec<Sender<Bytes>>>,
 }
 
 impl Broadcaster {
     pub(crate) fn new() -> Self {
-        Self { clients: vec![] }
+        Self {
+            clients: RwLock::new(vec![]),
+        }
     }
 
-    pub(crate) fn new_client(&mut self) -> Client {
+    pub(crate) async fn new_client(&mut self) -> Client {
         eprintln!("adding new client");
         let (tx, rx) = mpsc::channel(100);
 
@@ -27,25 +29,25 @@ impl Broadcaster {
             .try_send(Bytes::from("data: connected\n\n"))
             .unwrap();
 
-        self.clients.push(tx);
+        self.clients.write().await.push(tx);
 
         Client(rx)
     }
 
-    pub(crate) fn message(&mut self, msg: &str) -> Result<(), Vec<Sender<Bytes>>> {
+    pub(crate) async fn message(&self, msg: &str) -> Result<(), Vec<Sender<Bytes>>> {
         let mut ok_clients = vec![];
 
-        debug!("message to {} client(s)", self.clients.len());
-
+        let len = self.clients.read().await.len();
+        debug!("message to {} client(s)", len);
         let msg = Bytes::from(["data: ", msg, "\n\n"].concat());
 
-        for client in &mut self.clients {
+        for client in self.clients.write().await.iter_mut() {
             if let Ok(()) = client.try_send(msg.clone()) {
                 ok_clients.push(client.clone())
             }
         }
 
-        if ok_clients.len() != self.clients.len() {
+        if ok_clients.len() != len {
             return Err(ok_clients);
         }
 

@@ -113,31 +113,11 @@ async fn main() -> Result<(), ExitFailure> {
     let properties = settings.into();
     debug!("properties: {:?}", properties);
 
-    let broadcaster = web::Data::new(RwLock::new(Broadcaster::new()));
-
     let sessions = web::Data::new(Sessions::new(&properties, local).await?);
 
     let rsbt_app = web::Data::new(RsbtApp::new(properties));
 
-    let broadcaster_timer = broadcaster.clone();
-
-    let task = async move {
-        let mut timer = interval_at(Instant::now(), Duration::from_secs(10));
-
-        loop {
-            timer.tick().await;
-
-            debug!("timer event");
-
-            let mut me = broadcaster_timer.write().await;
-
-            if let Err(ok_clients) = me.message("ping") {
-                debug!("refresh client list");
-                me.clients = ok_clients;
-            }
-        }
-    };
-    Arbiter::spawn(task);
+    let broadcaster = init_broadcaster();
 
     let (download_events_sender, download_events_receiver) =
         mpsc::channel(rsbt_service::DEFAULT_CHANNEL_BUFFER);
@@ -204,4 +184,26 @@ async fn main() -> Result<(), ExitFailure> {
     .await?;
 
     Ok(())
+}
+
+fn init_broadcaster() -> web::Data<Broadcaster> {
+    let broadcaster = web::Data::new(Broadcaster::new());
+    let broadcaster_timer = broadcaster.clone();
+
+    let task = async move {
+        let mut timer = interval_at(Instant::now(), Duration::from_secs(10));
+
+        loop {
+            timer.tick().await;
+
+            debug!("timer event");
+
+            if let Err(ok_clients) = broadcaster_timer.message("ping").await {
+                debug!("refresh client list");
+                *broadcaster_timer.clients.write().await = ok_clients;
+            }
+        }
+    };
+    Arbiter::spawn(task);
+    broadcaster
 }
