@@ -2,6 +2,7 @@ use super::*;
 use crate::types::Properties;
 use app::TorrentProcess;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use failure::ResultExt;
 use flat_storage::FlatStorage;
 use flat_storage_mmap::MmapFlatStorage;
 use std::{
@@ -43,7 +44,7 @@ pub struct TorrentStorageState {
 
 impl TorrentStorageState {
     fn from_reader(mut rdr: impl Read) -> Result<Self, RsbtError> {
-        let version = rdr.read_u8()?;
+        let _version = rdr.read_u8()?;
         let bytes_downloaded: u64 = rdr.read_u64::<BigEndian>()?;
         let bytes_uploaded = rdr.read_u64::<BigEndian>()?;
         let pieces_left = rdr.read_u32::<BigEndian>()?;
@@ -80,7 +81,15 @@ async fn prepare_storage_state<P: AsRef<Path>>(
     let storage_torrent_file = properties.storage.join(torrent_name.as_ref());
 
     if !storage_torrent_file.is_file() {
-        fs::write(&storage_torrent_file, &torrent_process.torrent.raw).await?;
+        fs::write(&storage_torrent_file, &torrent_process.torrent.raw)
+            .await
+            .with_context(|err| {
+                format!(
+                    "cannot save torrent file {}: {}",
+                    storage_torrent_file.to_string_lossy(),
+                    err
+                )
+            })?;
     }
 
     let mut torrent_storage_state_file = storage_torrent_file.clone();

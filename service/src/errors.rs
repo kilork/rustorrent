@@ -64,6 +64,8 @@ pub enum RsbtError {
     JoinError(tokio::task::JoinError),
     #[fail(display = "storage {}", _0)]
     Storage(flat_storage::FlatStorageError),
+    #[fail(display = "failure {}", _0)]
+    Failure(failure::Context<String>),
 }
 
 macro_rules! from_rsbt_error {
@@ -93,6 +95,7 @@ from_rsbt_error!(http::uri::InvalidUri, InvalidUri);
 from_rsbt_error!(MessageCodecError, MessageCodec);
 from_rsbt_error!(UdpTrackerCodecError, UdpTrackerCodec);
 from_rsbt_error!(flat_storage::FlatStorageError, Storage);
+from_rsbt_error!(failure::Context<String>, Failure);
 
 impl From<futures::future::Aborted> for RsbtError {
     fn from(_: futures::future::Aborted) -> Self {

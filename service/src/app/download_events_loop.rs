@@ -13,7 +13,7 @@ pub(crate) async fn download_events_loop(
             RsbtCommand::AddTorrent(request_response, filename) => {
                 debug!("we need to download {:?}", filename);
                 if let Some(request) = request_response.request() {
-                    let name = PathBuf::from(filename)
+                    let name = PathBuf::from(&filename)
                         .file_stem()
                         .unwrap()
                         .to_string_lossy()
@@ -46,14 +46,14 @@ pub(crate) async fn download_events_loop(
 
                     let torrent_download = TorrentDownload {
                         id,
-                        name: name.clone(),
+                        name,
                         active: true,
                         process: torrent_process.clone(),
                     };
 
                     let torrent_storage = match TorrentStorage::new(
                         properties.clone(),
-                        name,
+                        filename,
                         torrent_process.clone(),
                     )
                     .await
