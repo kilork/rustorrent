@@ -117,26 +117,13 @@ async fn main() -> Result<(), ExitFailure> {
 
     let storage_path = properties.storage.clone();
 
-    let rsbt_app = web::Data::new(RsbtApp::new(properties));
+    let rsbt_app = RsbtApp::new(properties);
 
     let current_torrents = rsbt_app.init_storage().await?;
 
     let broadcaster = init_broadcaster();
 
-    let (mut download_events_sender, download_events_receiver) =
-        mpsc::channel(rsbt_service::DEFAULT_CHANNEL_BUFFER);
-
-    let rsbt_app_clone = rsbt_app.clone();
-    let download_events_task_sender = download_events_sender.clone();
-    let rsbt_app_task = async move {
-        if let Err(err) = rsbt_app_clone
-            .processing_loop(download_events_task_sender, download_events_receiver)
-            .await
-        {
-            error!("problem detected: {}", err);
-        }
-    };
-    Arbiter::spawn(rsbt_app_task);
+    let mut download_events_sender = init_rsbt_app(rsbt_app);
 
     for torrent in current_torrents.torrents {
         let torrent_path = storage_path.join(&torrent);
@@ -171,7 +158,6 @@ async fn main() -> Result<(), ExitFailure> {
             ))
             .app_data(broadcaster.clone())
             .app_data(sessions.clone())
-            .app_data(rsbt_app.clone())
             .app_data(sender.clone())
             .service(authorize)
             .service(login_get)
@@ -210,6 +196,25 @@ async fn main() -> Result<(), ExitFailure> {
     .await?;
 
     Ok(())
+}
+
+fn init_rsbt_app(rsbt_app: RsbtApp) -> Sender<RsbtCommand> {
+    let (download_events_sender, download_events_receiver) =
+        mpsc::channel(rsbt_service::DEFAULT_CHANNEL_BUFFER);
+
+    let download_events_task_sender = download_events_sender.clone();
+
+    let rsbt_app_task = async move {
+        if let Err(err) = rsbt_app
+            .processing_loop(download_events_task_sender, download_events_receiver)
+            .await
+        {
+            error!("problem detected: {}", err);
+        }
+    };
+    Arbiter::spawn(rsbt_app_task);
+
+    download_events_sender
 }
 
 fn init_broadcaster() -> web::Data<Broadcaster> {
