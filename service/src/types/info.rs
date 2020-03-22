@@ -1,11 +1,12 @@
 use super::*;
 use crate::count_parts;
 use flat_storage::FlatStorageFile as TorrentInfoFile;
+use serde::Deserialize;
 
 use crate::{BLOCK_SIZE, SHA1_SIZE};
 
 /// Normalized info from torrent.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Deserialize)]
 pub struct TorrentInfo {
     pub piece_length: usize,
     pub default_blocks_count: usize,
@@ -93,7 +94,7 @@ impl From<TorrentInfoRaw> for TorrentInfo {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Deserialize)]
 pub struct Piece([u8; SHA1_SIZE]);
 
 impl TryFrom<&[u8]> for Piece {
