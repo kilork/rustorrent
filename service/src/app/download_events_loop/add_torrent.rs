@@ -4,6 +4,7 @@ pub(crate) async fn add_torrent(
     properties: Arc<Properties>,
     request_response: &RequestResponse<Vec<u8>, Result<TorrentDownload, RsbtError>>,
     filename: String,
+    state: TorrentDownloadState,
     id: &mut usize,
     torrents: &mut Vec<TorrentDownload>,
 ) -> Result<TorrentDownload, RsbtError> {
@@ -37,10 +38,14 @@ pub(crate) async fn add_torrent(
             broker_sender,
         });
 
+        let torrent_header = TorrentDownloadHeader {
+            file: filename.clone(),
+            state,
+        };
         let torrent_download = TorrentDownload {
             id: *id,
             name,
-            active: true,
+            header: torrent_header.clone(),
             process: torrent_process.clone(),
         };
 
@@ -58,8 +63,13 @@ pub(crate) async fn add_torrent(
             Default::default()
         };
 
-        if !current_torrents.torrents.contains(&filename) {
-            current_torrents.torrents.push(filename);
+        if current_torrents
+            .torrents
+            .iter()
+            .find(|x| x.file == filename)
+            .is_none()
+        {
+            current_torrents.torrents.push(torrent_header);
             fs::write(torrents_toml, toml::to_string(&current_torrents)?).await?;
         }
 

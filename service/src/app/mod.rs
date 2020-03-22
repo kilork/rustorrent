@@ -44,8 +44,21 @@ pub struct RsbtApp {
 pub struct TorrentDownload {
     pub id: usize,
     pub name: String,
-    pub active: bool,
+    pub header: TorrentDownloadHeader,
     pub process: Arc<TorrentProcess>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct TorrentDownloadHeader {
+    pub file: String,
+    pub state: TorrentDownloadState,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub enum TorrentDownloadState {
+    Validate,
+    Enabled,
+    Disable,
 }
 
 #[derive(Debug)]
@@ -83,6 +96,7 @@ pub enum RsbtCommand {
     AddTorrent(
         RequestResponse<Vec<u8>, Result<TorrentDownload, RsbtError>>,
         String,
+        TorrentDownloadState,
     ),
     TorrentHandshake {
         handshake_request: Handshake,
@@ -121,7 +135,7 @@ pub(crate) enum TorrentDownloadMode {
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct CurrentTorrents {
-    pub torrents: Vec<String>,
+    pub torrents: Vec<TorrentDownloadHeader>,
 }
 
 impl RsbtApp {
@@ -181,6 +195,7 @@ impl RsbtApp {
                     .to_str()
                     .unwrap_or_default()
                     .into(),
+                TorrentDownloadState::Enabled,
             ))
             .await?;
 

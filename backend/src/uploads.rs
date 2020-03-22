@@ -34,6 +34,7 @@ async fn upload(
                         response: sender,
                     },
                     filename.to_string(),
+                    TorrentDownloadState::Enabled,
                 ))
                 .await
             {

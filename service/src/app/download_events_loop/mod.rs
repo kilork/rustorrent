@@ -14,11 +14,12 @@ pub(crate) async fn download_events_loop(
 
     while let Some(event) = events.next().await {
         match event {
-            RsbtCommand::AddTorrent(request_response, filename) => {
+            RsbtCommand::AddTorrent(request_response, filename, state) => {
                 let torrent = add_torrent(
                     properties.clone(),
                     &request_response,
                     filename,
+                    state,
                     &mut id,
                     &mut torrents,
                 )
