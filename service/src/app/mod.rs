@@ -20,6 +20,7 @@ pub(crate) mod download_torrent;
 mod peer_connection;
 mod peer_loop;
 mod peer_loop_message;
+mod request_response;
 mod select_new_peer;
 
 use accept_connections_loop::accept_connections_loop;
@@ -30,6 +31,7 @@ use download_torrent::{download_torrent, DownloadTorrentEvent};
 use peer_connection::peer_connection;
 use peer_loop::peer_loop;
 use peer_loop_message::PeerLoopMessage;
+pub use request_response::RequestResponse;
 use select_new_peer::select_new_peer;
 
 const TORRENTS_TOML: &str = "torrents.toml";
@@ -74,37 +76,6 @@ enum TorrentPeerState {
 impl Default for TorrentPeerState {
     fn default() -> Self {
         TorrentPeerState::Idle
-    }
-}
-
-pub enum RequestResponse<T, R> {
-    RequestOnly(T),
-    ResponseOnly(oneshot::Sender<R>),
-    Full {
-        request: T,
-        response: oneshot::Sender<R>,
-    },
-}
-
-impl<T, R> RequestResponse<T, R> {
-    pub fn request(&self) -> Option<&T> {
-        match self {
-            RequestResponse::RequestOnly(request) | RequestResponse::Full { request, .. } => {
-                Some(request)
-            }
-            RequestResponse::ResponseOnly(_) => None,
-        }
-    }
-
-    pub fn response(self, result: R) -> Result<(), RsbtError> {
-        match self {
-            RequestResponse::ResponseOnly(response) | RequestResponse::Full { response, .. } => {
-                response
-                    .send(result)
-                    .map_err(|_| RsbtError::FailureReason("Cannot send response".into()))
-            }
-            RequestResponse::RequestOnly(_) => Ok(()),
-        }
     }
 }
 

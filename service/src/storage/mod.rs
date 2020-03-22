@@ -57,9 +57,9 @@ impl TorrentStorageState {
         rdr.read_to_end(&mut downloaded)?;
         Ok(Self {
             downloaded,
-            bytes_downloaded: bytes_downloaded,
-            bytes_uploaded: bytes_uploaded,
-            pieces_left: pieces_left,
+            bytes_downloaded,
+            bytes_uploaded,
+            pieces_left,
         })
     }
 

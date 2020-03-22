@@ -59,4 +59,3 @@ pub(crate) async fn download_events_loop(
 
     debug!("download_events_loop done");
 }
-
