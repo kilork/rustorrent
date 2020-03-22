@@ -56,9 +56,10 @@ pub struct TorrentDownloadHeader {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub enum TorrentDownloadState {
-    Validate,
+    Validating,
+    Error,
     Enabled,
-    Disable,
+    Disabled,
 }
 
 #[derive(Debug)]
