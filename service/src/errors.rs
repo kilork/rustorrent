@@ -64,6 +64,8 @@ pub enum RsbtError {
     JoinError(tokio::task::JoinError),
     #[fail(display = "storage {}", _0)]
     Storage(flat_storage::FlatStorageError),
+    #[fail(display = "storage version {} is unsupported", _0)]
+    StorageVersion(u8),
     #[fail(display = "failure {}", _0)]
     Failure(failure::Context<String>),
     #[fail(display = "toml deserialize {}", _0)]

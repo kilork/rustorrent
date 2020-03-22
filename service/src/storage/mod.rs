@@ -42,9 +42,14 @@ pub struct TorrentStorageState {
     pub pieces_left: u32,
 }
 
+const TORRENT_STORAGE_FORMAT_VERSION: u8 = 0;
+
 impl TorrentStorageState {
     fn from_reader(mut rdr: impl Read) -> Result<Self, RsbtError> {
-        let _version = rdr.read_u8()?;
+        let version = rdr.read_u8()?;
+        if version != TORRENT_STORAGE_FORMAT_VERSION {
+            return Err(RsbtError::StorageVersion(version));
+        }
         let bytes_downloaded: u64 = rdr.read_u64::<BigEndian>()?;
         let bytes_uploaded = rdr.read_u64::<BigEndian>()?;
         let pieces_left = rdr.read_u32::<BigEndian>()?;
@@ -59,7 +64,7 @@ impl TorrentStorageState {
     }
 
     async fn write_to_file(&self, mut f: File) -> Result<(), RsbtError> {
-        f.write_u8(0).await?;
+        f.write_u8(TORRENT_STORAGE_FORMAT_VERSION).await?;
         f.write_u64(self.bytes_downloaded.try_into()?).await?;
         f.write_u64(self.bytes_uploaded.try_into()?).await?;
         f.write_u32(self.pieces_left.try_into()?).await?;
