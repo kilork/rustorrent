@@ -2,7 +2,7 @@
 extern crate actix_web;
 
 #[cfg(feature = "ui")]
-use rsbt_web_resources::*;
+use rsbt_frontend::*;
 
 use actix::prelude::*;
 use actix_identity::{CookieIdentityPolicy, Identity, IdentityService};
