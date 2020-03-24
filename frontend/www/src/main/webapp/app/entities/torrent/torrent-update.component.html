@@ -1,26 +1,34 @@
 <div class="row justify-content-center">
     <div class="col-8">
         <form name="editForm" role="form" novalidate (ngSubmit)="save()" [formGroup]="editForm">
-            <h2 id="jhi-torrent-heading" jhiTranslate="rsbt.torrent.home.createOrEditLabel">Host or edit a Torrent
-            </h2>
+            <h2 id="jhi-torrent-heading" jhiTranslate="rsbt.torrent.home.createOrEditLabel">Host or edit a Torrent </h2>
 
+            <div class="form-group" [hidden]="!editForm.get('id')!.value">
+                <label for="id" jhiTranslate="global.field.id">ID</label>
+                <input type="text" class="form-control" id="id" name="id" formControlName="id" readonly/>
+            </div>
+
+            <div class="form-group" [hidden]="!editForm.get('id')!.value">
+                <label class="form-control-label" jhiTranslate="rsbt.torrent.name" for="field_name">Name</label>
+                <input type="text" class="form-control" name="name" id="field_name" formControlName="name"/>
+            </div>
+
+            <rt-alert-error [hidden]="!showError"></rt-alert-error>
             <div>
-                <rt-alert-error></rt-alert-error>
-
-                <div class="form-group" [hidden]="!editForm.get('id')!.value">
-                    <label for="id" jhiTranslate="global.field.id">ID</label>
-                    <input type="text" class="form-control" id="id" name="id" formControlName="id" readonly />
-                </div>
-
-                <div class="form-group" [hidden]="!editForm.get('id')!.value">
-                    <label class="form-control-label" jhiTranslate="rsbt.torrent.name" for="field_name">Name</label>
-                    <input type="text" class="form-control" name="name" id="field_name" formControlName="name" />
-                </div>
-
-                <div class="form-group" [hidden]="editForm.get('id')!.value">
-                    <label class="form-control-label" jhiTranslate="rsbt.torrent.file" for="field_file">File</label>
-                    <input type="file" class="form-control" name="file" id="field_file" formControlName="file"
-                        accept=".torrent" (change)="updateFile($event.target.files)" />
+                <label class="form-control-label" jhiTranslate="rsbt.torrent.file" for="field_file">File</label>
+                <div class="input-group mb-1">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text">Upload</span>
+                    </div>
+                    <div class="custom-file">
+                        <input type="file" class="form-control" name="file" id="field_file"
+                               aria-describedby="inputGroupFileAddon" accept=".torrent"
+                               (change)="updateFile($event.target.files)">
+                        <label class="custom-file-label" for="field_file">
+                            <span *ngIf="fileToUpload === null"> Chose File </span>
+                            <span *ngIf="fileToUpload !== null"> {{fileToUpload.name}} </span>
+                        </label>
+                    </div>
                 </div>
             </div>
 
@@ -30,7 +38,7 @@
                 </button>
 
                 <button type="submit" id="save-entity" [disabled]="editForm.invalid || isSaving"
-                    class="btn btn-primary">
+                        class="btn btn-primary">
                     <fa-icon icon="save"></fa-icon>&nbsp;<span jhiTranslate="entity.action.save">Save</span>
                 </button>
             </div>

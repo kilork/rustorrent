@@ -18,6 +18,7 @@ export class TorrentUpdateComponent implements OnInit {
   isSaving = false;
 
   fileToUpload: File | null = null;
+  showError = false;
 
   editForm = this.fb.group({
     id: [],
