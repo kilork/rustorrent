@@ -54,7 +54,7 @@ impl FromRequest for Paging {
     }
 }
 
-#[get("/torrents")]
+#[get("/torrent")]
 async fn torrent_list(
     paging: Paging,
     event_sender: web::Data<Mutex<Sender<RsbtCommand>>>,
