@@ -14,21 +14,20 @@
             </div>
 
             <rt-alert-error [hidden]="!showError"></rt-alert-error>
-            <div>
-                <label class="form-control-label" jhiTranslate="rsbt.torrent.file" for="field_file">File</label>
-                <div class="input-group mb-1">
-                    <div class="input-group-prepend">
-                        <span class="input-group-text">Upload</span>
-                    </div>
-                    <div class="custom-file">
-                        <input type="file" class="form-control" name="file" id="field_file"
-                               aria-describedby="inputGroupFileAddon" accept=".torrent"
-                               (change)="updateFile($event.target.files)">
-                        <label class="custom-file-label" for="field_file">
-                            <span *ngIf="fileToUpload === null"> Chose File </span>
-                            <span *ngIf="fileToUpload !== null"> {{fileToUpload.name}} </span>
-                        </label>
-                    </div>
+
+            <div class="input-group mb-1">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" jhiTranslate="rsbt.torrent.fileSelect.upload">Upload</span>
+                </div>
+                <div class="custom-file">
+                    <input type="file" class="custom-file-input" id="customFileLang"
+                           accept=".torrent" lang="{{languageService.currentLang}}"
+                           (change)="updateFile($event.target.files)">
+                    <label class="custom-file-label" for="customFileLang">
+                        <span *ngIf="fileToUpload === null"
+                              jhiTranslate="rsbt.torrent.fileSelect.chose"> Chose File </span>
+                        <span *ngIf=" fileToUpload !== null"> {{fileToUpload.name}} </span>
+                    </label>
                 </div>
             </div>
 

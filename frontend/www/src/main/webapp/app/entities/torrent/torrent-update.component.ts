@@ -1,12 +1,13 @@
 import { Component, OnInit } from '@angular/core';
 import { HttpResponse } from '@angular/common/http';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { FormBuilder, Validators } from '@angular/forms';
+import { FormBuilder } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { Observable } from 'rxjs';
 
 import { ITorrent, Torrent } from 'app/shared/model/torrent.model';
 import { TorrentService } from './torrent.service';
+import { JhiLanguageService } from 'ng-jhipster';
 
 @Component({
   selector: 'rt-torrent-update',
@@ -24,7 +25,12 @@ export class TorrentUpdateComponent implements OnInit {
     file: []
   });
 
-  constructor(protected torrentService: TorrentService, protected activatedRoute: ActivatedRoute, private fb: FormBuilder) {}
+  constructor(
+    protected torrentService: TorrentService,
+    private languageService: JhiLanguageService,
+    protected activatedRoute: ActivatedRoute,
+    private fb: FormBuilder
+  ) {}
 
   ngOnInit(): void {
     this.activatedRoute.data.subscribe(({ torrent }) => {
