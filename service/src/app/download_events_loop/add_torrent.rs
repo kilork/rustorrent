@@ -2,18 +2,20 @@ use super::*;
 
 pub(crate) async fn add_torrent(
     properties: Arc<Properties>,
-    request_response: &RequestResponse<Vec<u8>, Result<TorrentDownload, RsbtError>>,
-    filename: String,
-    state: TorrentDownloadState,
+    request_response: &RequestResponse<RsbtCommandAddTorrent, Result<TorrentDownload, RsbtError>>,
     id: &mut usize,
     torrents: &mut Vec<TorrentDownload>,
 ) -> Result<TorrentDownload, RsbtError> {
+    let RsbtCommandAddTorrent {
+        data,
+        filename,
+        state,
+    } = request_response.request();
     debug!("we need to download {:?}", filename);
-    let request = request_response.request();
     let filepath = PathBuf::from(&filename);
     let name = filepath.file_stem().unwrap().to_string_lossy().into_owned();
 
-    let torrent = parse_torrent(request)?;
+    let torrent = parse_torrent(data)?;
     let hash_id = torrent.info_sha1_hash();
     let info = torrent.info()?;
 
@@ -40,7 +42,7 @@ pub(crate) async fn add_torrent(
 
     let torrent_header = TorrentDownloadHeader {
         file: filename.clone(),
-        state,
+        state: state.clone(),
     };
     let torrent_download = TorrentDownload {
         id: *id,
@@ -66,7 +68,7 @@ pub(crate) async fn add_torrent(
     if current_torrents
         .torrents
         .iter()
-        .find(|x| x.file == filename)
+        .find(|x| &x.file == filename)
         .is_none()
     {
         current_torrents.torrents.push(torrent_header);

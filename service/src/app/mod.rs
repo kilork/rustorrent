@@ -93,12 +93,14 @@ impl Default for TorrentPeerState {
     }
 }
 
+pub struct RsbtCommandAddTorrent {
+    pub data: Vec<u8>,
+    pub filename: String,
+    pub state: TorrentDownloadState,
+}
+
 pub enum RsbtCommand {
-    AddTorrent(
-        RequestResponse<Vec<u8>, Result<TorrentDownload, RsbtError>>,
-        String,
-        TorrentDownloadState,
-    ),
+    AddTorrent(RequestResponse<RsbtCommandAddTorrent, Result<TorrentDownload, RsbtError>>),
     TorrentHandshake {
         handshake_request: Handshake,
         handshake_sender: oneshot::Sender<Option<Arc<TorrentProcess>>>,
@@ -184,20 +186,22 @@ impl RsbtApp {
         let (mut download_events_sender, download_events_receiver) =
             mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
-        let buf = std::fs::read(torrent_file.as_ref())?;
+        let data = std::fs::read(torrent_file.as_ref())?;
 
         download_events_sender
-            .send(RsbtCommand::AddTorrent(
-                RequestResponse::RequestOnly(buf),
-                torrent_file
-                    .as_ref()
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_str()
-                    .unwrap_or_default()
-                    .into(),
-                TorrentDownloadState::Enabled,
-            ))
+            .send(RsbtCommand::AddTorrent(RequestResponse::RequestOnly(
+                RsbtCommandAddTorrent {
+                    data,
+                    filename: torrent_file
+                        .as_ref()
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_str()
+                        .unwrap_or_default()
+                        .into(),
+                    state: TorrentDownloadState::Enabled,
+                },
+            )))
             .await?;
 
         self.processing_loop(download_events_sender, download_events_receiver)

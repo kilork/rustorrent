@@ -20,7 +20,7 @@ use log::{debug, error, info};
 use openid::{DiscoveredClient, Options, Token, Userinfo};
 use reqwest;
 use rsbt_service::{
-    app::{RequestResponse, RsbtApp, RsbtCommand, TorrentDownloadState},
+    app::{RequestResponse, RsbtApp, RsbtCommand, RsbtCommandAddTorrent, TorrentDownloadState},
     types::{Properties, Settings},
     RsbtError,
 };
@@ -131,18 +131,17 @@ async fn main() -> Result<(), ExitFailure> {
         if torrent_path.exists() {
             let data = fs::read(&torrent_path).await?;
 
-            let (sender, receiver) = oneshot::channel();
+            let (request_response, receiver) = RequestResponse::new(RsbtCommandAddTorrent {
+                data,
+                filename: torrent.file,
+                state: torrent.state,
+            });
+
             download_events_sender
-                .send(RsbtCommand::AddTorrent(
-                    RequestResponse::Full {
-                        request: data,
-                        response: sender,
-                    },
-                    torrent.file,
-                    torrent.state,
-                ))
+                .send(RsbtCommand::AddTorrent(request_response))
                 .await
                 .map_err(RsbtError::from)?;
+
             let _ = receiver.await?;
         }
     }
