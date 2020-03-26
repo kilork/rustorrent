@@ -4,3 +4,9 @@
 * https://github.com/twbs/bootstrap/blob/v4-dev/scss/_variables.scss can be overwritten here
 * Make sure not to add !default to values here
 */
+
+$custom-file-text: (
+  en: 'Browse',
+  de: 'Durchsuchen',
+  ru: 'Выбрать'
+);

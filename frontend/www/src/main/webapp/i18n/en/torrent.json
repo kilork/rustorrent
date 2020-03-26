@@ -17,7 +17,11 @@
         "title": "Torrent"
       },
       "name": "Name",
-      "file": "Torrent File"
+      "file": "Torrent File",
+      "fileSelect": {
+        "choose": "Choose a file",
+        "upload": "Upload"
+      }
     }
   }
 }
