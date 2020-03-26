@@ -19,7 +19,7 @@
       "name": "Name",
       "file": "Torrent Datei",
       "fileSelect": {
-        "chose": "Datei auswählen",
+        "choose": "Datei auswählen",
         "upload": "Hochladen"
       }
     }
