@@ -6,7 +6,7 @@
   * Frontend programming
   * Design
 
-* Anna Koroleva
+* Anna K.
 
   * Artwork
 

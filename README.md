@@ -2,7 +2,7 @@
 
 ## WORK IN PROGRESS
 
-![RSBT](frontend/www/src/main/webapp/content/images/rsbt_mascot.svg)
+<img alt="RSBT" src="frontend/www/src/main/webapp/content/images/rsbt_mascot.svg" width="256px" height="256px">
 
 ## Legal
 
