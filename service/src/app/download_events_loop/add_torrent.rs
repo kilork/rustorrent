@@ -49,6 +49,7 @@ pub(crate) async fn add_torrent(
         name,
         header: torrent_header.clone(),
         process: torrent_process.clone(),
+        properties: properties.clone(),
     };
 
     let torrent_storage = TorrentStorage::new(
@@ -58,28 +59,13 @@ pub(crate) async fn add_torrent(
     )
     .await?;
 
-    let torrents_toml = properties.storage.join(TORRENTS_TOML);
-    let mut current_torrents: CurrentTorrents = if torrents_toml.exists() {
-        toml::from_str(&fs::read_to_string(&torrents_toml).await?)?
-    } else {
-        Default::default()
-    };
-
-    if current_torrents
-        .torrents
-        .iter()
-        .find(|x| &x.file == filename)
-        .is_none()
-    {
-        current_torrents.torrents.push(torrent_header);
-        fs::write(torrents_toml, toml::to_string(&current_torrents)?).await?;
-    }
+    save_current_torrents(properties.clone(), torrent_header).await?;
 
     torrents.push(torrent_download.clone());
     tokio::spawn(download_torrent(
-        properties.clone(),
+        properties,
         torrent_storage,
-        torrent_process.clone(),
+        torrent_process,
         broker_receiver,
     ));
 

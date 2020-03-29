@@ -3,9 +3,11 @@ use std::path::PathBuf;
 
 mod action;
 mod add_torrent;
+mod current_torrents;
 
 use action::torrent_action;
 use add_torrent::add_torrent;
+use current_torrents::save_current_torrents;
 
 #[derive(Clone)]
 pub struct TorrentDownload {
@@ -13,6 +15,7 @@ pub struct TorrentDownload {
     pub name: String,
     pub header: TorrentDownloadHeader,
     pub process: Arc<TorrentProcess>,
+    pub properties: Arc<Properties>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -21,10 +24,8 @@ pub struct TorrentDownloadHeader {
     pub state: TorrentDownloadState,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Copy)]
 pub enum TorrentDownloadState {
-    Validating,
-    Error,
     Enabled,
     Disabled,
 }
@@ -99,12 +100,7 @@ pub(crate) async fn download_events_loop(
             RsbtCommand::TorrentAction(request_response) => {
                 debug!("torrent action");
 
-                let response = torrent_action(
-                    properties.clone(),
-                    request_response.request(),
-                    &mut torrents,
-                )
-                .await;
+                let response = torrent_action(request_response.request(), &mut torrents).await;
 
                 if let Err(err) = request_response.response(response) {
                     error!("cannot send response for add torrent: {}", err);
