@@ -2,7 +2,7 @@ use super::*;
 
 pub(crate) async fn add_torrent(
     properties: Arc<Properties>,
-    request_response: &RequestResponse<RsbtCommandAddTorrent, Result<TorrentDownload, RsbtError>>,
+    request: &RsbtCommandAddTorrent,
     id: &mut usize,
     torrents: &mut Vec<TorrentDownload>,
 ) -> Result<TorrentDownload, RsbtError> {
@@ -10,7 +10,7 @@ pub(crate) async fn add_torrent(
         data,
         filename,
         state,
-    } = request_response.request();
+    } = request;
     debug!("we need to download {:?}", filename);
     let filepath = PathBuf::from(&filename);
     let name = filepath.file_stem().unwrap().to_string_lossy().into_owned();

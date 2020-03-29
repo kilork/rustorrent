@@ -99,6 +99,18 @@ pub struct RsbtCommandAddTorrent {
     pub state: TorrentDownloadState,
 }
 
+#[serde(rename_all = "lowercase")]
+#[derive(Serialize, Deserialize, Copy, Clone)]
+pub enum RsbtTorrentAction {
+    Enable,
+    Disable,
+}
+
+pub struct RsbtCommandTorrentAction {
+    pub id: usize,
+    pub action: RsbtTorrentAction,
+}
+
 pub enum RsbtCommand {
     AddTorrent(RequestResponse<RsbtCommandAddTorrent, Result<TorrentDownload, RsbtError>>),
     TorrentHandshake {
@@ -108,6 +120,7 @@ pub enum RsbtCommand {
     TorrentList {
         sender: oneshot::Sender<Vec<TorrentDownload>>,
     },
+    TorrentAction(RequestResponse<RsbtCommandTorrentAction, Result<(), RsbtError>>),
 }
 
 pub(crate) struct PeerState {

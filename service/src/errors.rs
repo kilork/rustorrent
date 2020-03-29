@@ -72,6 +72,8 @@ pub enum RsbtError {
     TomlDeserialize(toml::de::Error),
     #[fail(display = "toml serialize {}", _0)]
     TomlSerialize(toml::ser::Error),
+    #[fail(display = "torrent with id {} not found", _0)]
+    TorrentNotFound(usize),
 }
 
 macro_rules! from_rsbt_error {

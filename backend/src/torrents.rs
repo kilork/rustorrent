@@ -133,16 +133,29 @@ async fn torrent_list(
     }
 }
 
+#[derive(Serialize, Deserialize)]
+struct Action {
+    pub action: RsbtTorrentAction,
+}
+
 #[post("/torrent/{id}/action")]
 async fn torrent_create_action(
     event_sender: web::Data<Mutex<Sender<RsbtCommand>>>,
+    id: web::Path<usize>,
+    body: web::Json<Action>,
     _user: User,
 ) -> impl Responder {
-    let (sender, receiver) = oneshot::channel();
+    let (request_response, receiver) = RequestResponse::new(RsbtCommandTorrentAction {
+        id: *id,
+        action: body.action,
+    });
 
     {
         let mut event_sender = event_sender.lock().await;
-        if let Err(err) = event_sender.send(RsbtCommand::TorrentList { sender }).await {
+        if let Err(err) = event_sender
+            .send(RsbtCommand::TorrentAction(request_response))
+            .await
+        {
             error!("cannot send to torrent process: {}", err);
             return HttpResponse::InternalServerError().json(Failure {
                 error: format!("cannot send to torrent process: {}", err),
@@ -151,8 +164,15 @@ async fn torrent_create_action(
     }
 
     match receiver.await {
-        _ => HttpResponse::InternalServerError().json(Failure {
-            error: "not implemented".to_string(),
+        Ok(Ok(())) => HttpResponse::Ok().finish(),
+        Ok(Err(err @ RsbtError::TorrentNotFound(_))) => HttpResponse::NotFound().json(Failure {
+            error: format!("{}", err),
+        }),
+        Ok(Err(err)) => HttpResponse::InternalServerError().json(Failure {
+            error: format!("{}", err),
+        }),
+        Err(err) => HttpResponse::InternalServerError().json(Failure {
+            error: format!("{}", err),
         }),
     }
 }

@@ -1,8 +1,10 @@
 use super::*;
 use std::path::PathBuf;
 
+mod action;
 mod add_torrent;
 
+use action::torrent_action;
 use add_torrent::add_torrent;
 
 pub(crate) async fn download_events_loop(
@@ -15,9 +17,10 @@ pub(crate) async fn download_events_loop(
     while let Some(event) = events.next().await {
         match event {
             RsbtCommand::AddTorrent(request_response) => {
+                debug!("add torrent");
                 let torrent = add_torrent(
                     properties.clone(),
-                    &request_response,
+                    request_response.request(),
                     &mut id,
                     &mut torrents,
                 )
@@ -51,6 +54,20 @@ pub(crate) async fn download_events_loop(
                 debug!("collecting torrent list");
                 if sender.send(torrents.to_vec()).is_err() {
                     error!("cannot send handshake, receiver is dropped");
+                }
+            }
+            RsbtCommand::TorrentAction(request_response) => {
+                debug!("torrent action");
+
+                let response = torrent_action(
+                    properties.clone(),
+                    request_response.request(),
+                    &mut torrents,
+                )
+                .await;
+
+                if let Err(err) = request_response.response(response) {
+                    error!("cannot send response for add torrent: {}", err);
                 }
             }
         }

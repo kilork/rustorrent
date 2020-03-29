@@ -19,11 +19,7 @@ use futures::StreamExt;
 use log::{debug, error, info};
 use openid::{DiscoveredClient, Options, Token, Userinfo};
 use reqwest;
-use rsbt_service::{
-    app::{RequestResponse, RsbtApp, RsbtCommand, RsbtCommandAddTorrent, TorrentDownloadState},
-    types::{Properties, Settings},
-    RsbtError,
-};
+use rsbt_service::{app::*, types::*, RsbtError};
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
@@ -171,6 +167,7 @@ async fn main() -> Result<(), ExitFailure> {
                         }
                     })
                     .service(torrent_list)
+                    .service(torrent_create_action)
                     .service(upload_form)
                     .service(upload)
                     .service(account)
