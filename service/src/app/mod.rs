@@ -26,7 +26,7 @@ mod select_new_peer;
 use accept_connections_loop::accept_connections_loop;
 use connect_to_peer::connect_to_peer;
 use determine_download_mode::determine_download_mode;
-use download_events_loop::download_events_loop;
+pub use download_events_loop::*;
 use download_torrent::{download_torrent, DownloadTorrentEvent};
 use peer_connection::peer_connection;
 use peer_loop::peer_loop;
@@ -38,28 +38,6 @@ const TORRENTS_TOML: &str = "torrents.toml";
 
 pub struct RsbtApp {
     pub properties: Arc<Properties>,
-}
-
-#[derive(Clone)]
-pub struct TorrentDownload {
-    pub id: usize,
-    pub name: String,
-    pub header: TorrentDownloadHeader,
-    pub process: Arc<TorrentProcess>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct TorrentDownloadHeader {
-    pub file: String,
-    pub state: TorrentDownloadState,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub enum TorrentDownloadState {
-    Validating,
-    Error,
-    Enabled,
-    Disabled,
 }
 
 #[derive(Debug)]
@@ -93,12 +71,6 @@ impl Default for TorrentPeerState {
     }
 }
 
-pub struct RsbtCommandAddTorrent {
-    pub data: Vec<u8>,
-    pub filename: String,
-    pub state: TorrentDownloadState,
-}
-
 #[serde(rename_all = "lowercase")]
 #[derive(Serialize, Deserialize, Copy, Clone)]
 pub enum RsbtTorrentAction {
@@ -109,18 +81,6 @@ pub enum RsbtTorrentAction {
 pub struct RsbtCommandTorrentAction {
     pub id: usize,
     pub action: RsbtTorrentAction,
-}
-
-pub enum RsbtCommand {
-    AddTorrent(RequestResponse<RsbtCommandAddTorrent, Result<TorrentDownload, RsbtError>>),
-    TorrentHandshake {
-        handshake_request: Handshake,
-        handshake_sender: oneshot::Sender<Option<Arc<TorrentProcess>>>,
-    },
-    TorrentList {
-        sender: oneshot::Sender<Vec<TorrentDownload>>,
-    },
-    TorrentAction(RequestResponse<RsbtCommandTorrentAction, Result<(), RsbtError>>),
 }
 
 pub(crate) struct PeerState {

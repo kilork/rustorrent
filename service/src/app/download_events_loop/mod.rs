@@ -7,6 +7,46 @@ mod add_torrent;
 use action::torrent_action;
 use add_torrent::add_torrent;
 
+#[derive(Clone)]
+pub struct TorrentDownload {
+    pub id: usize,
+    pub name: String,
+    pub header: TorrentDownloadHeader,
+    pub process: Arc<TorrentProcess>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct TorrentDownloadHeader {
+    pub file: String,
+    pub state: TorrentDownloadState,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub enum TorrentDownloadState {
+    Validating,
+    Error,
+    Enabled,
+    Disabled,
+}
+
+pub struct RsbtCommandAddTorrent {
+    pub data: Vec<u8>,
+    pub filename: String,
+    pub state: TorrentDownloadState,
+}
+
+pub enum RsbtCommand {
+    AddTorrent(RequestResponse<RsbtCommandAddTorrent, Result<TorrentDownload, RsbtError>>),
+    TorrentHandshake {
+        handshake_request: Handshake,
+        handshake_sender: oneshot::Sender<Option<Arc<TorrentProcess>>>,
+    },
+    TorrentList {
+        sender: oneshot::Sender<Vec<TorrentDownload>>,
+    },
+    TorrentAction(RequestResponse<RsbtCommandTorrentAction, Result<(), RsbtError>>),
+}
+
 pub(crate) async fn download_events_loop(
     properties: Arc<Properties>,
     mut events: Receiver<RsbtCommand>,
