@@ -13,7 +13,7 @@ type EntityArrayResponseType = HttpResponse<ITorrent[]>;
 
 @Injectable({ providedIn: 'root' })
 export class TorrentService {
-  public resourceUrl = SERVER_API_URL + 'api/torrents';
+  public resourceUrl = SERVER_API_URL + 'api/torrent';
   public uploadUrl = SERVER_API_URL + 'api/upload';
 
   constructor(protected http: HttpClient) {}
