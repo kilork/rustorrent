@@ -228,6 +228,9 @@ pub(crate) async fn download_torrent(
             }
             DownloadTorrentEvent::Enable(request_response) => {
                 if active {
+                    if let Err(err) = request_response.response(Ok(())) {
+                        error!("cannot send response for disable torrent: {}", err);
+                    }
                     continue;
                 }
 
@@ -253,15 +256,36 @@ pub(crate) async fn download_torrent(
             }
             DownloadTorrentEvent::Disable(request_response) => {
                 if !active {
+                    if let Err(err) = request_response.response(Ok(())) {
+                        error!("cannot send response for disable torrent: {}", err);
+                    }
                     continue;
                 }
                 if let Some(abort_handle) = announce_abort_handle.take() {
                     abort_handle.abort();
                 }
+
+                for (peer_id, peer_state) in peer_states {
+                    match peer_state.state {
+                        TorrentPeerState::Connected { mut sender, .. } => {
+                            if let Err(err) = sender.send(PeerMessage::Disconnect).await {
+                                error!(
+                                    "[{}] disable torrent: cannot send disconnect message to peer: {}",
+                                    peer_id, err
+                                );
+                            }
+                        }
+                        TorrentPeerState::Connecting(_) => {
+                            error!("FIXME: need to stop cennecting too");
+                        }
+                        _ => (),
+                    }
+                }
+                peer_states = HashMap::new();
+
                 if let Err(err) = request_response.response(Ok(())) {
                     error!("cannot send response for disable torrent: {}", err);
                 }
-                //FIXME: disconnect and remove peers
                 active = false;
             }
         }
