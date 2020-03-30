@@ -82,7 +82,7 @@ async fn torrent_list(
                     received: 0,
                     uploaded: 0,
                     length: torrent.process.info.length,
-                    active: true,
+                    active: torrent.header.state == TorrentDownloadState::Enabled,
                 })
                 .collect();
             {
