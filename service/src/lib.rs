@@ -1,5 +1,5 @@
 use futures::{
-    future::{join, AbortHandle, Abortable},
+    future::{join, AbortHandle, Abortable, Aborted},
     prelude::*,
     stream::SplitSink,
     try_join,

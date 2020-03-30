@@ -24,7 +24,7 @@ pub struct TorrentDownloadHeader {
     pub state: TorrentDownloadState,
 }
 
-#[derive(Clone, Serialize, Deserialize, Copy)]
+#[derive(Clone, Serialize, Deserialize, Copy, PartialEq)]
 pub enum TorrentDownloadState {
     Enabled,
     Disabled,

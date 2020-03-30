@@ -19,15 +19,28 @@ pub(crate) async fn torrent_action(
 impl TorrentDownload {
     async fn enable(&mut self) -> Result<(), RsbtError> {
         debug!("enable {}", self.id);
-        // FIXME: send events to announce and peers to start them
+
+        let (enable_request, response) = RequestResponse::new(());
+        self.process
+            .broker_sender
+            .clone()
+            .send(DownloadTorrentEvent::Enable(enable_request))
+            .await?;
+        response.await??;
 
         self.update_state(TorrentDownloadState::Enabled).await
     }
 
     async fn disable(&mut self) -> Result<(), RsbtError> {
         debug!("disable {}", self.id);
-        // FIXME: send events to announce and peers to stop them
 
+        let (disable_request, response) = RequestResponse::new(());
+        self.process
+            .broker_sender
+            .clone()
+            .send(DownloadTorrentEvent::Disable(disable_request))
+            .await?;
+        response.await??;
         self.update_state(TorrentDownloadState::Disabled).await
     }
 
@@ -38,6 +51,6 @@ impl TorrentDownload {
 
         self.header.state = state;
 
-        Err(RsbtError::TorrentActionNotSupported)
+        Ok(())
     }
 }

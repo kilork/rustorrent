@@ -1,5 +1,6 @@
 use super::*;
 
+#[derive(Debug)]
 pub enum RequestResponse<T, R> {
     RequestOnly(T),
     Full {
