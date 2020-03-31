@@ -54,7 +54,7 @@ impl FromRequest for Paging {
     }
 }
 
-#[get("/torrents")]
+#[get("/torrent")]
 async fn torrent_list(
     paging: Paging,
     event_sender: web::Data<Mutex<Sender<RsbtCommand>>>,
@@ -82,7 +82,7 @@ async fn torrent_list(
                     received: 0,
                     uploaded: 0,
                     length: torrent.process.info.length,
-                    active: true,
+                    active: torrent.header.state == TorrentDownloadState::Enabled,
                 })
                 .collect();
             {
@@ -130,5 +130,49 @@ async fn torrent_list(
                 error: format!("cannot receive from torrent process: {}", err),
             })
         }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct Action {
+    pub action: RsbtTorrentAction,
+}
+
+#[post("/torrent/{id}/action")]
+async fn torrent_create_action(
+    event_sender: web::Data<Mutex<Sender<RsbtCommand>>>,
+    id: web::Path<usize>,
+    body: web::Json<Action>,
+    _user: User,
+) -> impl Responder {
+    let (request_response, receiver) = RequestResponse::new(RsbtCommandTorrentAction {
+        id: *id,
+        action: body.action,
+    });
+
+    {
+        let mut event_sender = event_sender.lock().await;
+        if let Err(err) = event_sender
+            .send(RsbtCommand::TorrentAction(request_response))
+            .await
+        {
+            error!("cannot send to torrent process: {}", err);
+            return HttpResponse::InternalServerError().json(Failure {
+                error: format!("cannot send to torrent process: {}", err),
+            });
+        }
+    }
+
+    match receiver.await {
+        Ok(Ok(())) => HttpResponse::Ok().finish(),
+        Ok(Err(err @ RsbtError::TorrentNotFound(_))) => HttpResponse::NotFound().json(Failure {
+            error: format!("{}", err),
+        }),
+        Ok(Err(err)) => HttpResponse::InternalServerError().json(Failure {
+            error: format!("{}", err),
+        }),
+        Err(err) => HttpResponse::InternalServerError().json(Failure {
+            error: format!("{}", err),
+        }),
     }
 }

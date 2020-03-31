@@ -25,7 +25,7 @@
                            (change)="updateFile($event.target.files)">
                     <label class="custom-file-label" for="customFileLang">
                         <span *ngIf="fileToUpload === null"
-                              jhiTranslate="rsbt.torrent.fileSelect.choose"> Choose a File </span>
+                              jhiTranslate="rsbt.torrent.fileSelect.choose"> Choose a file </span>
                         <span *ngIf=" fileToUpload !== null"> {{fileToUpload.name}} </span>
                     </label>
                 </div>

@@ -183,14 +183,12 @@ async fn logout(
     if let Some(id) = identity.identity() {
         identity.forget();
         if let Some(SessionUser {
-            user,
-            access_token,
-            info,
+            user, access_token, ..
         }) = sessions.map.write().await.remove(&id)
         {
             debug!("logout user: {:?}", user);
 
-            let id_token = access_token.clone();
+            let id_token = access_token;
             let logout_url = oidc_client.config().end_session_endpoint.clone();
 
             return HttpResponse::Ok().json(Logout {

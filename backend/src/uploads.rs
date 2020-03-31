@@ -24,17 +24,15 @@ async fn upload(
             torrent.extend(&data);
         }
 
-        let (sender, receiver) = oneshot::channel();
+        let (request_response, receiver) = RequestResponse::new(RsbtCommandAddTorrent {
+            data: torrent,
+            filename: filename.to_string(),
+            state: TorrentDownloadState::Enabled,
+        });
         {
             let mut event_sender = event_sender.lock().await;
             if let Err(err) = event_sender
-                .send(RsbtCommand::AddTorrent(
-                    RequestResponse::Full {
-                        request: torrent,
-                        response: sender,
-                    },
-                    filename.to_string(),
-                ))
+                .send(RsbtCommand::AddTorrent(request_response))
                 .await
             {
                 error!("cannot send to torrent process: {}", err);

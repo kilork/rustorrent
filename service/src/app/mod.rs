@@ -20,30 +20,24 @@ pub(crate) mod download_torrent;
 mod peer_connection;
 mod peer_loop;
 mod peer_loop_message;
+mod request_response;
 mod select_new_peer;
 
 use accept_connections_loop::accept_connections_loop;
 use connect_to_peer::connect_to_peer;
 use determine_download_mode::determine_download_mode;
-use download_events_loop::download_events_loop;
+pub use download_events_loop::*;
 use download_torrent::{download_torrent, DownloadTorrentEvent};
 use peer_connection::peer_connection;
 use peer_loop::peer_loop;
 use peer_loop_message::PeerLoopMessage;
+pub use request_response::RequestResponse;
 use select_new_peer::select_new_peer;
 
 const TORRENTS_TOML: &str = "torrents.toml";
 
 pub struct RsbtApp {
     pub properties: Arc<Properties>,
-}
-
-#[derive(Clone)]
-pub struct TorrentDownload {
-    pub id: usize,
-    pub name: String,
-    pub active: bool,
-    pub process: Arc<TorrentProcess>,
 }
 
 #[derive(Debug)]
@@ -77,49 +71,16 @@ impl Default for TorrentPeerState {
     }
 }
 
-pub enum RequestResponse<T, R> {
-    RequestOnly(T),
-    ResponseOnly(oneshot::Sender<R>),
-    Full {
-        request: T,
-        response: oneshot::Sender<R>,
-    },
+#[serde(rename_all = "lowercase")]
+#[derive(Serialize, Deserialize, Copy, Clone)]
+pub enum RsbtTorrentAction {
+    Enable,
+    Disable,
 }
 
-impl<T, R> RequestResponse<T, R> {
-    pub fn request(&self) -> Option<&T> {
-        match self {
-            RequestResponse::RequestOnly(request) | RequestResponse::Full { request, .. } => {
-                Some(request)
-            }
-            RequestResponse::ResponseOnly(_) => None,
-        }
-    }
-
-    pub fn response(self, result: R) -> Result<(), RsbtError> {
-        match self {
-            RequestResponse::ResponseOnly(response) | RequestResponse::Full { response, .. } => {
-                response
-                    .send(result)
-                    .map_err(|_| RsbtError::FailureReason("Cannot send response".into()))
-            }
-            RequestResponse::RequestOnly(_) => Ok(()),
-        }
-    }
-}
-
-pub enum RsbtCommand {
-    AddTorrent(
-        RequestResponse<Vec<u8>, Result<TorrentDownload, RsbtError>>,
-        String,
-    ),
-    TorrentHandshake {
-        handshake_request: Handshake,
-        handshake_sender: oneshot::Sender<Option<Arc<TorrentProcess>>>,
-    },
-    TorrentList {
-        sender: oneshot::Sender<Vec<TorrentDownload>>,
-    },
+pub struct RsbtCommandTorrentAction {
+    pub id: usize,
+    pub action: RsbtTorrentAction,
 }
 
 pub(crate) struct PeerState {
@@ -150,7 +111,7 @@ pub(crate) enum TorrentDownloadMode {
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct CurrentTorrents {
-    pub torrents: Vec<String>,
+    pub torrents: Vec<TorrentDownloadHeader>,
 }
 
 impl RsbtApp {
@@ -198,19 +159,22 @@ impl RsbtApp {
         let (mut download_events_sender, download_events_receiver) =
             mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
-        let buf = std::fs::read(torrent_file.as_ref())?;
+        let data = std::fs::read(torrent_file.as_ref())?;
 
         download_events_sender
-            .send(RsbtCommand::AddTorrent(
-                RequestResponse::RequestOnly(buf),
-                torrent_file
-                    .as_ref()
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_str()
-                    .unwrap_or_default()
-                    .into(),
-            ))
+            .send(RsbtCommand::AddTorrent(RequestResponse::RequestOnly(
+                RsbtCommandAddTorrent {
+                    data,
+                    filename: torrent_file
+                        .as_ref()
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_str()
+                        .unwrap_or_default()
+                        .into(),
+                    state: TorrentDownloadState::Enabled,
+                },
+            )))
             .await?;
 
         self.processing_loop(download_events_sender, download_events_receiver)
