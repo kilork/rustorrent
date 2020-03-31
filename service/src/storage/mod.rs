@@ -12,6 +12,7 @@ use std::{
 use tokio::{
     fs::{self, File},
     runtime::Builder,
+    sync::{oneshot, watch},
 };
 
 #[derive(Debug)]
@@ -19,18 +20,18 @@ pub struct TorrentStorage {
     pub handle: std::thread::JoinHandle<Result<(), RsbtError>>,
     torrent_process: Arc<TorrentProcess>,
     sender: Sender<TorrentStorageMessage>,
-    pub receiver: tokio::sync::watch::Receiver<TorrentStorageState>,
+    pub receiver: watch::Receiver<TorrentStorageState>,
 }
 
 enum TorrentStorageMessage {
     LoadPiece {
         index: usize,
-        sender: tokio::sync::oneshot::Sender<Result<Option<TorrentPiece>, RsbtError>>,
+        sender: oneshot::Sender<Result<Option<TorrentPiece>, RsbtError>>,
     },
     SavePiece {
         index: usize,
         data: Vec<u8>,
-        sender: tokio::sync::oneshot::Sender<Result<(), RsbtError>>,
+        sender: oneshot::Sender<Result<(), RsbtError>>,
     },
 }
 
@@ -151,7 +152,7 @@ impl TorrentStorage {
                 .await?;
         let (sender, mut channel_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
-        let (watch_sender, receiver) = tokio::sync::watch::channel(state.clone());
+        let (watch_sender, receiver) = watch::channel(state.clone());
 
         let thread_torrent_process = torrent_process.clone();
 
@@ -262,7 +263,7 @@ impl TorrentStorage {
     }
 
     pub async fn save(&mut self, index: usize, data: Vec<u8>) -> Result<(), RsbtError> {
-        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let (sender, receiver) = oneshot::channel();
         self.sender
             .send(TorrentStorageMessage::SavePiece {
                 index,
@@ -275,7 +276,7 @@ impl TorrentStorage {
     }
 
     pub async fn load(&mut self, index: usize) -> Result<Option<TorrentPiece>, RsbtError> {
-        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let (sender, receiver) = oneshot::channel();
         self.sender
             .send(TorrentStorageMessage::LoadPiece { index, sender })
             .await?;

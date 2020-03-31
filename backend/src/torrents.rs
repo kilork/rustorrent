@@ -60,11 +60,14 @@ async fn torrent_list(
     event_sender: web::Data<Mutex<Sender<RsbtCommand>>>,
     _user: User,
 ) -> impl Responder {
-    let (sender, receiver) = oneshot::channel();
+    let (request_response, receiver) = RequestResponse::new(());
 
     {
         let mut event_sender = event_sender.lock().await;
-        if let Err(err) = event_sender.send(RsbtCommand::TorrentList { sender }).await {
+        if let Err(err) = event_sender
+            .send(RsbtCommand::TorrentList(request_response))
+            .await
+        {
             error!("cannot send to torrent process: {}", err);
             return HttpResponse::InternalServerError().json(Failure {
                 error: format!("cannot send to torrent process: {}", err),
@@ -73,20 +76,9 @@ async fn torrent_list(
     }
 
     match receiver.await {
-        Ok(torrents) => {
-            let mut torrents: Vec<_> = torrents
-                .iter()
-                .map(|torrent| BackendTorrentDownload {
-                    id: torrent.id,
-                    name: torrent.name.as_str().into(),
-                    received: 0,
-                    uploaded: 0,
-                    length: torrent.process.info.length,
-                    active: torrent.header.state == TorrentDownloadState::Enabled,
-                })
-                .collect();
+        Ok(Ok(mut torrents)) => {
             {
-                type TD<'a> = &'a BackendTorrentDownload<'a>;
+                type TD<'a> = &'a TorrentDownloadView;
                 let mut fields_order: Box<dyn Fn(TD, TD) -> Ordering> =
                     Box::new(|_, _| Ordering::Equal);
                 let mut sorted_fields = paging
@@ -123,6 +115,12 @@ async fn torrent_list(
 
             HttpResponse::Ok()
                 .json::<Vec<_>>(torrents.iter().skip(page * size).take(size).collect())
+        }
+        Ok(Err(err)) => {
+            error!("error in receiver list call: {}", err);
+            HttpResponse::InternalServerError().json(Failure {
+                error: format!("cannot receive from torrent process list: {}", err),
+            })
         }
         Err(err) => {
             error!("error in receiver: {}", err);

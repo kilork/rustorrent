@@ -5,9 +5,20 @@ mod action;
 mod add_torrent;
 mod current_torrents;
 
+use crate::storage::TorrentStorageState;
 use action::torrent_action;
 use add_torrent::add_torrent;
 use current_torrents::save_current_torrents;
+
+#[derive(Serialize, Clone)]
+pub struct TorrentDownloadView {
+    pub id: usize,
+    pub name: String,
+    pub received: usize,
+    pub uploaded: usize,
+    pub length: usize,
+    pub active: bool,
+}
 
 #[derive(Clone)]
 pub struct TorrentDownload {
@@ -16,6 +27,7 @@ pub struct TorrentDownload {
     pub header: TorrentDownloadHeader,
     pub process: Arc<TorrentProcess>,
     pub properties: Arc<Properties>,
+    pub storage_state_watch: watch::Receiver<TorrentStorageState>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -42,9 +54,7 @@ pub enum RsbtCommand {
         handshake_request: Handshake,
         handshake_sender: oneshot::Sender<Option<Arc<TorrentProcess>>>,
     },
-    TorrentList {
-        sender: oneshot::Sender<Vec<TorrentDownload>>,
-    },
+    TorrentList(RequestResponse<(), Result<Vec<TorrentDownloadView>, RsbtError>>),
     TorrentAction(RequestResponse<RsbtCommandTorrentAction, Result<(), RsbtError>>),
 }
 
@@ -91,10 +101,30 @@ pub(crate) async fn download_events_loop(
                     error!("cannot send handshake, receiver is dropped");
                 }
             }
-            RsbtCommand::TorrentList { sender } => {
+            RsbtCommand::TorrentList(request_response) => {
                 debug!("collecting torrent list");
-                if sender.send(torrents.to_vec()).is_err() {
-                    error!("cannot send handshake, receiver is dropped");
+                let mut torrents_view = vec![];
+                for torrent in &torrents {
+                    let (uploaded, received, downloaded) = {
+                        let storage_stage = torrent.storage_state_watch.borrow();
+                        (
+                            storage_stage.bytes_uploaded as usize,
+                            storage_stage.bytes_downloaded as usize,
+                            storage_stage.downloaded.clone(),
+                        )
+                    };
+                    let torrent_view = TorrentDownloadView {
+                        id: torrent.id,
+                        name: torrent.name.clone(),
+                        active: torrent.header.state == TorrentDownloadState::Enabled,
+                        length: torrent.process.info.length,
+                        received,
+                        uploaded,
+                    };
+                    torrents_view.push(torrent_view);
+                }
+                if let Err(err) = request_response.response(Ok(torrents_view)) {
+                    error!("cannot send response for torrent list: {}", err);
                 }
             }
             RsbtCommand::TorrentAction(request_response) => {

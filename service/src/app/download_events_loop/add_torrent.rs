@@ -40,6 +40,13 @@ pub(crate) async fn add_torrent(
         broker_sender,
     });
 
+    let torrent_storage = TorrentStorage::new(
+        properties.clone(),
+        filename.clone(),
+        torrent_process.clone(),
+    )
+    .await?;
+
     let torrent_header = TorrentDownloadHeader {
         file: filename.clone(),
         state: state.clone(),
@@ -50,14 +57,8 @@ pub(crate) async fn add_torrent(
         header: torrent_header.clone(),
         process: torrent_process.clone(),
         properties: properties.clone(),
+        storage_state_watch: torrent_storage.receiver.clone(),
     };
-
-    let torrent_storage = TorrentStorage::new(
-        properties.clone(),
-        filename.clone(),
-        torrent_process.clone(),
-    )
-    .await?;
 
     save_current_torrents(properties.clone(), torrent_header).await?;
 
