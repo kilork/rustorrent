@@ -1,8 +1,15 @@
 use super::*;
 
 #[get("/stream")]
-async fn stream(broadcaster: web::Data<RwLock<Broadcaster>>, _user: User) -> impl Responder {
-    let rx = broadcaster.write().await.new_client().await;
+async fn stream_page(_user: User) -> impl Responder {
+    HttpResponse::Ok()
+        .content_type("text/html")
+        .body(include_str!("../static/stream.html"))
+}
+
+#[get("/stream")]
+async fn stream(broadcaster: web::Data<Broadcaster>, _user: User) -> impl Responder {
+    let rx = broadcaster.new_client().await;
     HttpResponse::Ok()
         .content_type("text/event-stream")
         .keep_alive()
@@ -21,7 +28,7 @@ impl Broadcaster {
         }
     }
 
-    pub(crate) async fn new_client(&mut self) -> Client {
+    pub(crate) async fn new_client(&self) -> Client {
         eprintln!("adding new client");
         let (tx, rx) = mpsc::channel(100);
 

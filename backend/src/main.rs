@@ -168,7 +168,11 @@ async fn main() -> Result<(), ExitFailure> {
             .app_data(sender.clone())
             .service(authorize)
             .service(login_get)
-            .service(web::scope("/sandbox").service(upload_form))
+            .service(
+                web::scope("/sandbox")
+                    .service(upload_form)
+                    .service(stream_page),
+            )
             .service(
                 web::scope("/api")
                     .service(torrent_list)
