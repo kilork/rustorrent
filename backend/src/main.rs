@@ -19,7 +19,11 @@ use futures::StreamExt;
 use log::{debug, error, info};
 use openid::{DiscoveredClient, Options, Token, Userinfo};
 use reqwest;
-use rsbt_service::{app::*, types::*, RsbtError};
+use rsbt_service::{
+    app::{events::TorrentEvent, *},
+    types::*,
+    RsbtError,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
@@ -117,7 +121,7 @@ async fn main() -> Result<(), ExitFailure> {
 
     let current_torrents = rsbt_app.init_storage().await?;
 
-    let broadcaster = init_broadcaster();
+    let (broadcaster, mut broadcaster_sender) = init_broadcaster();
 
     let mut download_events_sender = init_rsbt_app(rsbt_app);
 
@@ -138,7 +142,14 @@ async fn main() -> Result<(), ExitFailure> {
                 .await
                 .map_err(RsbtError::from)?;
 
-            let _ = receiver.await?;
+            let torrent_download = receiver.await??;
+
+            if let Err(err) = broadcaster_sender
+                .send(BroadcasterMessage::Subscribe(torrent_download))
+                .await
+            {
+                error!("cannot send subscribe message: {}", err);
+            }
         }
     }
 
@@ -206,40 +217,51 @@ fn init_rsbt_app(rsbt_app: RsbtApp) -> Sender<RsbtCommand> {
 
     download_events_sender
 }
-
+enum BroadcasterMessage {
+    Send(TorrentEvent),
+    Subscribe(TorrentDownload),
+}
 // fn init_broadcaster() -> (web::Data<Broadcaster>, mpsc::unbounded::UnboundedSender<>) {
-fn init_broadcaster() -> web::Data<Broadcaster> {
+fn init_broadcaster() -> (web::Data<Broadcaster>, Sender<BroadcasterMessage>) {
     let broadcaster = web::Data::new(Broadcaster::new());
     let broadcaster_timer = broadcaster.clone();
 
+    let (broadcaster_sender, broadcaster_receiver) =
+        mpsc::channel(rsbt_service::DEFAULT_CHANNEL_BUFFER);
+
     let task = async move {
-        let mut timer = interval_at(Instant::now(), Duration::from_secs(10));
+        let mut messages = futures::stream::SelectAll::new();
+        let boxed: Pin<Box<dyn Stream<Item = BroadcasterMessage>>> =
+            broadcaster_receiver.boxed_local();
+        messages.push(boxed);
 
-        loop {
-            timer.tick().await;
-
-            debug!("timer event");
-
-            if let Err(ok_clients) = broadcaster_timer.message("ping").await {
-                debug!("refresh client list");
-                *broadcaster_timer.clients.write().await = ok_clients;
+        while let Some(message) = messages.next().await {
+            match message {
+                BroadcasterMessage::Send(torrent_event) => {
+                    let json_message = serde_json::to_string(&torrent_event).unwrap();
+                    debug!("sending broadcast: {}", json_message);
+                    if let Err(ok_clients) = broadcaster_timer.message(&json_message).await {
+                        debug!("refresh client list");
+                        *broadcaster_timer.clients.write().await = ok_clients;
+                    }
+                }
+                BroadcasterMessage::Subscribe(torrent_download) => {
+                    let id = torrent_download.id;
+                    let storage_state = torrent_download
+                        .storage_state_watch
+                        .map(move |x| {
+                            BroadcasterMessage::Send(TorrentEvent::Storage {
+                                id,
+                                uploaded: x.bytes_uploaded as usize,
+                                received: x.bytes_downloaded as usize,
+                            })
+                        })
+                        .boxed_local();
+                    messages.push(storage_state);
+                }
             }
         }
     };
     Arbiter::spawn(task);
-    broadcaster
-}
-
-#[cfg(test)]
-mod tests {
-
-    use rsbt_service::app::events::TorrentEvent;
-
-    #[test]
-    fn torrent_event_storage() {
-        let torrent_event = TorrentEvent::Storage {};
-
-        let json = serde_json::to_string(&torrent_event).unwrap();
-        assert_eq!(json, r#"{"storage":{}}"#);
-    }
+    (broadcaster, broadcaster_sender)
 }
