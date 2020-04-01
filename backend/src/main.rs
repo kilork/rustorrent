@@ -157,6 +157,7 @@ async fn main() -> Result<(), ExitFailure> {
             .app_data(sender.clone())
             .service(authorize)
             .service(login_get)
+            .service(web::scope("/sandbox").service(upload_form))
             .service(
                 web::scope("/api")
                     .wrap_fn(|req, srv| {
@@ -168,7 +169,6 @@ async fn main() -> Result<(), ExitFailure> {
                     })
                     .service(torrent_list)
                     .service(torrent_create_action)
-                    .service(upload_form)
                     .service(upload)
                     .service(account)
                     .service(logout)
