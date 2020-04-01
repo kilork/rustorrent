@@ -43,14 +43,10 @@ async fn upload(
         }
 
         return Ok(match receiver.await {
-            Ok(Ok(torrent)) => HttpResponse::Ok().json(BackendTorrentDownload {
-                id: torrent.id,
-                name: torrent.name.as_str().into(),
-                received: 0,
-                uploaded: 0,
-                length: torrent.process.info.length,
-                active: true,
-            }),
+            Ok(Ok(ref torrent)) => {
+                let torrent_view: TorrentDownloadView = torrent.into();
+                HttpResponse::Ok().json(torrent_view)
+            }
             Ok(Err(err)) => {
                 error!("error in update call: {}", err);
                 HttpResponse::InternalServerError().json(Failure {

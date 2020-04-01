@@ -30,6 +30,26 @@ pub struct TorrentDownload {
     pub storage_state_watch: watch::Receiver<TorrentStorageState>,
 }
 
+impl From<&TorrentDownload> for TorrentDownloadView {
+    fn from(torrent: &TorrentDownload) -> Self {
+        let (uploaded, received) = {
+            let storage_stage = torrent.storage_state_watch.borrow();
+            (
+                storage_stage.bytes_uploaded as usize,
+                storage_stage.bytes_downloaded as usize,
+            )
+        };
+        Self {
+            id: torrent.id,
+            name: torrent.name.clone(),
+            active: torrent.header.state == TorrentDownloadState::Enabled,
+            length: torrent.process.info.length,
+            received,
+            uploaded,
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TorrentDownloadHeader {
     pub file: String,
@@ -103,26 +123,7 @@ pub(crate) async fn download_events_loop(
             }
             RsbtCommand::TorrentList(request_response) => {
                 debug!("collecting torrent list");
-                let mut torrents_view = vec![];
-                for torrent in &torrents {
-                    let (uploaded, received, downloaded) = {
-                        let storage_stage = torrent.storage_state_watch.borrow();
-                        (
-                            storage_stage.bytes_uploaded as usize,
-                            storage_stage.bytes_downloaded as usize,
-                            storage_stage.downloaded.clone(),
-                        )
-                    };
-                    let torrent_view = TorrentDownloadView {
-                        id: torrent.id,
-                        name: torrent.name.clone(),
-                        active: torrent.header.state == TorrentDownloadState::Enabled,
-                        length: torrent.process.info.length,
-                        received,
-                        uploaded,
-                    };
-                    torrents_view.push(torrent_view);
-                }
+                let torrents_view = torrents.iter().map(TorrentDownloadView::from).collect();
                 if let Err(err) = request_response.response(Ok(torrents_view)) {
                     error!("cannot send response for torrent list: {}", err);
                 }
