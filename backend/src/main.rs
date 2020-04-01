@@ -160,13 +160,6 @@ async fn main() -> Result<(), ExitFailure> {
             .service(web::scope("/sandbox").service(upload_form))
             .service(
                 web::scope("/api")
-                    .wrap_fn(|req, srv| {
-                        let fut = srv.call(req);
-                        async {
-                            let res = fut.await?;
-                            Ok(res)
-                        }
-                    })
                     .service(torrent_list)
                     .service(torrent_create_action)
                     .service(upload)
@@ -214,6 +207,7 @@ fn init_rsbt_app(rsbt_app: RsbtApp) -> Sender<RsbtCommand> {
     download_events_sender
 }
 
+// fn init_broadcaster() -> (web::Data<Broadcaster>, mpsc::unbounded::UnboundedSender<>) {
 fn init_broadcaster() -> web::Data<Broadcaster> {
     let broadcaster = web::Data::new(Broadcaster::new());
     let broadcaster_timer = broadcaster.clone();
@@ -234,4 +228,18 @@ fn init_broadcaster() -> web::Data<Broadcaster> {
     };
     Arbiter::spawn(task);
     broadcaster
+}
+
+#[cfg(test)]
+mod tests {
+
+    use rsbt_service::app::events::TorrentEvent;
+
+    #[test]
+    fn torrent_event_storage() {
+        let torrent_event = TorrentEvent::Storage {};
+
+        let json = serde_json::to_string(&torrent_event).unwrap();
+        assert_eq!(json, r#"{"storage":{}}"#);
+    }
 }

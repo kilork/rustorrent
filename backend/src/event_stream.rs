@@ -1,7 +1,7 @@
 use super::*;
 
 #[get("/stream")]
-async fn stream(broadcaster: web::Data<RwLock<Broadcaster>>) -> impl Responder {
+async fn stream(broadcaster: web::Data<RwLock<Broadcaster>>, _user: User) -> impl Responder {
     let rx = broadcaster.write().await.new_client().await;
     HttpResponse::Ok()
         .content_type("text/event-stream")

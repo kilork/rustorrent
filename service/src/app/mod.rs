@@ -17,6 +17,7 @@ mod connect_to_peer;
 mod determine_download_mode;
 mod download_events_loop;
 pub(crate) mod download_torrent;
+pub mod events;
 mod peer_connection;
 mod peer_loop;
 mod peer_loop_message;
