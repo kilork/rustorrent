@@ -7,7 +7,6 @@ use rsbt_frontend::*;
 use actix::prelude::*;
 use actix_identity::{CookieIdentityPolicy, Identity, IdentityService};
 use actix_multipart::Multipart;
-use actix_service::Service;
 use actix_web::{
     dev::Payload, error::ErrorUnauthorized, http, middleware, web, App, Error, FromRequest,
     HttpRequest, HttpResponse, HttpServer, Responder,
@@ -16,10 +15,14 @@ use bytes::Bytes;
 use dotenv::dotenv;
 use exitfailure::ExitFailure;
 use futures::StreamExt;
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use openid::{DiscoveredClient, Options, Token, Userinfo};
 use reqwest;
-use rsbt_service::{app::*, types::*, RsbtError};
+use rsbt_service::{
+    app::{events::TorrentEvent, *},
+    types::*,
+    RsbtError,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
@@ -33,9 +36,8 @@ use tokio::{
     fs,
     sync::{
         mpsc::{self, Receiver, Sender},
-        oneshot, Mutex, RwLock,
+        Mutex, RwLock,
     },
-    time::{interval_at, Duration, Instant},
 };
 use url::Url;
 
@@ -49,7 +51,6 @@ mod uploads;
 
 use event_stream::*;
 use login::*;
-use model::*;
 use session::*;
 use torrents::*;
 use uploads::*;
@@ -117,7 +118,7 @@ async fn main() -> Result<(), ExitFailure> {
 
     let current_torrents = rsbt_app.init_storage().await?;
 
-    let broadcaster = init_broadcaster();
+    let (broadcaster, mut broadcaster_sender) = init_broadcaster();
 
     let mut download_events_sender = init_rsbt_app(rsbt_app);
 
@@ -138,11 +139,19 @@ async fn main() -> Result<(), ExitFailure> {
                 .await
                 .map_err(RsbtError::from)?;
 
-            let _ = receiver.await?;
+            let torrent_download = receiver.await??;
+
+            if let Err(err) = broadcaster_sender
+                .send(BroadcasterMessage::Subscribe(torrent_download))
+                .await
+            {
+                error!("cannot send subscribe message: {}", err);
+            }
         }
     }
 
     let sender = web::Data::new(Mutex::new(download_events_sender));
+    let broadcaster_sender = web::Data::new(Mutex::new(broadcaster_sender));
 
     HttpServer::new(move || {
         let mut app = App::new()
@@ -155,20 +164,18 @@ async fn main() -> Result<(), ExitFailure> {
             .app_data(broadcaster.clone())
             .app_data(sessions.clone())
             .app_data(sender.clone())
+            .app_data(broadcaster_sender.clone())
             .service(authorize)
             .service(login_get)
             .service(
+                web::scope("/sandbox")
+                    .service(upload_form)
+                    .service(stream_page),
+            )
+            .service(
                 web::scope("/api")
-                    .wrap_fn(|req, srv| {
-                        let fut = srv.call(req);
-                        async {
-                            let res = fut.await?;
-                            Ok(res)
-                        }
-                    })
                     .service(torrent_list)
                     .service(torrent_create_action)
-                    .service(upload_form)
                     .service(upload)
                     .service(account)
                     .service(logout)
@@ -213,25 +220,62 @@ fn init_rsbt_app(rsbt_app: RsbtApp) -> Sender<RsbtCommand> {
 
     download_events_sender
 }
-
-fn init_broadcaster() -> web::Data<Broadcaster> {
+enum BroadcasterMessage {
+    Send(TorrentEvent),
+    Subscribe(TorrentDownload),
+}
+// fn init_broadcaster() -> (web::Data<Broadcaster>, mpsc::unbounded::UnboundedSender<>) {
+fn init_broadcaster() -> (web::Data<Broadcaster>, Sender<BroadcasterMessage>) {
     let broadcaster = web::Data::new(Broadcaster::new());
     let broadcaster_timer = broadcaster.clone();
 
+    let (broadcaster_sender, broadcaster_receiver) =
+        mpsc::channel(rsbt_service::DEFAULT_CHANNEL_BUFFER);
+
     let task = async move {
-        let mut timer = interval_at(Instant::now(), Duration::from_secs(10));
+        let mut messages = futures::stream::SelectAll::new();
+        let boxed: Pin<Box<dyn Stream<Item = BroadcasterMessage>>> =
+            broadcaster_receiver.boxed_local();
+        messages.push(boxed);
 
-        loop {
-            timer.tick().await;
-
-            debug!("timer event");
-
-            if let Err(ok_clients) = broadcaster_timer.message("ping").await {
-                debug!("refresh client list");
-                *broadcaster_timer.clients.write().await = ok_clients;
+        while let Some(message) = messages.next().await {
+            match message {
+                BroadcasterMessage::Send(torrent_event) => {
+                    let json_message = serde_json::to_string(&torrent_event).unwrap();
+                    debug!("sending broadcast: {}", json_message);
+                    if let Err(ok_clients) = broadcaster_timer.message(&json_message).await {
+                        debug!("refresh client list");
+                        *broadcaster_timer.clients.write().await = ok_clients;
+                    }
+                }
+                BroadcasterMessage::Subscribe(torrent_download) => {
+                    let id = torrent_download.id;
+                    let storage_state = torrent_download
+                        .storage_state_watch
+                        .map(move |x| {
+                            BroadcasterMessage::Send(TorrentEvent::Storage {
+                                id,
+                                read: x.bytes_read,
+                                write: x.bytes_write,
+                            })
+                        })
+                        .boxed_local();
+                    messages.push(storage_state);
+                    let statistics_state = torrent_download
+                        .statistics_watch
+                        .map(move |x| {
+                            BroadcasterMessage::Send(TorrentEvent::Stat {
+                                id,
+                                tx: x.uploaded,
+                                rx: x.downloaded,
+                            })
+                        })
+                        .boxed_local();
+                    messages.push(statistics_state);
+                }
             }
         }
     };
     Arbiter::spawn(task);
-    broadcaster
+    (broadcaster, broadcaster_sender)
 }

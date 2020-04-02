@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        * {
+            margin: 0px;
+            padding: 0px;
+        }
+    </style>
+</head>
+
+<body>
+    <ul style="list-style-type:none" id="list">
+    </ul>
+    <script>
+        const evtSource = new EventSource("/api/stream");
+        const eventList = document.getElementById('list');
+        evtSource.onmessage = function (event) {
+            const newElement = document.createElement("li");
+            newElement.innerHTML = event.data;
+            eventList.appendChild(newElement);
+            newElement.scrollIntoView(false);
+        };
+    </script>
+</body>
+
+</html>

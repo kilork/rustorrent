@@ -46,6 +46,7 @@ pub(crate) enum DownloadTorrentEvent {
     },
     Enable(RequestResponse<(), Result<(), RsbtError>>),
     Disable(RequestResponse<(), Result<(), RsbtError>>),
+    Subscribe(RequestResponse<(), watch::Receiver<TorrentDownloadState>>),
 }
 
 impl Display for DownloadTorrentEvent {
@@ -59,6 +60,19 @@ impl Display for DownloadTorrentEvent {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct TorrentDownloadState {
+    pub downloaded: u64,
+    pub uploaded: u64,
+}
+
+pub enum TorrentStatisticMessage {
+    Subscribe(RequestResponse<(), watch::Receiver<TorrentDownloadState>>),
+    Downloaded(u64),
+    Uploaded(u64),
+    Quit,
+}
+
 pub(crate) async fn download_torrent(
     properties: Arc<Properties>,
     mut torrent_storage: TorrentStorage,
@@ -69,6 +83,45 @@ pub(crate) async fn download_torrent(
     let mut mode = TorrentDownloadMode::Normal;
     let mut active = false;
     let mut announce_abort_handle = None;
+
+    let (mut statistic_sender, mut statistic_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
+
+    let mut torrent_download_state = {
+        let storage_state = torrent_storage.receiver.borrow();
+        TorrentDownloadState {
+            downloaded: storage_state.bytes_write,
+            uploaded: storage_state.bytes_read,
+        }
+    };
+    let statistic_task = async move {
+        let (watch_sender, watch_receiver) = watch::channel(torrent_download_state.clone());
+        while let Some(message) = statistic_receiver.next().await {
+            match message {
+                TorrentStatisticMessage::Subscribe(request_response) => {
+                    if let Err(err) = request_response.response(watch_receiver.clone()) {
+                        error!(
+                            "cannot send subscription response to torrent statistics: {}",
+                            err
+                        );
+                    }
+                }
+                TorrentStatisticMessage::Uploaded(count) => {
+                    torrent_download_state.uploaded += count;
+                    if let Err(err) = watch_sender.broadcast(torrent_download_state) {
+                        error!("cannot broadcast uploaded torrent statistics: {}", err);
+                    }
+                }
+                TorrentStatisticMessage::Downloaded(count) => {
+                    torrent_download_state.downloaded += count;
+                    if let Err(err) = watch_sender.broadcast(torrent_download_state) {
+                        error!("cannot broadcast downloaded torrent statistics: {}", err);
+                    }
+                }
+                TorrentStatisticMessage::Quit => break,
+            }
+        }
+    };
+    tokio::spawn(statistic_task);
 
     while let Some(event) = broker_receiver.next().await {
         debug!("received event: {}", event);
@@ -105,6 +158,7 @@ pub(crate) async fn download_torrent(
                     &mut peer_states,
                     stream,
                     &mut torrent_storage,
+                    statistic_sender.clone(),
                 )
                 .await
                 {
@@ -118,6 +172,7 @@ pub(crate) async fn download_torrent(
                     &mut peer_states,
                     peer_id,
                     stream,
+                    statistic_sender.clone(),
                 )
                 .await
                 {
@@ -288,7 +343,19 @@ pub(crate) async fn download_torrent(
                 }
                 active = false;
             }
+            DownloadTorrentEvent::Subscribe(request_response) => {
+                if let Err(err) = statistic_sender
+                    .send(TorrentStatisticMessage::Subscribe(request_response))
+                    .await
+                {
+                    error!("cannot subscribe: {}", err);
+                }
+            }
         }
+    }
+
+    if let Err(err) = statistic_sender.send(TorrentStatisticMessage::Quit).await {
+        error!("cannot send quit to statistic: {}", err);
     }
 
     debug!("download_torrent done");

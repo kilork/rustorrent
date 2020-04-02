@@ -11,6 +11,7 @@ async fn upload_form(_user: User) -> impl Responder {
 async fn upload(
     _user: User,
     event_sender: web::Data<Mutex<Sender<RsbtCommand>>>,
+    broadcaster_sender: web::Data<Mutex<Sender<BroadcasterMessage>>>,
     mut payload: Multipart,
 ) -> Result<HttpResponse, Error> {
     if let Some(item) = payload.next().await {
@@ -27,7 +28,7 @@ async fn upload(
         let (request_response, receiver) = RequestResponse::new(RsbtCommandAddTorrent {
             data: torrent,
             filename: filename.to_string(),
-            state: TorrentDownloadState::Enabled,
+            state: TorrentDownloadStatus::Enabled,
         });
         {
             let mut event_sender = event_sender.lock().await;
@@ -45,6 +46,14 @@ async fn upload(
         return Ok(match receiver.await {
             Ok(Ok(ref torrent)) => {
                 let torrent_view: TorrentDownloadView = torrent.into();
+                if let Err(err) = broadcaster_sender
+                    .lock()
+                    .await
+                    .send(BroadcasterMessage::Subscribe(torrent.clone()))
+                    .await
+                {
+                    error!("cannot send subscribe message: {}", err);
+                }
                 HttpResponse::Ok().json(torrent_view)
             }
             Ok(Err(err)) => {

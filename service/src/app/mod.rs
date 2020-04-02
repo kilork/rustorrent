@@ -17,6 +17,7 @@ mod connect_to_peer;
 mod determine_download_mode;
 mod download_events_loop;
 pub(crate) mod download_torrent;
+pub mod events;
 mod peer_connection;
 mod peer_loop;
 mod peer_loop_message;
@@ -172,7 +173,7 @@ impl RsbtApp {
                         .to_str()
                         .unwrap_or_default()
                         .into(),
-                    state: TorrentDownloadState::Enabled,
+                    state: TorrentDownloadStatus::Enabled,
                 },
             )))
             .await?;

@@ -1,4 +1,5 @@
 use super::*;
+use crate::app::download_torrent::TorrentStatisticMessage;
 
 pub(crate) struct PeerLoopMessage {
     pub(crate) torrent_process: Arc<TorrentProcess>,
@@ -12,6 +13,7 @@ pub(crate) struct PeerLoopMessage {
     pub(crate) piece_length: usize,
     pub(crate) wtransport: SplitSink<Framed<TcpStream, MessageCodec>, Message>,
     pub(crate) request: Option<(u32, u32, u32)>,
+    pub(crate) statistic_sender: Sender<TorrentStatisticMessage>,
 }
 
 impl PeerLoopMessage {
@@ -85,6 +87,13 @@ impl PeerLoopMessage {
         block: Vec<u8>,
     ) -> Result<bool, RsbtError> {
         let peer_id = self.peer_id;
+        if let Err(err) = self
+            .statistic_sender
+            .send(TorrentStatisticMessage::Downloaded(block.len() as u64))
+            .await
+        {
+            error!("cannot send downloaded statistics: {}", err);
+        }
 
         if let Some(piece) = self.downloading {
             if piece as u32 != index {
