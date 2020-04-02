@@ -5,6 +5,7 @@ pub(crate) async fn process_peer_forwarded(
     peer_states: &mut HashMap<Uuid, PeerState>,
     stream: TcpStream,
     storage: &mut TorrentStorage,
+    statistic_sender: Sender<TorrentStatisticMessage>,
 ) -> Result<(), RsbtError> {
     let peer_id = Uuid::new_v4();
     debug!("[{}] peer connection forwarded", peer_id);
@@ -41,7 +42,14 @@ pub(crate) async fn process_peer_forwarded(
     }
 
     let _ = spawn_and_log_error(
-        peer_loop(torrent_process, peer_id, sender, receiver, stream),
+        peer_loop(
+            torrent_process,
+            peer_id,
+            sender,
+            receiver,
+            stream,
+            statistic_sender,
+        ),
         move || format!("[{}] peer loop failed", peer_id),
     );
 

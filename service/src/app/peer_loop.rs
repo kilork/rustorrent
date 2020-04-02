@@ -1,4 +1,5 @@
 use super::*;
+use crate::app::download_torrent::TorrentStatisticMessage;
 
 pub(crate) async fn peer_loop(
     torrent_process: Arc<TorrentProcess>,
@@ -6,6 +7,7 @@ pub(crate) async fn peer_loop(
     mut sender: Sender<PeerMessage>,
     mut receiver: Receiver<PeerMessage>,
     stream: TcpStream,
+    mut statistic_sender: Sender<TorrentStatisticMessage>,
 ) -> Result<(), RsbtError> {
     let (wtransport, mut rtransport) = Framed::new(stream, MessageCodec).split();
 
@@ -26,6 +28,7 @@ pub(crate) async fn peer_loop(
             torrent_piece: None,
             wtransport,
             request: None,
+            statistic_sender: statistic_sender.clone(),
         };
 
         while let Some(message) = receiver.next().await {
@@ -46,12 +49,10 @@ pub(crate) async fn peer_loop(
                     begin,
                     block,
                 } => {
+                    let block_len = block.len() as u64;
                     debug!(
                         "[{}] sending piece {} {} [{}]",
-                        peer_id,
-                        index,
-                        begin,
-                        block.len()
+                        peer_id, index, begin, block_len
                     );
                     processor
                         .wtransport
@@ -61,6 +62,12 @@ pub(crate) async fn peer_loop(
                             block,
                         })
                         .await?;
+                    if let Err(err) = statistic_sender
+                        .send(TorrentStatisticMessage::Uploaded(block_len))
+                        .await
+                    {
+                        error!("cannot send uploaded statistics: {}", err);
+                    }
                 }
                 PeerMessage::Cancel => {
                     debug!("[{}] cancel download", peer_id);

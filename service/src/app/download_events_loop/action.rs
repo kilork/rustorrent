@@ -28,7 +28,7 @@ impl TorrentDownload {
             .await?;
         response.await??;
 
-        self.update_state(TorrentDownloadState::Enabled).await
+        self.update_state(TorrentDownloadStatus::Enabled).await
     }
 
     async fn disable(&mut self) -> Result<(), RsbtError> {
@@ -41,10 +41,10 @@ impl TorrentDownload {
             .send(DownloadTorrentEvent::Disable(disable_request))
             .await?;
         response.await??;
-        self.update_state(TorrentDownloadState::Disabled).await
+        self.update_state(TorrentDownloadStatus::Disabled).await
     }
 
-    async fn update_state(&mut self, state: TorrentDownloadState) -> Result<(), RsbtError> {
+    async fn update_state(&mut self, state: TorrentDownloadStatus) -> Result<(), RsbtError> {
         let mut torrent_header = self.header.clone();
         torrent_header.state = state;
         save_current_torrents(self.properties.clone(), torrent_header).await?;

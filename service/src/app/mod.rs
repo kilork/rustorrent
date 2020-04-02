@@ -173,7 +173,7 @@ impl RsbtApp {
                         .to_str()
                         .unwrap_or_default()
                         .into(),
-                    state: TorrentDownloadState::Enabled,
+                    state: TorrentDownloadStatus::Enabled,
                 },
             )))
             .await?;

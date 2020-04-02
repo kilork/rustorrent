@@ -9,6 +9,7 @@ use crate::storage::TorrentStorageState;
 use action::torrent_action;
 use add_torrent::add_torrent;
 use current_torrents::save_current_torrents;
+use download_torrent::TorrentDownloadState;
 
 #[derive(Serialize, Clone)]
 pub struct TorrentDownloadView {
@@ -28,6 +29,7 @@ pub struct TorrentDownload {
     pub process: Arc<TorrentProcess>,
     pub properties: Arc<Properties>,
     pub storage_state_watch: watch::Receiver<TorrentStorageState>,
+    pub statistics_watch: watch::Receiver<TorrentDownloadState>,
 }
 
 impl From<&TorrentDownload> for TorrentDownloadView {
@@ -42,7 +44,7 @@ impl From<&TorrentDownload> for TorrentDownloadView {
         Self {
             id: torrent.id,
             name: torrent.name.clone(),
-            active: torrent.header.state == TorrentDownloadState::Enabled,
+            active: torrent.header.state == TorrentDownloadStatus::Enabled,
             length: torrent.process.info.length,
             received,
             uploaded,
@@ -53,11 +55,11 @@ impl From<&TorrentDownload> for TorrentDownloadView {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TorrentDownloadHeader {
     pub file: String,
-    pub state: TorrentDownloadState,
+    pub state: TorrentDownloadStatus,
 }
 
 #[derive(Clone, Serialize, Deserialize, Copy, PartialEq)]
-pub enum TorrentDownloadState {
+pub enum TorrentDownloadStatus {
     Enabled,
     Disabled,
 }
@@ -65,7 +67,7 @@ pub enum TorrentDownloadState {
 pub struct RsbtCommandAddTorrent {
     pub data: Vec<u8>,
     pub filename: String,
-    pub state: TorrentDownloadState,
+    pub state: TorrentDownloadStatus,
 }
 
 pub enum RsbtCommand {

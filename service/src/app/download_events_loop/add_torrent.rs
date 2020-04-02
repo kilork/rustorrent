@@ -51,26 +51,39 @@ pub(crate) async fn add_torrent(
         file: filename.clone(),
         state: state.clone(),
     };
+    let storage_state_watch = torrent_storage.receiver.clone();
+    tokio::spawn(download_torrent(
+        properties.clone(),
+        torrent_storage,
+        torrent_process.clone(),
+        broker_receiver,
+    ));
+
+    let (statistics_request_response, statistics_receiver) = RequestResponse::new(());
+
+    torrent_process
+        .broker_sender
+        .clone()
+        .send(DownloadTorrentEvent::Subscribe(statistics_request_response))
+        .await?;
+
+    let statistics_watch = statistics_receiver.await?;
+
     let torrent_download = TorrentDownload {
         id: *id,
         name,
         header: torrent_header.clone(),
         process: torrent_process.clone(),
         properties: properties.clone(),
-        storage_state_watch: torrent_storage.receiver.clone(),
+        storage_state_watch,
+        statistics_watch,
     };
 
     save_current_torrents(properties.clone(), torrent_header).await?;
 
     torrents.push(torrent_download.clone());
-    tokio::spawn(download_torrent(
-        properties,
-        torrent_storage,
-        torrent_process.clone(),
-        broker_receiver,
-    ));
 
-    if state == &TorrentDownloadState::Enabled {
+    if state == &TorrentDownloadStatus::Enabled {
         debug!("sending activation event");
         let (enable_request, response) = RequestResponse::new(());
         torrent_process

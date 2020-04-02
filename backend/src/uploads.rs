@@ -28,7 +28,7 @@ async fn upload(
         let (request_response, receiver) = RequestResponse::new(RsbtCommandAddTorrent {
             data: torrent,
             filename: filename.to_string(),
-            state: TorrentDownloadState::Enabled,
+            state: TorrentDownloadStatus::Enabled,
         });
         {
             let mut event_sender = event_sender.lock().await;
