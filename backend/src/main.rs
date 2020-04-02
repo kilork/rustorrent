@@ -15,7 +15,7 @@ use bytes::Bytes;
 use dotenv::dotenv;
 use exitfailure::ExitFailure;
 use futures::StreamExt;
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use openid::{DiscoveredClient, Options, Token, Userinfo};
 use reqwest;
 use rsbt_service::{
@@ -261,6 +261,17 @@ fn init_broadcaster() -> (web::Data<Broadcaster>, Sender<BroadcasterMessage>) {
                         })
                         .boxed_local();
                     messages.push(storage_state);
+                    let statistics_state = torrent_download
+                        .statistics_watch
+                        .map(move |x| {
+                            BroadcasterMessage::Send(TorrentEvent::Stat {
+                                id,
+                                tx: x.uploaded,
+                                rx: x.downloaded,
+                            })
+                        })
+                        .boxed_local();
+                    messages.push(statistics_state);
                 }
             }
         }

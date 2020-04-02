@@ -10,4 +10,9 @@ pub enum TorrentEvent {
         received: usize,
         uploaded: usize,
     },
+    Stat {
+        id: usize,
+        rx: u64,
+        tx: u64,
+    },
 }

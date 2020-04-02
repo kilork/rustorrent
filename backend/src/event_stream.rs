@@ -45,7 +45,7 @@ impl Broadcaster {
         let mut ok_clients = vec![];
 
         let len = self.clients.read().await.len();
-        debug!("message to {} client(s)", len);
+        trace!("message to {} client(s)", len);
         let msg = Bytes::from(["data: ", msg, "\n\n"].concat());
 
         for client in self.clients.write().await.iter_mut() {
