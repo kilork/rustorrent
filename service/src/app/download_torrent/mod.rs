@@ -89,8 +89,8 @@ pub(crate) async fn download_torrent(
     let mut torrent_download_state = {
         let storage_state = torrent_storage.receiver.borrow();
         TorrentDownloadState {
-            downloaded: storage_state.bytes_downloaded,
-            uploaded: storage_state.bytes_uploaded,
+            downloaded: storage_state.bytes_write,
+            uploaded: storage_state.bytes_read,
         }
     };
     let statistic_task = async move {

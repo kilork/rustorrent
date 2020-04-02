@@ -5,10 +5,7 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use failure::ResultExt;
 use flat_storage::FlatStorage;
 use flat_storage_mmap::MmapFlatStorage;
-use std::{
-    io::{Read, Write},
-    thread,
-};
+use std::{io::Read, thread};
 use tokio::{
     fs::{self, File},
     runtime::Builder,
@@ -38,8 +35,8 @@ enum TorrentStorageMessage {
 #[derive(Clone, Debug)]
 pub struct TorrentStorageState {
     pub downloaded: Vec<u8>,
-    pub bytes_downloaded: u64,
-    pub bytes_uploaded: u64,
+    pub bytes_write: u64,
+    pub bytes_read: u64,
     pub pieces_left: u32,
 }
 
@@ -51,23 +48,23 @@ impl TorrentStorageState {
         if version != TORRENT_STORAGE_FORMAT_VERSION {
             return Err(RsbtError::StorageVersion(version));
         }
-        let bytes_downloaded: u64 = rdr.read_u64::<BigEndian>()?;
-        let bytes_uploaded = rdr.read_u64::<BigEndian>()?;
+        let bytes_write: u64 = rdr.read_u64::<BigEndian>()?;
+        let bytes_read = rdr.read_u64::<BigEndian>()?;
         let pieces_left = rdr.read_u32::<BigEndian>()?;
         let mut downloaded = vec![];
         rdr.read_to_end(&mut downloaded)?;
         Ok(Self {
             downloaded,
-            bytes_downloaded,
-            bytes_uploaded,
+            bytes_write,
+            bytes_read,
             pieces_left,
         })
     }
 
     async fn write_to_file(&self, mut f: File) -> Result<(), RsbtError> {
         f.write_u8(TORRENT_STORAGE_FORMAT_VERSION).await?;
-        f.write_u64(self.bytes_downloaded.try_into()?).await?;
-        f.write_u64(self.bytes_uploaded.try_into()?).await?;
+        f.write_u64(self.bytes_write.try_into()?).await?;
+        f.write_u64(self.bytes_read.try_into()?).await?;
         f.write_u32(self.pieces_left.try_into()?).await?;
         f.write_all(&self.downloaded).await?;
         Ok(())
@@ -131,8 +128,8 @@ async fn prepare_storage_state<P: AsRef<Path>>(
     } else {
         let state = TorrentStorageState {
             downloaded: vec![],
-            bytes_downloaded: 0,
-            bytes_uploaded: 0,
+            bytes_write: 0,
+            bytes_read: 0,
             pieces_left: torrent_process.info.pieces.len() as u32,
         };
         state.save(&torrent_storage_state_file).await?;
@@ -198,7 +195,7 @@ impl TorrentStorage {
                             }
                             if state.downloaded[block_index] & bit == 0 {
                                 state.pieces_left -= 1;
-                                state.bytes_downloaded += len as u64;
+                                state.bytes_write += len as u64;
                             }
                             state.downloaded[block_index] |= bit;
 
@@ -232,7 +229,7 @@ impl TorrentStorage {
                             };
 
                             if let Some(piece) = &piece {
-                                state.bytes_uploaded += piece.as_ref().len() as u64;
+                                state.bytes_read += piece.as_ref().len() as u64;
                             }
 
                             if let Err(err) = state.save(&state_file).await {

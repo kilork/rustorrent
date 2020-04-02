@@ -255,8 +255,8 @@ fn init_broadcaster() -> (web::Data<Broadcaster>, Sender<BroadcasterMessage>) {
                         .map(move |x| {
                             BroadcasterMessage::Send(TorrentEvent::Storage {
                                 id,
-                                uploaded: x.bytes_uploaded as usize,
-                                received: x.bytes_downloaded as usize,
+                                read: x.bytes_read,
+                                write: x.bytes_write,
                             })
                         })
                         .boxed_local();

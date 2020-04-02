@@ -37,8 +37,8 @@ impl From<&TorrentDownload> for TorrentDownloadView {
         let (uploaded, received) = {
             let storage_stage = torrent.storage_state_watch.borrow();
             (
-                storage_stage.bytes_uploaded as usize,
-                storage_stage.bytes_downloaded as usize,
+                storage_stage.bytes_read as usize,
+                storage_stage.bytes_write as usize,
             )
         };
         Self {
