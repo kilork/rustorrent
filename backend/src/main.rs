@@ -7,7 +7,6 @@ use rsbt_frontend::*;
 use actix::prelude::*;
 use actix_identity::{CookieIdentityPolicy, Identity, IdentityService};
 use actix_multipart::Multipart;
-use actix_service::Service;
 use actix_web::{
     dev::Payload, error::ErrorUnauthorized, http, middleware, web, App, Error, FromRequest,
     HttpRequest, HttpResponse, HttpServer, Responder,
@@ -37,9 +36,8 @@ use tokio::{
     fs,
     sync::{
         mpsc::{self, Receiver, Sender},
-        oneshot, Mutex, RwLock,
+        Mutex, RwLock,
     },
-    time::{interval_at, Duration, Instant},
 };
 use url::Url;
 
@@ -53,7 +51,6 @@ mod uploads;
 
 use event_stream::*;
 use login::*;
-use model::*;
 use session::*;
 use torrents::*;
 use uploads::*;
