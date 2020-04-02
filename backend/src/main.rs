@@ -151,6 +151,7 @@ async fn main() -> Result<(), ExitFailure> {
     }
 
     let sender = web::Data::new(Mutex::new(download_events_sender));
+    let broadcaster_sender = web::Data::new(Mutex::new(broadcaster_sender));
 
     HttpServer::new(move || {
         let mut app = App::new()
@@ -163,6 +164,7 @@ async fn main() -> Result<(), ExitFailure> {
             .app_data(broadcaster.clone())
             .app_data(sessions.clone())
             .app_data(sender.clone())
+            .app_data(broadcaster_sender.clone())
             .service(authorize)
             .service(login_get)
             .service(
