@@ -27,7 +27,7 @@ export class TorrentUpdateComponent implements OnInit {
 
   constructor(
     protected torrentService: TorrentService,
-    private languageService: JhiLanguageService,
+    public languageService: JhiLanguageService,
     protected activatedRoute: ActivatedRoute,
     private fb: FormBuilder
   ) {}
