@@ -76,6 +76,8 @@ pub enum RsbtError {
     TorrentNotFound(usize),
     #[fail(display = "torrent action not supported")]
     TorrentActionNotSupported,
+    #[fail(display = "elapsed {}", _0)]
+    Elapsed(tokio::time::Elapsed),
 }
 
 macro_rules! from_rsbt_error {
@@ -108,6 +110,7 @@ from_rsbt_error!(flat_storage::FlatStorageError, Storage);
 from_rsbt_error!(failure::Context<String>, Failure);
 from_rsbt_error!(toml::de::Error, TomlDeserialize);
 from_rsbt_error!(toml::ser::Error, TomlSerialize);
+from_rsbt_error!(tokio::time::Elapsed, Elapsed);
 
 impl From<futures::future::Aborted> for RsbtError {
     fn from(_: futures::future::Aborted) -> Self {

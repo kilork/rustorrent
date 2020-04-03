@@ -26,7 +26,7 @@ pub(crate) async fn udp_announce(
         debug!("sending udp tracker connect request: {:?}", request);
         wtransport.send((request.clone(), addr)).await?;
         debug!("awaiting response...");
-        match rtransport.next().await {
+        match time::timeout(Duration::from_millis(500), rtransport.next()).await? {
             Some(Ok((connect_response, _socket))) => {
                 debug!(
                     "received udp tracker connect response: {:?}",
