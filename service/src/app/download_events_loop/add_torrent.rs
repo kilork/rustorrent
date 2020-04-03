@@ -79,7 +79,7 @@ pub(crate) async fn add_torrent(
         statistics_watch,
     };
 
-    save_current_torrents(properties.clone(), torrent_header).await?;
+    add_to_current_torrents(properties.clone(), torrent_header).await?;
 
     torrents.push(torrent_download.clone());
 

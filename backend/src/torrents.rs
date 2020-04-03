@@ -57,13 +57,13 @@ impl FromRequest for Paging {
 #[get("/torrent")]
 async fn torrent_list(
     paging: Paging,
-    event_sender: web::Data<Mutex<Sender<RsbtCommand>>>,
+    event_sender: web::Data<Sender<RsbtCommand>>,
     _user: User,
 ) -> impl Responder {
     let (request_response, receiver) = RequestResponse::new(());
 
     {
-        let mut event_sender = event_sender.lock().await;
+        let mut event_sender = event_sender.as_ref().clone();
         if let Err(err) = event_sender
             .send(RsbtCommand::TorrentList(request_response))
             .await
@@ -138,7 +138,7 @@ struct Action {
 
 #[post("/torrent/{id}/action")]
 async fn torrent_create_action(
-    event_sender: web::Data<Mutex<Sender<RsbtCommand>>>,
+    event_sender: web::Data<Sender<RsbtCommand>>,
     id: web::Path<usize>,
     body: web::Json<Action>,
     _user: User,
@@ -149,7 +149,7 @@ async fn torrent_create_action(
     });
 
     {
-        let mut event_sender = event_sender.lock().await;
+        let mut event_sender = event_sender.get_ref().clone();
         if let Err(err) = event_sender
             .send(RsbtCommand::TorrentAction(request_response))
             .await
@@ -166,6 +166,58 @@ async fn torrent_create_action(
         Ok(Err(err @ RsbtError::TorrentNotFound(_))) => HttpResponse::NotFound().json(Failure {
             error: format!("{}", err),
         }),
+        Ok(Err(err)) => HttpResponse::InternalServerError().json(Failure {
+            error: format!("{}", err),
+        }),
+        Err(err) => HttpResponse::InternalServerError().json(Failure {
+            error: format!("{}", err),
+        }),
+    }
+}
+
+#[derive(Deserialize)]
+struct DeleteQuery {
+    #[serde(default)]
+    files: bool,
+}
+
+#[delete("/torrent/{id}")]
+async fn torrent_delete(
+    event_sender: web::Data<Sender<RsbtCommand>>,
+    broadcast_sender: web::Data<Sender<BroadcasterMessage>>,
+    id: web::Path<usize>,
+    body: web::Query<DeleteQuery>,
+    _user: User,
+) -> impl Responder {
+    if let Err(err) = broadcast_sender
+        .as_ref()
+        .clone()
+        .send(BroadcasterMessage::Unsubscribe(*id))
+        .await
+    {
+        return HttpResponse::InternalServerError().json(Failure {
+            error: format!("cannot unsubscribe: {}", err),
+        });
+    }
+
+    let (delete_request_response, delete_response) =
+        RequestResponse::new(RsbtCommandDeleteTorrent {
+            id: *id,
+            files: body.files,
+        });
+    if let Err(err) = event_sender
+        .as_ref()
+        .clone()
+        .send(RsbtCommand::DeleteTorrent(delete_request_response))
+        .await
+    {
+        return HttpResponse::InternalServerError().json(Failure {
+            error: format!("cannot delete: {}", err),
+        });
+    }
+
+    match delete_response.await {
+        Ok(Ok(())) => HttpResponse::Ok().finish(),
         Ok(Err(err)) => HttpResponse::InternalServerError().json(Failure {
             error: format!("{}", err),
         }),

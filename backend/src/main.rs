@@ -151,8 +151,8 @@ async fn main() -> Result<(), ExitFailure> {
         }
     }
 
-    let sender = web::Data::new(Mutex::new(download_events_sender));
-    let broadcaster_sender = web::Data::new(Mutex::new(broadcaster_sender));
+    let sender = web::Data::new(download_events_sender);
+    let broadcaster_sender = web::Data::new(broadcaster_sender);
 
     HttpServer::new(move || {
         let mut app = App::new()
@@ -176,6 +176,7 @@ async fn main() -> Result<(), ExitFailure> {
             .service(
                 web::scope("/api")
                     .service(torrent_list)
+                    .service(torrent_delete)
                     .service(torrent_create_action)
                     .service(upload)
                     .service(account)
@@ -224,6 +225,7 @@ fn init_rsbt_app(rsbt_app: RsbtApp) -> Sender<RsbtCommand> {
 enum BroadcasterMessage {
     Send(TorrentEvent),
     Subscribe(TorrentDownload),
+    Unsubscribe(usize),
 }
 
 fn init_broadcaster() -> (web::Data<Broadcaster>, Sender<BroadcasterMessage>) {
@@ -281,6 +283,11 @@ fn init_broadcaster() -> (web::Data<Broadcaster>, Sender<BroadcasterMessage>) {
                     });
                     tokio::spawn(subscription_task);
                     subscriptions.insert(id, subscription_abort_handle);
+                }
+                BroadcasterMessage::Unsubscribe(id) => {
+                    if let Some(abort_handle) = subscriptions.remove(&id) {
+                        abort_handle.abort();
+                    }
                 }
             }
         }

@@ -30,6 +30,10 @@ enum TorrentStorageMessage {
         data: Vec<u8>,
         sender: oneshot::Sender<Result<(), RsbtError>>,
     },
+    Delete {
+        files: bool,
+        sender: oneshot::Sender<Result<(), RsbtError>>,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -92,6 +96,26 @@ impl TorrentStorageState {
     }
 }
 
+async fn cleanup_storage_state<P: AsRef<Path>>(
+    properties: Arc<Properties>,
+    torrent_name: P,
+) -> Result<(), RsbtError> {
+    let storage_torrent_file = properties.storage.join(torrent_name.as_ref());
+
+    if storage_torrent_file.is_file() {
+        fs::remove_file(&storage_torrent_file).await?;
+    }
+
+    let mut torrent_storage_state_file = storage_torrent_file.clone();
+    torrent_storage_state_file.set_extension("torrent.state");
+
+    if torrent_storage_state_file.is_file() {
+        fs::remove_file(&torrent_storage_state_file).await?;
+    }
+
+    Ok(())
+}
+
 async fn prepare_storage_state<P: AsRef<Path>>(
     properties: Arc<Properties>,
     torrent_name: P,
@@ -144,14 +168,19 @@ impl TorrentStorage {
         torrent_name: P,
         torrent_process: Arc<TorrentProcess>,
     ) -> Result<Self, RsbtError> {
-        let (state_file, mut state) =
-            prepare_storage_state(properties.clone(), torrent_name, torrent_process.clone())
-                .await?;
+        let (state_file, mut state) = prepare_storage_state(
+            properties.clone(),
+            torrent_name.as_ref(),
+            torrent_process.clone(),
+        )
+        .await?;
         let (sender, mut channel_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
         let (watch_sender, receiver) = watch::channel(state.clone());
 
         let thread_torrent_process = torrent_process.clone();
+
+        let thread_torrent_name = PathBuf::from(torrent_name.as_ref());
 
         let handle = thread::spawn(move || {
             let info = &thread_torrent_process.info;
@@ -243,6 +272,24 @@ impl TorrentStorage {
                                 error!("cannot send piece with oneshot message");
                             }
                         }
+                        TorrentStorageMessage::Delete { files, sender } => {
+                            let mut result =
+                                cleanup_storage_state(properties.clone(), thread_torrent_name)
+                                    .await;
+                            if files {
+                                let storage = mmap_storage.clone();
+                                result = tokio::task::spawn_blocking(move || {
+                                    storage
+                                        .delete_files(properties.save_to.clone())
+                                        .map_err(RsbtError::from)
+                                })
+                                .await?;
+                            }
+                            if let Err(Err(err)) = sender.send(result) {
+                                error!("cannot send delete result with oneshot message: {}", err);
+                            }
+                            break;
+                        }
                     }
                 }
                 Ok::<(), RsbtError>(())
@@ -276,6 +323,15 @@ impl TorrentStorage {
         let (sender, receiver) = oneshot::channel();
         self.sender
             .send(TorrentStorageMessage::LoadPiece { index, sender })
+            .await?;
+
+        receiver.await?
+    }
+
+    pub async fn delete(&mut self, files: bool) -> Result<(), RsbtError> {
+        let (sender, receiver) = oneshot::channel();
+        self.sender
+            .send(TorrentStorageMessage::Delete { files, sender })
             .await?;
 
         receiver.await?
