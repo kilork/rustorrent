@@ -10,8 +10,8 @@ async fn upload_form(_user: User) -> impl Responder {
 #[post("/upload")]
 async fn upload(
     _user: User,
-    event_sender: web::Data<Mutex<Sender<RsbtCommand>>>,
-    broadcaster_sender: web::Data<Mutex<Sender<BroadcasterMessage>>>,
+    event_sender: web::Data<Sender<RsbtCommand>>,
+    broadcaster_sender: web::Data<Sender<BroadcasterMessage>>,
     mut payload: Multipart,
 ) -> Result<HttpResponse, Error> {
     if let Some(item) = payload.next().await {
@@ -31,7 +31,7 @@ async fn upload(
             state: TorrentDownloadStatus::Enabled,
         });
         {
-            let mut event_sender = event_sender.lock().await;
+            let mut event_sender = event_sender.as_ref().clone();
             if let Err(err) = event_sender
                 .send(RsbtCommand::AddTorrent(request_response))
                 .await
@@ -47,8 +47,8 @@ async fn upload(
             Ok(Ok(ref torrent)) => {
                 let torrent_view: TorrentDownloadView = torrent.into();
                 if let Err(err) = broadcaster_sender
-                    .lock()
-                    .await
+                    .as_ref()
+                    .clone()
                     .send(BroadcasterMessage::Subscribe(torrent.clone()))
                     .await
                 {

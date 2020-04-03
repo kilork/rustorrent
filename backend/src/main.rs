@@ -151,8 +151,8 @@ async fn main() -> Result<(), ExitFailure> {
         }
     }
 
-    let sender = web::Data::new(Mutex::new(download_events_sender));
-    let broadcaster_sender = web::Data::new(Mutex::new(broadcaster_sender));
+    let sender = web::Data::new(download_events_sender);
+    let broadcaster_sender = web::Data::new(broadcaster_sender);
 
     HttpServer::new(move || {
         let mut app = App::new()
@@ -176,6 +176,7 @@ async fn main() -> Result<(), ExitFailure> {
             .service(
                 web::scope("/api")
                     .service(torrent_list)
+                    .service(torrent_delete)
                     .service(torrent_create_action)
                     .service(upload)
                     .service(account)

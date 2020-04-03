@@ -57,13 +57,13 @@ impl FromRequest for Paging {
 #[get("/torrent")]
 async fn torrent_list(
     paging: Paging,
-    event_sender: web::Data<Mutex<Sender<RsbtCommand>>>,
+    event_sender: web::Data<Sender<RsbtCommand>>,
     _user: User,
 ) -> impl Responder {
     let (request_response, receiver) = RequestResponse::new(());
 
     {
-        let mut event_sender = event_sender.lock().await;
+        let mut event_sender = event_sender.as_ref().clone();
         if let Err(err) = event_sender
             .send(RsbtCommand::TorrentList(request_response))
             .await
@@ -138,7 +138,7 @@ struct Action {
 
 #[post("/torrent/{id}/action")]
 async fn torrent_create_action(
-    event_sender: web::Data<Mutex<Sender<RsbtCommand>>>,
+    event_sender: web::Data<Sender<RsbtCommand>>,
     id: web::Path<usize>,
     body: web::Json<Action>,
     _user: User,
@@ -149,7 +149,7 @@ async fn torrent_create_action(
     });
 
     {
-        let mut event_sender = event_sender.lock().await;
+        let mut event_sender = event_sender.get_ref().clone();
         if let Err(err) = event_sender
             .send(RsbtCommand::TorrentAction(request_response))
             .await
@@ -173,4 +173,22 @@ async fn torrent_create_action(
             error: format!("{}", err),
         }),
     }
+}
+
+#[derive(Deserialize)]
+struct DeleteQuery {
+    #[serde(default)]
+    files: bool,
+}
+
+#[delete("/torrent/{id}")]
+async fn torrent_delete(
+    event_sender: web::Data<Sender<RsbtCommand>>,
+    id: web::Path<usize>,
+    body: web::Query<DeleteQuery>,
+    _user: User,
+) -> impl Responder {
+    HttpResponse::InternalServerError().json(Failure {
+        error: format!("delete files: {}", body.files),
+    })
 }
