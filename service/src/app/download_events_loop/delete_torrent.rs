@@ -11,7 +11,8 @@ pub(crate) async fn delete_torrent(
             torrent.disable().await?;
             torrent.delete(request.files).await?;
 
-            save_current_torrents(torrent.properties.clone(), torrent.header.clone()).await?;
+            remove_from_current_torrents(torrent.properties.clone(), torrent.header.clone())
+                .await?;
         }
 
         torrents.remove(torrent_index);

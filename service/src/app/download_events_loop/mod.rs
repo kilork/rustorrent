@@ -9,7 +9,7 @@ mod delete_torrent;
 use crate::storage::TorrentStorageState;
 use action::torrent_action;
 use add_torrent::add_torrent;
-use current_torrents::save_current_torrents;
+use current_torrents::{add_to_current_torrents, remove_from_current_torrents};
 use delete_torrent::delete_torrent;
 use download_torrent::TorrentDownloadState;
 

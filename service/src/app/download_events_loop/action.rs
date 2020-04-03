@@ -47,7 +47,7 @@ impl TorrentDownload {
     async fn update_state(&mut self, state: TorrentDownloadStatus) -> Result<(), RsbtError> {
         let mut torrent_header = self.header.clone();
         torrent_header.state = state;
-        save_current_torrents(self.properties.clone(), torrent_header).await?;
+        add_to_current_torrents(self.properties.clone(), torrent_header).await?;
 
         self.header.state = state;
 
