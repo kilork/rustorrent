@@ -15,8 +15,13 @@ use download_torrent::TorrentDownloadState;
 pub struct TorrentDownloadView {
     pub id: usize,
     pub name: String,
-    pub received: usize,
-    pub uploaded: usize,
+    pub write: u64,
+    pub read: u64,
+    pub tx: u64,
+    pub rx: u64,
+    pub pieces_total: u32,
+    pub pieces_left: u32,
+    pub piece_size: u32,
     pub length: usize,
     pub active: bool,
 }
@@ -34,20 +39,30 @@ pub struct TorrentDownload {
 
 impl From<&TorrentDownload> for TorrentDownloadView {
     fn from(torrent: &TorrentDownload) -> Self {
-        let (uploaded, received) = {
-            let storage_stage = torrent.storage_state_watch.borrow();
+        let (read, write, pieces_left) = {
+            let storage_state = torrent.storage_state_watch.borrow();
             (
-                storage_stage.bytes_read as usize,
-                storage_stage.bytes_write as usize,
+                storage_state.bytes_read,
+                storage_state.bytes_write,
+                storage_state.pieces_left,
             )
+        };
+        let (tx, rx) = {
+            let state = torrent.statistics_watch.borrow();
+            (state.uploaded, state.downloaded)
         };
         Self {
             id: torrent.id,
             name: torrent.name.clone(),
             active: torrent.header.state == TorrentDownloadStatus::Enabled,
             length: torrent.process.info.length,
-            received,
-            uploaded,
+            write,
+            read,
+            tx,
+            rx,
+            pieces_left,
+            pieces_total: torrent.process.info.pieces.len() as u32,
+            piece_size: torrent.process.info.piece_length as u32,
         }
     }
 }
