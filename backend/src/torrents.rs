@@ -184,11 +184,45 @@ struct DeleteQuery {
 #[delete("/torrent/{id}")]
 async fn torrent_delete(
     event_sender: web::Data<Sender<RsbtCommand>>,
+    broadcast_sender: web::Data<Sender<BroadcasterMessage>>,
     id: web::Path<usize>,
     body: web::Query<DeleteQuery>,
     _user: User,
 ) -> impl Responder {
-    HttpResponse::InternalServerError().json(Failure {
-        error: format!("delete files: {}", body.files),
-    })
+    if let Err(err) = broadcast_sender
+        .as_ref()
+        .clone()
+        .send(BroadcasterMessage::Unsubscribe(*id))
+        .await
+    {
+        return HttpResponse::InternalServerError().json(Failure {
+            error: format!("cannot unsubscribe: {}", err),
+        });
+    }
+
+    let (delete_request_response, delete_response) =
+        RequestResponse::new(RsbtCommandDeleteTorrent {
+            id: *id,
+            files: body.files,
+        });
+    if let Err(err) = event_sender
+        .as_ref()
+        .clone()
+        .send(RsbtCommand::DeleteTorrent(delete_request_response))
+        .await
+    {
+        return HttpResponse::InternalServerError().json(Failure {
+            error: format!("cannot delete: {}", err),
+        });
+    }
+
+    match delete_response.await {
+        Ok(Ok(())) => HttpResponse::Ok().finish(),
+        Ok(Err(err)) => HttpResponse::InternalServerError().json(Failure {
+            error: format!("{}", err),
+        }),
+        Err(err) => HttpResponse::InternalServerError().json(Failure {
+            error: format!("{}", err),
+        }),
+    }
 }

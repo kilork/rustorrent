@@ -3,15 +3,15 @@ use std::path::PathBuf;
 
 mod action;
 mod add_torrent;
-mod delete_torrent;
 mod current_torrents;
+mod delete_torrent;
 
 use crate::storage::TorrentStorageState;
 use action::torrent_action;
 use add_torrent::add_torrent;
 use current_torrents::save_current_torrents;
-use download_torrent::TorrentDownloadState;
 use delete_torrent::delete_torrent;
+use download_torrent::TorrentDownloadState;
 
 #[derive(Serialize, Clone)]
 pub struct TorrentDownloadView {
@@ -91,6 +91,7 @@ pub struct RsbtCommandDeleteTorrent {
     pub id: usize,
     pub files: bool,
 }
+
 pub enum RsbtCommand {
     AddTorrent(RequestResponse<RsbtCommandAddTorrent, Result<TorrentDownload, RsbtError>>),
     DeleteTorrent(RequestResponse<RsbtCommandDeleteTorrent, Result<(), RsbtError>>),
