@@ -14,7 +14,7 @@ use actix_web::{
 use bytes::Bytes;
 use dotenv::dotenv;
 use exitfailure::ExitFailure;
-use futures::StreamExt;
+use futures::{future::abortable, stream::select_all, StreamExt};
 use log::{debug, error, info, trace};
 use openid::{DiscoveredClient, Options, Token, Userinfo};
 use reqwest;
@@ -224,21 +224,18 @@ enum BroadcasterMessage {
     Send(TorrentEvent),
     Subscribe(TorrentDownload),
 }
-// fn init_broadcaster() -> (web::Data<Broadcaster>, mpsc::unbounded::UnboundedSender<>) {
+
 fn init_broadcaster() -> (web::Data<Broadcaster>, Sender<BroadcasterMessage>) {
     let broadcaster = web::Data::new(Broadcaster::new());
     let broadcaster_timer = broadcaster.clone();
 
-    let (broadcaster_sender, broadcaster_receiver) =
+    let (broadcaster_sender, mut broadcaster_receiver) =
         mpsc::channel(rsbt_service::DEFAULT_CHANNEL_BUFFER);
 
+    let task_broadcaster_sender = broadcaster_sender.clone();
     let task = async move {
-        let mut messages = futures::stream::SelectAll::new();
-        let boxed: Pin<Box<dyn Stream<Item = BroadcasterMessage>>> =
-            broadcaster_receiver.boxed_local();
-        messages.push(boxed);
-
-        while let Some(message) = messages.next().await {
+        let mut subscriptions = HashMap::new();
+        while let Some(message) = broadcaster_receiver.next().await {
             match message {
                 BroadcasterMessage::Send(torrent_event) => {
                     let json_message = serde_json::to_string(&torrent_event).unwrap();
@@ -250,28 +247,37 @@ fn init_broadcaster() -> (web::Data<Broadcaster>, Sender<BroadcasterMessage>) {
                 }
                 BroadcasterMessage::Subscribe(torrent_download) => {
                     let id = torrent_download.id;
-                    let storage_state = torrent_download
-                        .storage_state_watch
-                        .map(move |x| {
-                            BroadcasterMessage::Send(TorrentEvent::Storage {
-                                id,
-                                read: x.bytes_read,
-                                write: x.bytes_write,
-                            })
-                        })
-                        .boxed_local();
-                    messages.push(storage_state);
-                    let statistics_state = torrent_download
-                        .statistics_watch
-                        .map(move |x| {
-                            BroadcasterMessage::Send(TorrentEvent::Stat {
-                                id,
-                                tx: x.uploaded,
-                                rx: x.downloaded,
-                            })
-                        })
-                        .boxed_local();
-                    messages.push(statistics_state);
+                    let mut task_broadcaster_sender = task_broadcaster_sender.clone();
+                    let (subscription_task, subscription_abort_handle) = abortable(async move {
+                        let mut messages = select_all(vec![
+                            torrent_download
+                                .storage_state_watch
+                                .map(move |x| TorrentEvent::Storage {
+                                    id,
+                                    read: x.bytes_read,
+                                    write: x.bytes_write,
+                                })
+                                .boxed(),
+                            torrent_download
+                                .statistics_watch
+                                .map(move |x| TorrentEvent::Stat {
+                                    id,
+                                    tx: x.uploaded,
+                                    rx: x.downloaded,
+                                })
+                                .boxed(),
+                        ]);
+                        while let Some(message) = messages.next().await {
+                            if let Err(err) = task_broadcaster_sender
+                                .send(BroadcasterMessage::Send(message))
+                                .await
+                            {
+                                error!("cannot send from subscription: {}", err)
+                            }
+                        }
+                    });
+                    tokio::spawn(subscription_task);
+                    subscriptions.insert(id, subscription_abort_handle);
                 }
             }
         }

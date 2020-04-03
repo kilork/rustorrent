@@ -1,3 +1,4 @@
+#[cfg(feature = "ui")]
 use std::collections::HashMap;
 
 #[cfg(feature = "ui")]
