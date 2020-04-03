@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 mod action;
 mod add_torrent;
+mod delete_torrent;
 mod current_torrents;
 
 use crate::storage::TorrentStorageState;
@@ -10,6 +11,7 @@ use action::torrent_action;
 use add_torrent::add_torrent;
 use current_torrents::save_current_torrents;
 use download_torrent::TorrentDownloadState;
+use delete_torrent::delete_torrent;
 
 #[derive(Serialize, Clone)]
 pub struct TorrentDownloadView {
@@ -85,8 +87,13 @@ pub struct RsbtCommandAddTorrent {
     pub state: TorrentDownloadStatus,
 }
 
+pub struct RsbtCommandDeleteTorrent {
+    pub id: usize,
+    pub files: bool,
+}
 pub enum RsbtCommand {
     AddTorrent(RequestResponse<RsbtCommandAddTorrent, Result<TorrentDownload, RsbtError>>),
+    DeleteTorrent(RequestResponse<RsbtCommandDeleteTorrent, Result<(), RsbtError>>),
     TorrentHandshake {
         handshake_request: Handshake,
         handshake_sender: oneshot::Sender<Option<Arc<TorrentProcess>>>,
@@ -151,7 +158,16 @@ pub(crate) async fn download_events_loop(
                 let response = torrent_action(request_response.request(), &mut torrents).await;
 
                 if let Err(err) = request_response.response(response) {
-                    error!("cannot send response for add torrent: {}", err);
+                    error!("cannot send response for torrent action: {}", err);
+                }
+            }
+            RsbtCommand::DeleteTorrent(request_response) => {
+                debug!("delete torrent");
+
+                let response = delete_torrent(request_response.request(), &mut torrents).await;
+
+                if let Err(err) = request_response.response(response) {
+                    error!("cannot send response for delete torrent: {}", err);
                 }
             }
         }

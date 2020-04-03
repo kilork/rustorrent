@@ -2,7 +2,7 @@ use flat_storage::*;
 use log::debug;
 use memmap::MmapMut;
 use std::{
-    fs::{create_dir_all, OpenOptions},
+    fs::{create_dir_all, remove_file, OpenOptions},
     path::Path,
     sync::Mutex,
 };
@@ -25,8 +25,7 @@ struct FileBlock {
 }
 
 struct FileHandle {
-    mmap: MmapMut,
-    saved: usize,
+    mmap: Option<MmapMut>,
 }
 
 impl MmapFlatStorage {
@@ -43,6 +42,24 @@ impl MmapFlatStorage {
             file_handles,
             mapping,
         })
+    }
+
+    pub fn delete_files<P: AsRef<Path>>(&self, download_path: P) -> Result<(), std::io::Error> {
+        for file_handle in &self.file_handles {
+            if let Some(mut file_handle) = file_handle.lock().ok() {
+                if let Some(mmap) = file_handle.mmap.take() {
+                    mmap.flush()?;
+                }
+            }
+        }
+        for file in &self.files {
+            let file_path = download_path.as_ref().join(&file.path);
+            debug!("deleting file: {:?}", file_path);
+            if file_path.is_file() {
+                remove_file(file_path)?
+            }
+        }
+        Ok(())
     }
 }
 
@@ -70,8 +87,8 @@ fn load_files<P: AsRef<Path>>(
         debug!("set len");
         f.set_len(file.length as u64)?;
         debug!("creating mmap...");
-        let mmap = unsafe { MmapMut::map_mut(&f)? };
-        result.push(Mutex::new(FileHandle { mmap, saved: 0 }));
+        let mmap = Some(unsafe { MmapMut::map_mut(&f)? });
+        result.push(Mutex::new(FileHandle { mmap }));
         debug!("processed file: {:?}", file_path);
     }
     Ok(result)
@@ -90,9 +107,10 @@ impl FlatStorage for MmapFlatStorage {
         let mut result = vec![];
         for file_block in &map_to_files.0 {
             let f = &self.file_handles[file_block.file_index];
-            let data = &f.lock().unwrap().mmap
-                [file_block.file_offset..file_block.file_offset + file_block.size];
-            result.extend_from_slice(data);
+            if let Some(data) = &f.lock().unwrap().mmap {
+                let data = &data[file_block.file_offset..file_block.file_offset + file_block.size];
+                result.extend_from_slice(data);
+            }
         }
 
         Ok(Some(result))
@@ -106,9 +124,11 @@ impl FlatStorage for MmapFlatStorage {
         let map_to_files = &self.mapping[*index.into()];
         for file_block in &map_to_files.0 {
             let f = &self.file_handles[file_block.file_index];
-            let data = &mut f.lock().unwrap().mmap
-                [file_block.file_offset..file_block.file_offset + file_block.size];
-            data.copy_from_slice(&block[file_block.offset..file_block.offset + file_block.size])
+            if let Some(data) = f.lock().unwrap().mmap.as_mut() {
+                let data =
+                    &mut data[file_block.file_offset..file_block.file_offset + file_block.size];
+                data.copy_from_slice(&block[file_block.offset..file_block.offset + file_block.size])
+            }
         }
 
         Ok(())

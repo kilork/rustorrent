@@ -47,6 +47,7 @@ pub(crate) enum DownloadTorrentEvent {
     Enable(RequestResponse<(), Result<(), RsbtError>>),
     Disable(RequestResponse<(), Result<(), RsbtError>>),
     Subscribe(RequestResponse<(), watch::Receiver<TorrentDownloadState>>),
+    Delete(RequestResponse<bool, Result<(), RsbtError>>),
 }
 
 impl Display for DownloadTorrentEvent {
@@ -350,6 +351,14 @@ pub(crate) async fn download_torrent(
                 {
                     error!("cannot subscribe: {}", err);
                 }
+            }
+            DownloadTorrentEvent::Delete(request_response) => {
+                let delete_result = torrent_storage.delete(*request_response.request()).await;
+
+                if let Err(err) = request_response.response(delete_result) {
+                    error!("cannot send response for delete torrent: {}", err);
+                }
+                break;
             }
         }
     }

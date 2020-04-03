@@ -31,7 +31,7 @@ impl TorrentDownload {
         self.update_state(TorrentDownloadStatus::Enabled).await
     }
 
-    async fn disable(&mut self) -> Result<(), RsbtError> {
+    pub(crate) async fn disable(&mut self) -> Result<(), RsbtError> {
         debug!("disable {}", self.id);
 
         let (disable_request, response) = RequestResponse::new(());
