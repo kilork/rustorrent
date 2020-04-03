@@ -257,6 +257,7 @@ fn init_broadcaster() -> (web::Data<Broadcaster>, Sender<BroadcasterMessage>) {
                                     id,
                                     read: x.bytes_read,
                                     write: x.bytes_write,
+                                    left: x.pieces_left,
                                 })
                                 .boxed(),
                             torrent_download
