@@ -38,6 +38,7 @@ use tokio::{
         mpsc::{self, Receiver, Sender},
         Mutex, RwLock,
     },
+    time::{delay_for, Duration},
 };
 use url::Url;
 
@@ -274,6 +275,7 @@ fn init_broadcaster() -> (web::Data<Broadcaster>, Sender<BroadcasterMessage>) {
                             {
                                 error!("cannot send from subscription: {}", err)
                             }
+                            delay_for(Duration::from_millis(500)).await;
                         }
                     });
                     tokio::spawn(subscription_task);
