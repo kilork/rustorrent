@@ -48,6 +48,10 @@ Run rsbt cli in Docker to check interaction with popular torrent clients:
 
     docker-compose up
 
+## Web client info
+
+[README](backend/README.md)
+
 ## Configuration
 
 ### Web version
