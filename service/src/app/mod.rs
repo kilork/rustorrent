@@ -132,7 +132,7 @@ impl RsbtApp {
 
         let accept_incoming_connections = accept_connections_loop(addr, sender.clone());
 
-        join(accept_incoming_connections, download_events).await;
+        join(accept_incoming_connections, download_events).await.0?;
 
         Ok(())
     }

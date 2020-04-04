@@ -218,6 +218,7 @@ async fn torrent_delete(
 
     match delete_response.await {
         Ok(Ok(())) => HttpResponse::Ok().finish(),
+        Ok(Err(RsbtError::TorrentNotFound(_))) => HttpResponse::Ok().finish(),
         Ok(Err(err)) => HttpResponse::InternalServerError().json(Failure {
             error: format!("{}", err),
         }),
@@ -225,4 +226,52 @@ async fn torrent_delete(
             error: format!("{}", err),
         }),
     }
+}
+
+async fn torrent_command<T, F, R: Serialize>(
+    event_sender: web::Data<Sender<RsbtCommand>>,
+    data: T,
+    cmd: F,
+) -> impl Responder
+where
+    F: FnOnce(RequestResponse<T, Result<R, RsbtError>>) -> RsbtCommand,
+{
+    let (request_response, receiver) = RequestResponse::new(data);
+
+    {
+        let mut event_sender = event_sender.as_ref().clone();
+        if let Err(err) = event_sender.send(cmd(request_response)).await {
+            error!("cannot send to torrent process: {}", err);
+            return HttpResponse::InternalServerError().json(Failure {
+                error: format!("cannot send to torrent process: {}", err),
+            });
+        }
+    }
+
+    match receiver.await {
+        Ok(Ok(peers)) => HttpResponse::Ok().json(peers),
+        Ok(Err(err @ RsbtError::TorrentNotFound(_))) => HttpResponse::NotFound().json(Failure {
+            error: format!("{}", err),
+        }),
+        Ok(Err(err)) => HttpResponse::InternalServerError().json(Failure {
+            error: format!("{}", err),
+        }),
+        Err(err) => HttpResponse::InternalServerError().json(Failure {
+            error: format!("cannot receive from torrent process: {}", err),
+        }),
+    }
+}
+
+#[get("/torrent/{id}/peer")]
+async fn torrent_peer_list(
+    event_sender: web::Data<Sender<RsbtCommand>>,
+    id: web::Path<usize>,
+    _user: User,
+) -> impl Responder {
+    torrent_command(
+        event_sender,
+        RsbtCommandTorrentPeers { id: *id },
+        RsbtCommand::TorrentPeers,
+    )
+    .await
 }

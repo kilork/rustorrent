@@ -1,10 +1,12 @@
 use super::*;
+use serde_with::skip_serializing_none;
 use std::path::PathBuf;
 
 mod action;
 mod add_torrent;
 mod current_torrents;
 mod delete_torrent;
+mod torrent_peers;
 
 use crate::storage::TorrentStorageState;
 use action::torrent_action;
@@ -12,6 +14,7 @@ use add_torrent::add_torrent;
 use current_torrents::{add_to_current_torrents, remove_from_current_torrents};
 use delete_torrent::delete_torrent;
 use download_torrent::TorrentDownloadState;
+use torrent_peers::torrent_peers;
 
 #[derive(Serialize, Clone)]
 pub struct TorrentDownloadView {
@@ -37,6 +40,21 @@ pub struct TorrentDownload {
     pub properties: Arc<Properties>,
     pub storage_state_watch: watch::Receiver<TorrentStorageState>,
     pub statistics_watch: watch::Receiver<TorrentDownloadState>,
+}
+
+impl TorrentDownload {
+    pub(crate) async fn request<T, F, R>(&self, data: T, cmd: F) -> Result<R, RsbtError>
+    where
+        F: FnOnce(RequestResponse<T, Result<R, RsbtError>>) -> DownloadTorrentEvent,
+    {
+        let (request_response, response) = RequestResponse::new(data);
+        self.process
+            .broker_sender
+            .clone()
+            .send(cmd(request_response))
+            .await?;
+        response.await?
+    }
 }
 
 impl From<&TorrentDownload> for TorrentDownloadView {
@@ -92,6 +110,66 @@ pub struct RsbtCommandDeleteTorrent {
     pub files: bool,
 }
 
+pub struct RsbtCommandTorrentPeers {
+    pub id: usize,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct RsbtPeerView {
+    addr: SocketAddr,
+    state: RsbtPeerStateView,
+}
+
+#[skip_serializing_none]
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum RsbtPeerStateView {
+    Idle {},
+    Connecting {},
+    Connected {
+        chocked: bool,
+        interested: bool,
+        piece: Option<usize>,
+        //FIXME: downloading_since: Option<Instant>,
+        rx: usize,
+        tx: usize,
+    },
+}
+
+impl From<&TorrentPeerState> for RsbtPeerStateView {
+    fn from(value: &TorrentPeerState) -> Self {
+        match value {
+            TorrentPeerState::Idle => Self::Idle {},
+            TorrentPeerState::Connecting(_) => Self::Connecting {},
+            TorrentPeerState::Connected {
+                chocked,
+                interested,
+                downloading_piece,
+                downloading_since,
+                downloaded,
+                uploaded,
+                ..
+            } => Self::Connected {
+                chocked: *chocked,
+                interested: *interested,
+                piece: downloading_piece.clone(),
+                rx: *downloaded,
+                tx: *uploaded,
+            },
+        }
+    }
+}
+
+impl From<&PeerState> for RsbtPeerView {
+    fn from(value: &PeerState) -> Self {
+        let state = &value.state;
+        Self {
+            addr: value.peer.clone().into(),
+            state: state.into(),
+        }
+    }
+}
+
 pub enum RsbtCommand {
     AddTorrent(RequestResponse<RsbtCommandAddTorrent, Result<TorrentDownload, RsbtError>>),
     DeleteTorrent(RequestResponse<RsbtCommandDeleteTorrent, Result<(), RsbtError>>),
@@ -101,6 +179,7 @@ pub enum RsbtCommand {
     },
     TorrentList(RequestResponse<(), Result<Vec<TorrentDownloadView>, RsbtError>>),
     TorrentAction(RequestResponse<RsbtCommandTorrentAction, Result<(), RsbtError>>),
+    TorrentPeers(RequestResponse<RsbtCommandTorrentPeers, Result<Vec<RsbtPeerView>, RsbtError>>),
 }
 
 pub(crate) async fn download_events_loop(
@@ -171,8 +250,26 @@ pub(crate) async fn download_events_loop(
                     error!("cannot send response for delete torrent: {}", err);
                 }
             }
+            RsbtCommand::TorrentPeers(request_response) => {
+                debug!("torrent's peers");
+                let response = torrent_peers(request_response.request(), &torrents).await;
+
+                if let Err(err) = request_response.response(response) {
+                    error!("cannot send response for torrent's peers: {}", err);
+                }
+            }
         }
     }
 
     debug!("download_events_loop done");
+}
+
+pub(crate) fn find_torrent(
+    torrents: &[TorrentDownload],
+    id: usize,
+) -> Result<&TorrentDownload, RsbtError> {
+    torrents
+        .iter()
+        .find(|x| x.id == id)
+        .ok_or_else(|| RsbtError::TorrentNotFound(id))
 }
