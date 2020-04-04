@@ -135,7 +135,7 @@ pub struct RsbtAnnounceView {
 pub struct RsbtFileView {
     pub(crate) id: usize,
     pub(crate) name: String,
-    pub(crate) downloaded: usize,
+    pub(crate) saved: usize,
     pub(crate) size: usize,
 }
 

@@ -292,13 +292,13 @@ impl TorrentStorage {
                                 .map_err(RsbtError::from);
                             let files_view = saved.map(|saved| {
                                 saved
-                                    .iter()
+                                    .into_iter()
                                     .zip(info.files.iter())
                                     .enumerate()
-                                    .map(|(id, (downloaded, info))| RsbtFileView {
+                                    .map(|(id, (saved, info))| RsbtFileView {
                                         id,
                                         name: info.path.to_string_lossy().into(),
-                                        downloaded: *downloaded,
+                                        saved,
                                         size: info.length,
                                     })
                                     .collect()
