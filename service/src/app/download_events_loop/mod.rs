@@ -133,10 +133,10 @@ pub struct RsbtAnnounceView {
 
 #[derive(Serialize, Clone, Debug)]
 pub struct RsbtFileView {
-    id: usize,
-    name: String,
-    downloaded: usize,
-    size: usize,
+    pub(crate) id: usize,
+    pub(crate) name: String,
+    pub(crate) downloaded: usize,
+    pub(crate) size: usize,
 }
 
 #[derive(Serialize, Clone, Debug)]

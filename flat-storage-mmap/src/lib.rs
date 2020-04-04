@@ -62,6 +62,13 @@ impl MmapFlatStorage {
         }
         Ok(())
     }
+
+    pub fn saved(&self) -> Vec<usize> {
+        self.file_handles
+            .iter()
+            .map(|x| x.lock().unwrap().saved)
+            .collect()
+    }
 }
 
 fn load_files<P: AsRef<Path>>(

@@ -286,7 +286,24 @@ impl TorrentStorage {
                             break;
                         }
                         TorrentStorageMessage::Files(sender) => {
-                            if sender.send(Ok(vec![])).is_err() {
+                            let storage = mmap_storage.clone();
+                            let saved = spawn_blocking(move || storage.saved())
+                                .await
+                                .map_err(RsbtError::from);
+                            let files_view = saved.map(|saved| {
+                                saved
+                                    .iter()
+                                    .zip(info.files.iter())
+                                    .enumerate()
+                                    .map(|(id, (downloaded, info))| RsbtFileView {
+                                        id,
+                                        name: info.path.to_string_lossy().into(),
+                                        downloaded: *downloaded,
+                                        size: info.length,
+                                    })
+                                    .collect()
+                            });
+                            if sender.send(files_view).is_err() {
                                 error!("cannot send files result with oneshot message");
                             }
                         }
