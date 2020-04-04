@@ -34,7 +34,7 @@ Delete torrent. Optional parameter `files` allows to delete also downloaded torr
 
 ## GET /api/stream
 
-Server Side Event stream with state updates. Each message comes as json:
+Server-Sent Event stream with state updates. Each message comes as json:
 
 ```json
 ...
