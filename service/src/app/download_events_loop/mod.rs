@@ -1,4 +1,5 @@
 use super::*;
+use serde_with::skip_serializing_none;
 use std::path::PathBuf;
 
 mod action;
@@ -116,12 +117,55 @@ pub struct RsbtCommandTorrentPeers {
 #[derive(Serialize, Clone, Debug)]
 pub struct RsbtPeerView {
     addr: SocketAddr,
+    state: RsbtPeerStateView,
+}
+
+#[skip_serializing_none]
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum RsbtPeerStateView {
+    Idle {},
+    Connecting {},
+    Connected {
+        chocked: bool,
+        interested: bool,
+        piece: Option<usize>,
+        //FIXME: downloading_since: Option<Instant>,
+        rx: usize,
+        tx: usize,
+    },
+}
+
+impl From<&TorrentPeerState> for RsbtPeerStateView {
+    fn from(value: &TorrentPeerState) -> Self {
+        match value {
+            TorrentPeerState::Idle => Self::Idle {},
+            TorrentPeerState::Connecting(_) => Self::Connecting {},
+            TorrentPeerState::Connected {
+                chocked,
+                interested,
+                downloading_piece,
+                downloading_since,
+                downloaded,
+                uploaded,
+                ..
+            } => Self::Connected {
+                chocked: *chocked,
+                interested: *interested,
+                piece: downloading_piece.clone(),
+                rx: *downloaded,
+                tx: *uploaded,
+            },
+        }
+    }
 }
 
 impl From<&PeerState> for RsbtPeerView {
     fn from(value: &PeerState) -> Self {
+        let state = &value.state;
         Self {
             addr: value.peer.clone().into(),
+            state: state.into(),
         }
     }
 }
