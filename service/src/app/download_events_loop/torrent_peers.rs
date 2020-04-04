@@ -4,13 +4,13 @@ pub(crate) async fn torrent_peers(
     request: &RsbtCommandTorrentPeers,
     torrents: &[TorrentDownload],
 ) -> Result<Vec<RsbtPeerView>, RsbtError> {
-    let id = request.id;
+    let torrent = find_torrent(torrents, request.id)?;
+    torrent.peers().await
+}
 
-    if let Some(torrent_index) = torrents.iter().position(|x| x.id == id) {
-        if let Some(torrent) = torrents.get(torrent_index) {}
-
-        Ok(vec![])
-    } else {
-        Err(RsbtError::TorrentNotFound(id))
+impl TorrentDownload {
+    async fn peers(&self) -> Result<Vec<RsbtPeerView>, RsbtError> {
+        debug!("peers for {}", self.id);
+        self.request((), DownloadTorrentEvent::PeersView).await
     }
 }

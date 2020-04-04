@@ -48,6 +48,7 @@ pub(crate) enum DownloadTorrentEvent {
     Disable(RequestResponse<(), Result<(), RsbtError>>),
     Subscribe(RequestResponse<(), watch::Receiver<TorrentDownloadState>>),
     Delete(RequestResponse<bool, Result<(), RsbtError>>),
+    PeersView(RequestResponse<(), Result<Vec<RsbtPeerView>, RsbtError>>),
 }
 
 impl Display for DownloadTorrentEvent {
@@ -359,6 +360,13 @@ pub(crate) async fn download_torrent(
                     error!("cannot send response for delete torrent: {}", err);
                 }
                 break;
+            }
+            DownloadTorrentEvent::PeersView(request_response) => {
+                let peers_view = peer_states.values().map(RsbtPeerView::from).collect();
+
+                if let Err(err) = request_response.response(Ok(peers_view)) {
+                    error!("cannot send response for delete torrent: {}", err);
+                }
             }
         }
     }

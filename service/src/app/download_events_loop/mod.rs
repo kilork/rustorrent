@@ -41,6 +41,21 @@ pub struct TorrentDownload {
     pub statistics_watch: watch::Receiver<TorrentDownloadState>,
 }
 
+impl TorrentDownload {
+    pub(crate) async fn request<T, F, R>(&self, data: T, cmd: F) -> Result<R, RsbtError>
+    where
+        F: FnOnce(RequestResponse<T, Result<R, RsbtError>>) -> DownloadTorrentEvent,
+    {
+        let (request_response, response) = RequestResponse::new(data);
+        self.process
+            .broker_sender
+            .clone()
+            .send(cmd(request_response))
+            .await?;
+        response.await?
+    }
+}
+
 impl From<&TorrentDownload> for TorrentDownloadView {
     fn from(torrent: &TorrentDownload) -> Self {
         let (read, write, pieces_left) = {
@@ -98,8 +113,18 @@ pub struct RsbtCommandTorrentPeers {
     pub id: usize,
 }
 
-#[derive(Serialize, Clone)]
-pub struct RsbtPeerView {}
+#[derive(Serialize, Clone, Debug)]
+pub struct RsbtPeerView {
+    addr: SocketAddr,
+}
+
+impl From<&PeerState> for RsbtPeerView {
+    fn from(value: &PeerState) -> Self {
+        Self {
+            addr: value.peer.clone().into(),
+        }
+    }
+}
 
 pub enum RsbtCommand {
     AddTorrent(RequestResponse<RsbtCommandAddTorrent, Result<TorrentDownload, RsbtError>>),
@@ -193,4 +218,14 @@ pub(crate) async fn download_events_loop(
     }
 
     debug!("download_events_loop done");
+}
+
+pub(crate) fn find_torrent(
+    torrents: &[TorrentDownload],
+    id: usize,
+) -> Result<&TorrentDownload, RsbtError> {
+    torrents
+        .iter()
+        .find(|x| x.id == id)
+        .ok_or_else(|| RsbtError::TorrentNotFound(id))
 }
