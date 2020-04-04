@@ -289,3 +289,17 @@ async fn torrent_announce_list(
     )
     .await
 }
+
+#[get("/torrent/{id}/file")]
+async fn torrent_file_list(
+    event_sender: web::Data<Sender<RsbtCommand>>,
+    id: web::Path<usize>,
+    _user: User,
+) -> impl Responder {
+    torrent_command(
+        event_sender,
+        RsbtCommandTorrentFiles { id: *id },
+        RsbtCommand::TorrentFiles,
+    )
+    .await
+}

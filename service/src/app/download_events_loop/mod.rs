@@ -7,6 +7,7 @@ mod add_torrent;
 mod current_torrents;
 mod delete_torrent;
 mod torrent_announces;
+mod torrent_files;
 mod torrent_peers;
 
 use crate::storage::TorrentStorageState;
@@ -16,6 +17,7 @@ use current_torrents::{add_to_current_torrents, remove_from_current_torrents};
 use delete_torrent::delete_torrent;
 use download_torrent::TorrentDownloadState;
 use torrent_announces::torrent_announces;
+use torrent_files::torrent_files;
 use torrent_peers::torrent_peers;
 
 #[derive(Serialize, Clone)]
@@ -120,9 +122,21 @@ pub struct RsbtCommandTorrentAnnounce {
     pub id: usize,
 }
 
+pub struct RsbtCommandTorrentFiles {
+    pub id: usize,
+}
+
 #[derive(Serialize, Clone, Debug)]
 pub struct RsbtAnnounceView {
     pub(crate) url: String,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct RsbtFileView {
+    id: usize,
+    name: String,
+    downloaded: usize,
+    size: usize,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -194,6 +208,7 @@ pub enum RsbtCommand {
     TorrentAnnounces(
         RequestResponse<RsbtCommandTorrentAnnounce, Result<Vec<RsbtAnnounceView>, RsbtError>>,
     ),
+    TorrentFiles(RequestResponse<RsbtCommandTorrentFiles, Result<Vec<RsbtFileView>, RsbtError>>),
 }
 
 pub(crate) async fn download_events_loop(
@@ -277,7 +292,15 @@ pub(crate) async fn download_events_loop(
                 let response = torrent_announces(request_response.request(), &torrents).await;
 
                 if let Err(err) = request_response.response(response) {
-                    error!("cannot send response for torrent's peers: {}", err);
+                    error!("cannot send response for torrent's announces: {}", err);
+                }
+            }
+            RsbtCommand::TorrentFiles(request_response) => {
+                debug!("torrent's files");
+                let response = torrent_files(request_response.request(), &torrents).await;
+
+                if let Err(err) = request_response.response(response) {
+                    error!("cannot send response for torrent's files: {}", err);
                 }
             }
         }
