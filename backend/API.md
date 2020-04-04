@@ -1,5 +1,13 @@
 # RSBT API
 
+## Common aggrements
+
+If exception occurs - output is HTTP message with JSON {"error":"error message"} body.
+
+```json
+{"error":"torrent with id 3 not found"}
+```
+
 ## GET /api/torrent
 
 List all torrents
@@ -57,7 +65,7 @@ Messages in stream for each torrent produced with minimal 0.5 seconds delay to n
 
 ## POST /api/torrent/{id}/action
 
-Torrent actions
+Torrent actions.
 
 ### Enable torrent
 
@@ -76,3 +84,43 @@ curl -v \
   --data '{"action":"disable"}' \
   http://localhost:8080/api/torrent/1/action
 ```
+
+## GET /api/torrent/{id}/peer
+
+Torrent peers.
+
+```bash
+curl http://localhost:8080/api/torrent/2/peer
+```
+
+```json
+[
+{"addr":"78.46.190.97:50007","state":{"connected":{"chocked":true,"interested":false,"rx":0,"tx":0}}},
+{"addr":"116.86.22.69:6881","state":{"connected":{"chocked":false,"interested":false,"rx":0,"tx":0}}},
+{"addr":"84.229.184.198:51413","state":{"connecting":{}}},
+{"addr":"185.192.69.98:41283","state":{"idle":{}}},
+/* ... */
+]
+```
+
+`addr` is the socket address of peer. `state` field is the map with single member, which represents one of possible peer states.
+
+### `idle` state
+
+Not visible from API perspective usually.
+
+### `connecting` state
+
+Client tries to establish connection with this peer.
+
+### `connected` state
+
+Client connected to peer.
+
+Attributes:
+
+- `chocked` : other side disallows to request pieces.
+- `interested` : other side wants to request pieces.
+- `rx` : bytes downloaded from peer.
+- `tx` : bytes uploaded to peer.
+- `piece` : currently requested piece.
