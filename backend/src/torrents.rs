@@ -228,20 +228,19 @@ async fn torrent_delete(
     }
 }
 
-#[get("/torrent/{id}/peer")]
-async fn torrent_peer_list(
+async fn torrent_command<T, F, R: Serialize>(
     event_sender: web::Data<Sender<RsbtCommand>>,
-    id: web::Path<usize>,
-    _user: User,
-) -> impl Responder {
-    let (request_response, receiver) = RequestResponse::new(RsbtCommandTorrentPeers { id: *id });
+    data: T,
+    cmd: F,
+) -> impl Responder
+where
+    F: FnOnce(RequestResponse<T, Result<R, RsbtError>>) -> RsbtCommand,
+{
+    let (request_response, receiver) = RequestResponse::new(data);
 
     {
         let mut event_sender = event_sender.as_ref().clone();
-        if let Err(err) = event_sender
-            .send(RsbtCommand::TorrentPeers(request_response))
-            .await
-        {
+        if let Err(err) = event_sender.send(cmd(request_response)).await {
             error!("cannot send to torrent process: {}", err);
             return HttpResponse::InternalServerError().json(Failure {
                 error: format!("cannot send to torrent process: {}", err),
@@ -261,4 +260,18 @@ async fn torrent_peer_list(
             error: format!("cannot receive from torrent process: {}", err),
         }),
     }
+}
+
+#[get("/torrent/{id}/peer")]
+async fn torrent_peer_list(
+    event_sender: web::Data<Sender<RsbtCommand>>,
+    id: web::Path<usize>,
+    _user: User,
+) -> impl Responder {
+    torrent_command(
+        event_sender,
+        RsbtCommandTorrentPeers { id: *id },
+        RsbtCommand::TorrentPeers,
+    )
+    .await
 }
