@@ -6,6 +6,7 @@ mod action;
 mod add_torrent;
 mod current_torrents;
 mod delete_torrent;
+mod torrent_announces;
 mod torrent_peers;
 
 use crate::storage::TorrentStorageState;
@@ -14,6 +15,7 @@ use add_torrent::add_torrent;
 use current_torrents::{add_to_current_torrents, remove_from_current_torrents};
 use delete_torrent::delete_torrent;
 use download_torrent::TorrentDownloadState;
+use torrent_announces::torrent_announces;
 use torrent_peers::torrent_peers;
 
 #[derive(Serialize, Clone)]
@@ -114,6 +116,15 @@ pub struct RsbtCommandTorrentPeers {
     pub id: usize,
 }
 
+pub struct RsbtCommandTorrentAnnounce {
+    pub id: usize,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct RsbtAnnounceView {
+    pub(crate) url: String,
+}
+
 #[derive(Serialize, Clone, Debug)]
 pub struct RsbtPeerView {
     addr: SocketAddr,
@@ -180,6 +191,9 @@ pub enum RsbtCommand {
     TorrentList(RequestResponse<(), Result<Vec<TorrentDownloadView>, RsbtError>>),
     TorrentAction(RequestResponse<RsbtCommandTorrentAction, Result<(), RsbtError>>),
     TorrentPeers(RequestResponse<RsbtCommandTorrentPeers, Result<Vec<RsbtPeerView>, RsbtError>>),
+    TorrentAnnounces(
+        RequestResponse<RsbtCommandTorrentAnnounce, Result<Vec<RsbtAnnounceView>, RsbtError>>,
+    ),
 }
 
 pub(crate) async fn download_events_loop(
@@ -253,6 +267,14 @@ pub(crate) async fn download_events_loop(
             RsbtCommand::TorrentPeers(request_response) => {
                 debug!("torrent's peers");
                 let response = torrent_peers(request_response.request(), &torrents).await;
+
+                if let Err(err) = request_response.response(response) {
+                    error!("cannot send response for torrent's peers: {}", err);
+                }
+            }
+            RsbtCommand::TorrentAnnounces(request_response) => {
+                debug!("torrent's announces");
+                let response = torrent_announces(request_response.request(), &torrents).await;
 
                 if let Err(err) = request_response.response(response) {
                     error!("cannot send response for torrent's peers: {}", err);

@@ -124,3 +124,17 @@ Attributes:
 - `rx` : bytes downloaded from peer.
 - `tx` : bytes uploaded to peer.
 - `piece` : currently requested piece.
+
+## GET /api/torrent/{id}/announce
+
+Torrent announce urls.
+
+```bash
+curl http://localhost:8080/api/torrent/2/announce
+```
+
+```json
+[
+{"url":"udp://tracker.leechers-paradise.org:6969"}
+]
+```

@@ -275,3 +275,17 @@ async fn torrent_peer_list(
     )
     .await
 }
+
+#[get("/torrent/{id}/announce")]
+async fn torrent_announce_list(
+    event_sender: web::Data<Sender<RsbtCommand>>,
+    id: web::Path<usize>,
+    _user: User,
+) -> impl Responder {
+    torrent_command(
+        event_sender,
+        RsbtCommandTorrentAnnounce { id: *id },
+        RsbtCommand::TorrentAnnounces,
+    )
+    .await
+}
