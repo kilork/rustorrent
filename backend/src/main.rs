@@ -36,7 +36,7 @@ use tokio::{
     fs,
     sync::{
         mpsc::{self, Receiver, Sender},
-        Mutex, RwLock,
+        RwLock,
     },
     time::{delay_for, Duration},
 };
@@ -178,6 +178,7 @@ async fn main() -> Result<(), ExitFailure> {
                     .service(torrent_list)
                     .service(torrent_delete)
                     .service(torrent_create_action)
+                    .service(torrent_peer_list)
                     .service(upload)
                     .service(account)
                     .service(logout)

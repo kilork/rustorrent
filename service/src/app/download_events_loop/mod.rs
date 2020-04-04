@@ -5,6 +5,7 @@ mod action;
 mod add_torrent;
 mod current_torrents;
 mod delete_torrent;
+mod torrent_peers;
 
 use crate::storage::TorrentStorageState;
 use action::torrent_action;
@@ -12,6 +13,7 @@ use add_torrent::add_torrent;
 use current_torrents::{add_to_current_torrents, remove_from_current_torrents};
 use delete_torrent::delete_torrent;
 use download_torrent::TorrentDownloadState;
+use torrent_peers::torrent_peers;
 
 #[derive(Serialize, Clone)]
 pub struct TorrentDownloadView {
@@ -92,6 +94,13 @@ pub struct RsbtCommandDeleteTorrent {
     pub files: bool,
 }
 
+pub struct RsbtCommandTorrentPeers {
+    pub id: usize,
+}
+
+#[derive(Serialize, Clone)]
+pub struct RsbtPeerView {}
+
 pub enum RsbtCommand {
     AddTorrent(RequestResponse<RsbtCommandAddTorrent, Result<TorrentDownload, RsbtError>>),
     DeleteTorrent(RequestResponse<RsbtCommandDeleteTorrent, Result<(), RsbtError>>),
@@ -101,6 +110,7 @@ pub enum RsbtCommand {
     },
     TorrentList(RequestResponse<(), Result<Vec<TorrentDownloadView>, RsbtError>>),
     TorrentAction(RequestResponse<RsbtCommandTorrentAction, Result<(), RsbtError>>),
+    TorrentPeers(RequestResponse<RsbtCommandTorrentPeers, Result<Vec<RsbtPeerView>, RsbtError>>),
 }
 
 pub(crate) async fn download_events_loop(
@@ -169,6 +179,14 @@ pub(crate) async fn download_events_loop(
 
                 if let Err(err) = request_response.response(response) {
                     error!("cannot send response for delete torrent: {}", err);
+                }
+            }
+            RsbtCommand::TorrentPeers(request_response) => {
+                debug!("torrent's peers");
+                let response = torrent_peers(request_response.request(), &torrents).await;
+
+                if let Err(err) = request_response.response(response) {
+                    error!("cannot send response for torrent's peers: {}", err);
                 }
             }
         }
