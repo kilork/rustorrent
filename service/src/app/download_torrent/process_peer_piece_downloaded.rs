@@ -14,9 +14,11 @@ pub(crate) async fn process_peer_piece_downloaded(
             ref pieces,
             ref mut downloading_piece,
             ref mut downloading_since,
+            ref mut downloaded,
             ..
         } = existing_peer.state
         {
+            *downloaded += piece.len();
             if let (Some(index), Some(_since)) =
                 (downloading_piece.take(), downloading_since.take())
             {
