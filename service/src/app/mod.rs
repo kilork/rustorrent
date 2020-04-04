@@ -146,7 +146,7 @@ impl RsbtApp {
             fs::create_dir_all(&properties.storage).await?;
         }
 
-        let torrents_path = properties.storage.join(TORRENTS_TOML);
+        let torrents_path = properties.config_dir.join(TORRENTS_TOML);
 
         if torrents_path.is_file() {
             let torrents_toml = fs::read_to_string(torrents_path).await?;

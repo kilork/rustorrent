@@ -4,7 +4,7 @@ pub(crate) async fn add_to_current_torrents(
     properties: Arc<Properties>,
     torrent_header: TorrentDownloadHeader,
 ) -> Result<(), RsbtError> {
-    let torrents_toml = properties.storage.join(TORRENTS_TOML);
+    let torrents_toml = properties.config_dir.join(TORRENTS_TOML);
     let mut current_torrents: CurrentTorrents = if torrents_toml.exists() {
         toml::from_str(&fs::read_to_string(&torrents_toml).await?)?
     } else {
@@ -30,7 +30,7 @@ pub(crate) async fn remove_from_current_torrents(
     properties: Arc<Properties>,
     torrent_header: TorrentDownloadHeader,
 ) -> Result<(), RsbtError> {
-    let torrents_toml = properties.storage.join(TORRENTS_TOML);
+    let torrents_toml = properties.config_dir.join(TORRENTS_TOML);
     let mut current_torrents: CurrentTorrents = if torrents_toml.exists() {
         toml::from_str(&fs::read_to_string(&torrents_toml).await?)?
     } else {

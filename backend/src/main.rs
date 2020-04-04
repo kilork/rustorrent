@@ -108,7 +108,7 @@ async fn main() -> Result<(), ExitFailure> {
     };
 
     debug!("starting torrents process with settings: {:?}", settings);
-    let properties = settings.into();
+    let properties = (settings, config_path).into();
     debug!("properties: {:?}", properties);
 
     let sessions = web::Data::new(Sessions::new(&properties, local).await?);

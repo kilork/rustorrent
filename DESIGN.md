@@ -1,27 +1,8 @@
 # Development information
 
-## Schemes
+## Technical specification
 
-### Torrent states
-
-```graphviz
-digraph Peer {
-    rankdir=LR
-    Active -> Idle [label = "event 'all counters achieved'"]
-    Active -> Idle [label = "action 'pause'"]
-    Idle -> Active [label = "action 'resume'"]
-}
-```
-
-### Peer states
-
-```graphviz
-digraph Peer {
-    rankdir=LR
-    size="8,5"
-    Connected -> Disconnected -> Connected
-}
-```
+RSBT uses BEPs: <http://bittorrent.org/beps/bep_0000.html>
 
 ## Processes
 
