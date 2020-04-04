@@ -1,7 +1,7 @@
 use super::*;
 use crate::types::Properties;
-use app::TorrentProcess;
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use app::{RsbtFileView, TorrentProcess};
+use byteorder::{BigEndian, ReadBytesExt};
 use failure::ResultExt;
 use flat_storage::FlatStorage;
 use flat_storage_mmap::MmapFlatStorage;
@@ -10,6 +10,7 @@ use tokio::{
     fs::{self, File},
     runtime::Builder,
     sync::{oneshot, watch},
+    task::spawn_blocking,
 };
 
 #[derive(Debug)]
@@ -34,6 +35,7 @@ enum TorrentStorageMessage {
         files: bool,
         sender: oneshot::Sender<Result<(), RsbtError>>,
     },
+    Files(oneshot::Sender<Result<Vec<RsbtFileView>, RsbtError>>),
 }
 
 #[derive(Clone, Debug)]
@@ -204,11 +206,7 @@ impl TorrentStorage {
                             let storage = mmap_storage.clone();
                             let len = data.len();
 
-                            match tokio::task::spawn_blocking(move || {
-                                storage.write_piece(index, data)
-                            })
-                            .await?
-                            {
+                            match spawn_blocking(move || storage.write_piece(index, data)).await? {
                                 Ok(()) => (),
                                 Err(err) => {
                                     error!("cannot write piece: {}", err);
@@ -242,20 +240,17 @@ impl TorrentStorage {
                         TorrentStorageMessage::LoadPiece { index, sender } => {
                             let storage = mmap_storage.clone();
 
-                            let piece = match tokio::task::spawn_blocking(move || {
-                                storage.read_piece(index)
-                            })
-                            .await?
-                            {
-                                Ok(data) => data.map(TorrentPiece),
-                                Err(err) => {
-                                    error!("cannot read piece: {}", err);
-                                    if sender.send(Err(err.into())).is_err() {
-                                        error!("cannot send piece with oneshot message");
+                            let piece =
+                                match spawn_blocking(move || storage.read_piece(index)).await? {
+                                    Ok(data) => data.map(TorrentPiece),
+                                    Err(err) => {
+                                        error!("cannot read piece: {}", err);
+                                        if sender.send(Err(err.into())).is_err() {
+                                            error!("cannot send piece with oneshot message");
+                                        }
+                                        continue;
                                     }
-                                    continue;
-                                }
-                            };
+                                };
 
                             if let Some(piece) = &piece {
                                 state.bytes_read += piece.as_ref().len() as u64;
@@ -278,17 +273,39 @@ impl TorrentStorage {
                                     .await;
                             if files {
                                 let storage = mmap_storage.clone();
-                                result = tokio::task::spawn_blocking(move || {
+                                result = spawn_blocking(move || {
                                     storage
                                         .delete_files(properties.save_to.clone())
                                         .map_err(RsbtError::from)
                                 })
                                 .await?;
                             }
-                            if let Err(Err(err)) = sender.send(result) {
-                                error!("cannot send delete result with oneshot message: {}", err);
+                            if sender.send(result).is_err() {
+                                error!("cannot send delete result with oneshot message");
                             }
                             break;
+                        }
+                        TorrentStorageMessage::Files(sender) => {
+                            let storage = mmap_storage.clone();
+                            let saved = spawn_blocking(move || storage.saved())
+                                .await
+                                .map_err(RsbtError::from);
+                            let files_view = saved.map(|saved| {
+                                saved
+                                    .into_iter()
+                                    .zip(info.files.iter())
+                                    .enumerate()
+                                    .map(|(id, (saved, info))| RsbtFileView {
+                                        id,
+                                        name: info.path.to_string_lossy().into(),
+                                        saved,
+                                        size: info.length,
+                                    })
+                                    .collect()
+                            });
+                            if sender.send(files_view).is_err() {
+                                error!("cannot send files result with oneshot message");
+                            }
                         }
                     }
                 }
@@ -306,35 +323,38 @@ impl TorrentStorage {
         })
     }
 
-    pub async fn save(&mut self, index: usize, data: Vec<u8>) -> Result<(), RsbtError> {
+    async fn message<R, F>(&self, f: F) -> Result<R, RsbtError>
+    where
+        F: FnOnce(oneshot::Sender<Result<R, RsbtError>>) -> TorrentStorageMessage,
+    {
         let (sender, receiver) = oneshot::channel();
-        self.sender
-            .send(TorrentStorageMessage::SavePiece {
-                index,
-                data,
-                sender,
-            })
-            .await?;
+
+        self.sender.clone().send(f(sender)).await?;
 
         receiver.await?
+    }
+
+    pub async fn save(&mut self, index: usize, data: Vec<u8>) -> Result<(), RsbtError> {
+        self.message(|sender| TorrentStorageMessage::SavePiece {
+            index,
+            data,
+            sender,
+        })
+        .await
     }
 
     pub async fn load(&mut self, index: usize) -> Result<Option<TorrentPiece>, RsbtError> {
-        let (sender, receiver) = oneshot::channel();
-        self.sender
-            .send(TorrentStorageMessage::LoadPiece { index, sender })
-            .await?;
-
-        receiver.await?
+        self.message(|sender| TorrentStorageMessage::LoadPiece { index, sender })
+            .await
     }
 
     pub async fn delete(&mut self, files: bool) -> Result<(), RsbtError> {
-        let (sender, receiver) = oneshot::channel();
-        self.sender
-            .send(TorrentStorageMessage::Delete { files, sender })
-            .await?;
+        self.message(|sender| TorrentStorageMessage::Delete { files, sender })
+            .await
+    }
 
-        receiver.await?
+    pub async fn files(&mut self) -> Result<Vec<RsbtFileView>, RsbtError> {
+        self.message(TorrentStorageMessage::Files).await
     }
 }
 

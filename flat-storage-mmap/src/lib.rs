@@ -26,6 +26,7 @@ struct FileBlock {
 
 struct FileHandle {
     mmap: Option<MmapMut>,
+    saved: usize,
 }
 
 impl MmapFlatStorage {
@@ -36,7 +37,7 @@ impl MmapFlatStorage {
         downloaded: &[u8],
     ) -> Result<Self, std::io::Error> {
         let mapping = map_pieces_to_files(piece_size, &files);
-        let file_handles = load_files(&download_path, &files, downloaded)?;
+        let file_handles = load_files(&download_path, &files, downloaded, &mapping)?;
         Ok(Self {
             files,
             file_handles,
@@ -61,15 +62,24 @@ impl MmapFlatStorage {
         }
         Ok(())
     }
+
+    pub fn saved(&self) -> Vec<usize> {
+        self.file_handles
+            .iter()
+            .map(|x| x.lock().unwrap().saved)
+            .collect()
+    }
 }
 
 fn load_files<P: AsRef<Path>>(
     download_path: P,
     files: &[FlatStorageFile],
-    _downloaded: &[u8],
+    downloaded: &[u8],
+    mapping: &[MmapFlatStorageMapping],
 ) -> Result<Vec<Mutex<FileHandle>>, std::io::Error> {
     let mut result = vec![];
-    for file in files {
+    for (index, file) in files.iter().enumerate() {
+        let saved = saved(index, mapping, downloaded);
         let file_path = download_path.as_ref().join(&file.path);
         debug!("checking file: {:?}", file_path);
         if !file_path.is_file() {
@@ -88,7 +98,7 @@ fn load_files<P: AsRef<Path>>(
         f.set_len(file.length as u64)?;
         debug!("creating mmap...");
         let mmap = Some(unsafe { MmapMut::map_mut(&f)? });
-        result.push(Mutex::new(FileHandle { mmap }));
+        result.push(Mutex::new(FileHandle { mmap, saved }));
         debug!("processed file: {:?}", file_path);
     }
     Ok(result)
@@ -124,7 +134,9 @@ impl FlatStorage for MmapFlatStorage {
         let map_to_files = &self.mapping[*index.into()];
         for file_block in &map_to_files.0 {
             let f = &self.file_handles[file_block.file_index];
-            if let Some(data) = f.lock().unwrap().mmap.as_mut() {
+            let mut f_lock = f.lock().unwrap();
+            f_lock.saved += file_block.size;
+            if let Some(data) = f_lock.mmap.as_mut() {
                 let data =
                     &mut data[file_block.file_offset..file_block.file_offset + file_block.size];
                 data.copy_from_slice(&block[file_block.offset..file_block.offset + file_block.size])
@@ -181,6 +193,24 @@ fn map_pieces_to_files(
     }
 
     mapping
+}
+
+fn saved(file_index: usize, mapping: &[MmapFlatStorageMapping], downloaded: &[u8]) -> usize {
+    let mut saved = 0;
+    for (downloaded_block_index, downloaded_block) in downloaded.iter().enumerate() {
+        for subindex in 0..8 {
+            if downloaded_block & 1 << subindex != 0 {
+                let index = downloaded_block_index * 8 + subindex;
+                let mapping_block = &mapping[index];
+                for file_block in &mapping_block.0 {
+                    if file_block.file_index == file_index {
+                        saved += file_block.size;
+                    }
+                }
+            }
+        }
+    }
+    saved
 }
 
 #[cfg(test)]

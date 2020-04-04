@@ -138,3 +138,26 @@ curl http://localhost:8080/api/torrent/2/announce
 {"url":"udp://tracker.leechers-paradise.org:6969"}
 ]
 ```
+
+## GET /api/torrent/{id}/file
+
+Torrent files.
+
+```bash
+curl http://localhost:8080/api/torrent/2/file
+```
+
+```json
+[
+{"id":0,"name":"Big Buck Bunny.en.srt","saved":140,"size":140},
+{"id":1,"name":"Big Buck Bunny.mp4","saved":195559284,"size":276134947},
+{"id":2,"name":"poster.jpg","saved":0,"size":310380}
+]
+```
+
+Attributes:
+
+- `id` : internal file id.
+- `name` : file name.
+- `size` : file size in bytes.
+- `saved` : how much bytes already saved.
