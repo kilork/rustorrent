@@ -1,5 +1,7 @@
 use super::*;
 
+use std::{sync::Mutex, task::Waker};
+
 mod process_announce;
 mod process_peer_announced;
 mod process_peer_connected;
@@ -23,6 +25,12 @@ use process_peer_piece_downloaded::process_peer_piece_downloaded;
 use process_peer_piece_request::process_peer_piece_request;
 use process_peer_pieces::process_peer_pieces;
 use process_peer_unchoke::process_peer_unchoke;
+
+#[derive(Debug)]
+pub(crate) struct DownloadTorrentEventQueryPiece {
+    pub(crate) piece: usize,
+    pub(crate) waker: Arc<Mutex<Option<Waker>>>,
+}
 
 #[derive(Debug)]
 pub(crate) enum DownloadTorrentEvent {
@@ -52,6 +60,7 @@ pub(crate) enum DownloadTorrentEvent {
     AnnounceView(RequestResponse<(), Result<Vec<RsbtAnnounceView>, RsbtError>>),
     FilesView(RequestResponse<(), Result<Vec<RsbtFileView>, RsbtError>>),
     FileDownload(RequestResponse<usize, Result<RsbtFileDownloadStream, RsbtError>>),
+    QueryPiece(RequestResponse<DownloadTorrentEventQueryPiece, Result<Vec<u8>, RsbtError>>),
 }
 
 impl Display for DownloadTorrentEvent {
@@ -392,6 +401,9 @@ pub(crate) async fn download_torrent(
                 if let Err(err) = request_response.response(files_download) {
                     error!("cannot send response for download torrent: {}", err);
                 }
+            }
+            DownloadTorrentEvent::QueryPiece(request_response) => {
+                debug!("processing query piece");
             }
         }
     }

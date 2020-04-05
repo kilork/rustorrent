@@ -16,12 +16,19 @@ pub struct MmapFlatStorage {
 #[derive(Debug, PartialEq)]
 struct MmapFlatStorageMapping(Vec<FileBlock>);
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 struct FileBlock {
     offset: usize,
     file_index: usize,
     file_offset: usize,
     size: usize,
+}
+
+#[derive(Debug)]
+pub struct FileInfo {
+    pub file: FlatStorageFile,
+    pub piece: usize,
+    pub piece_offset: usize,
 }
 
 struct FileHandle {
@@ -71,8 +78,23 @@ impl MmapFlatStorage {
             .collect()
     }
 
-    pub fn file_info(&self, file_id: usize) -> Option<()> {
-        None
+    pub fn file_info(&self, file_id: usize) -> Option<FileInfo> {
+        self.files.get(file_id).cloned().and_then(|file| {
+            self.mapping
+                .iter()
+                .enumerate()
+                .find_map(move |(piece, m)| {
+                    m.0.iter()
+                        .filter(|x| x.file_index == file_id)
+                        .map(|x| (piece, x.offset))
+                        .next()
+                })
+                .map(|(piece, piece_offset)| FileInfo {
+                    file,
+                    piece,
+                    piece_offset,
+                })
+        })
     }
 }
 

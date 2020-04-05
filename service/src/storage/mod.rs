@@ -1,11 +1,15 @@
 use super::*;
 use crate::types::Properties;
-use app::{RsbtFileView, TorrentProcess};
+use app::{
+    download_torrent::{DownloadTorrentEvent, DownloadTorrentEventQueryPiece},
+    RequestResponse, RsbtFileView, TorrentProcess,
+};
 use byteorder::{BigEndian, ReadBytesExt};
 use bytes::Bytes;
 use failure::ResultExt;
 use flat_storage::FlatStorage;
-use flat_storage_mmap::MmapFlatStorage;
+use flat_storage_mmap::{FileInfo, MmapFlatStorage};
+use futures::future::BoxFuture;
 use std::{io::Read, thread};
 use std::{
     pin::Pin,
@@ -44,7 +48,7 @@ enum TorrentStorageMessage {
     Files(oneshot::Sender<Result<Vec<RsbtFileView>, RsbtError>>),
     FileInfo {
         file_id: usize,
-        sender: oneshot::Sender<Result<(), RsbtError>>,
+        sender: oneshot::Sender<Result<FileInfo, RsbtError>>,
     },
 }
 
@@ -112,25 +116,100 @@ impl TorrentStorageState {
 pub struct RsbtFileDownloadStream {
     pub name: String,
     pub size: usize,
+    pub left: usize,
+    pub piece: usize,
+    pub piece_offset: usize,
     torrent_process: Arc<TorrentProcess>,
     sender: Sender<TorrentStorageMessage>,
     receiver: watch::Receiver<TorrentStorageState>,
-    state: Arc<Mutex<RsbtFileDownload>>,
+    state: RsbtFileDownloadState,
+    waker: Arc<Mutex<Option<Waker>>>,
 }
 
-#[derive(Debug)]
-pub struct RsbtFileDownload {
-    pub index: usize,
+enum RsbtFileDownloadState {
+    Idle,
+    SendQueryPiece(
+        BoxFuture<'static, Result<(), RsbtError>>,
+        Option<oneshot::Receiver<Result<Vec<u8>, RsbtError>>>,
+    ),
+    ReceiveQueryPiece(oneshot::Receiver<Result<Vec<u8>, RsbtError>>),
+}
+
+impl std::fmt::Debug for RsbtFileDownloadState {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "")
+    }
 }
 
 impl Stream for RsbtFileDownloadStream {
     type Item = Result<Bytes, RsbtError>;
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let state = self.state.lock().unwrap();
-        if state.index == self.size {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        if self.left == 0 {
+            self.get_mut().left = 0;
             Poll::Ready(None)
         } else {
-            unimplemented!()
+            let mut that = self.as_mut();
+            {
+                let mut waker = that.waker.lock().unwrap();
+                *waker = Some(cx.waker().clone());
+            }
+
+            loop {
+                match &mut that.state {
+                    RsbtFileDownloadState::Idle => {
+                        let (request_response, receiver) =
+                            RequestResponse::new(DownloadTorrentEventQueryPiece {
+                                piece: that.piece,
+                                waker: that.waker.clone(),
+                            });
+
+                        let torrent_process = that.torrent_process.clone();
+                        let future = async move {
+                            torrent_process
+                                .broker_sender
+                                .clone()
+                                .send(DownloadTorrentEvent::QueryPiece(request_response))
+                                .map_err(RsbtError::from)
+                                .await
+                        };
+                        let sender = future.boxed();
+
+                        that.state = RsbtFileDownloadState::SendQueryPiece(sender, Some(receiver));
+                    }
+                    RsbtFileDownloadState::SendQueryPiece(ref mut sender, receiver) => {
+                        match sender.as_mut().poll(cx) {
+                            Poll::Ready(Ok(())) => {
+                                that.state = RsbtFileDownloadState::ReceiveQueryPiece(
+                                    receiver.take().unwrap(),
+                                )
+                            }
+                            Poll::Ready(Err(err)) => return Poll::Ready(Some(Err(err))),
+                            Poll::Pending => return Poll::Pending,
+                        }
+                    }
+                    RsbtFileDownloadState::ReceiveQueryPiece(receiver) => {
+                        match receiver.poll_unpin(cx) {
+                            Poll::Ready(Ok(Ok(data))) => {
+                                let remains = data.len() - that.piece_offset;
+                                let size = if remains < that.left {
+                                    remains
+                                } else {
+                                    that.left
+                                };
+                                let out = &data[that.piece_offset..that.piece_offset + size];
+                                that.left -= size;
+                                that.piece += 1;
+                                that.piece_offset = 0;
+                                that.state = RsbtFileDownloadState::Idle;
+                                return Poll::Ready(Some(Ok(Bytes::from(out.to_owned()))));
+                            }
+                            Poll::Ready(Ok(Err(err))) => return Poll::Ready(Some(Err(err))),
+                            Poll::Ready(Err(err)) => return Poll::Ready(Some(Err(err.into()))),
+                            Poll::Pending => return Poll::Pending,
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -207,7 +286,7 @@ impl TorrentStorage {
         torrent_name: P,
         torrent_process: Arc<TorrentProcess>,
     ) -> Result<Self, RsbtError> {
-        let (state_file, mut state) = prepare_storage_state(
+        let (state_file, state) = prepare_storage_state(
             properties.clone(),
             torrent_name.as_ref(),
             torrent_process.clone(),

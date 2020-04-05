@@ -1,5 +1,4 @@
 use super::*;
-use bytes::Bytes;
 
 pub(crate) async fn torrent_file_download(
     request: &RsbtCommandTorrentFileDownload,
