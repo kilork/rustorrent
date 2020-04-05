@@ -7,6 +7,7 @@ mod add_torrent;
 mod current_torrents;
 mod delete_torrent;
 mod torrent_announces;
+mod torrent_file_download;
 mod torrent_files;
 mod torrent_peers;
 
@@ -17,10 +18,13 @@ use current_torrents::{add_to_current_torrents, remove_from_current_torrents};
 use delete_torrent::delete_torrent;
 use download_torrent::TorrentDownloadState;
 use torrent_announces::torrent_announces;
+use torrent_file_download::torrent_file_download;
+pub use torrent_file_download::RsbtFileDownloadStream;
 use torrent_files::torrent_files;
+
 use torrent_peers::torrent_peers;
 
-#[derive(Serialize, Clone)]
+#[derive(Debug, Serialize, Clone)]
 pub struct TorrentDownloadView {
     pub id: usize,
     pub name: String,
@@ -35,7 +39,7 @@ pub struct TorrentDownloadView {
     pub active: bool,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct TorrentDownload {
     pub id: usize,
     pub name: String,
@@ -91,39 +95,50 @@ impl From<&TorrentDownload> for TorrentDownloadView {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TorrentDownloadHeader {
     pub file: String,
     pub state: TorrentDownloadStatus,
 }
 
-#[derive(Clone, Serialize, Deserialize, Copy, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq)]
 pub enum TorrentDownloadStatus {
     Enabled,
     Disabled,
 }
 
+#[derive(Debug)]
 pub struct RsbtCommandAddTorrent {
     pub data: Vec<u8>,
     pub filename: String,
     pub state: TorrentDownloadStatus,
 }
 
+#[derive(Debug)]
 pub struct RsbtCommandDeleteTorrent {
     pub id: usize,
     pub files: bool,
 }
 
+#[derive(Debug)]
 pub struct RsbtCommandTorrentPeers {
     pub id: usize,
 }
 
+#[derive(Debug)]
 pub struct RsbtCommandTorrentAnnounce {
     pub id: usize,
 }
 
+#[derive(Debug)]
 pub struct RsbtCommandTorrentFiles {
     pub id: usize,
+}
+
+#[derive(Debug)]
+pub struct RsbtCommandTorrentFileDownload {
+    pub id: usize,
+    pub file_id: usize,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -195,6 +210,7 @@ impl From<&PeerState> for RsbtPeerView {
     }
 }
 
+#[derive(Debug)]
 pub enum RsbtCommand {
     AddTorrent(RequestResponse<RsbtCommandAddTorrent, Result<TorrentDownload, RsbtError>>),
     DeleteTorrent(RequestResponse<RsbtCommandDeleteTorrent, Result<(), RsbtError>>),
@@ -209,6 +225,9 @@ pub enum RsbtCommand {
         RequestResponse<RsbtCommandTorrentAnnounce, Result<Vec<RsbtAnnounceView>, RsbtError>>,
     ),
     TorrentFiles(RequestResponse<RsbtCommandTorrentFiles, Result<Vec<RsbtFileView>, RsbtError>>),
+    TorrentFileDownload(
+        RequestResponse<RsbtCommandTorrentFileDownload, Result<RsbtFileDownloadStream, RsbtError>>,
+    ),
 }
 
 pub(crate) async fn download_events_loop(
@@ -298,6 +317,14 @@ pub(crate) async fn download_events_loop(
             RsbtCommand::TorrentFiles(request_response) => {
                 debug!("torrent's files");
                 let response = torrent_files(request_response.request(), &torrents).await;
+
+                if let Err(err) = request_response.response(response) {
+                    error!("cannot send response for torrent's files: {}", err);
+                }
+            }
+            RsbtCommand::TorrentFileDownload(request_response) => {
+                debug!("torrent's files");
+                let response = torrent_file_download(request_response.request(), &torrents).await;
 
                 if let Err(err) = request_response.response(response) {
                     error!("cannot send response for torrent's files: {}", err);

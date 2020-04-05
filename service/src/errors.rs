@@ -1,4 +1,7 @@
-use crate::types::{message::MessageCodecError, udp_tracker::UdpTrackerCodecError};
+use crate::{
+    app::RsbtCommand,
+    types::{message::MessageCodecError, udp_tracker::UdpTrackerCodecError},
+};
 use failure::*;
 use log::error;
 
@@ -44,6 +47,8 @@ pub enum RsbtError {
     WrongConfig,
     #[fail(display = "send error {}", _0)]
     SendError(futures::channel::mpsc::SendError),
+    #[fail(display = "cannot send to torrent process: {}", _0)]
+    SendToTorrentProcess(tokio::sync::mpsc::error::SendError<RsbtCommand>),
     #[fail(display = "oneshot recv error {}", _0)]
     TokioMpscOneshotRecvError(tokio::sync::oneshot::error::RecvError),
     #[fail(display = "cannot parse uri {}", _0)]

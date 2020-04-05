@@ -73,17 +73,19 @@ impl Default for TorrentPeerState {
 }
 
 #[serde(rename_all = "lowercase")]
-#[derive(Serialize, Deserialize, Copy, Clone)]
+#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 pub enum RsbtTorrentAction {
     Enable,
     Disable,
 }
 
+#[derive(Debug)]
 pub struct RsbtCommandTorrentAction {
     pub id: usize,
     pub action: RsbtTorrentAction,
 }
 
+#[derive(Debug)]
 pub(crate) struct PeerState {
     peer: Peer,
     state: TorrentPeerState,

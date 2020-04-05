@@ -334,7 +334,7 @@ impl TorrentStorage {
         receiver.await?
     }
 
-    pub async fn save(&mut self, index: usize, data: Vec<u8>) -> Result<(), RsbtError> {
+    pub async fn save(&self, index: usize, data: Vec<u8>) -> Result<(), RsbtError> {
         self.message(|sender| TorrentStorageMessage::SavePiece {
             index,
             data,
@@ -343,18 +343,25 @@ impl TorrentStorage {
         .await
     }
 
-    pub async fn load(&mut self, index: usize) -> Result<Option<TorrentPiece>, RsbtError> {
+    pub async fn load(&self, index: usize) -> Result<Option<TorrentPiece>, RsbtError> {
         self.message(|sender| TorrentStorageMessage::LoadPiece { index, sender })
             .await
     }
 
-    pub async fn delete(&mut self, files: bool) -> Result<(), RsbtError> {
+    pub async fn delete(&self, files: bool) -> Result<(), RsbtError> {
         self.message(|sender| TorrentStorageMessage::Delete { files, sender })
             .await
     }
 
-    pub async fn files(&mut self) -> Result<Vec<RsbtFileView>, RsbtError> {
+    pub async fn files(&self) -> Result<Vec<RsbtFileView>, RsbtError> {
         self.message(TorrentStorageMessage::Files).await
+    }
+
+    pub async fn download(
+        &self,
+        file_id: usize,
+    ) -> Result<crate::app::RsbtFileDownloadStream, RsbtError> {
+        Err(RsbtError::TorrentActionNotSupported)
     }
 }
 
