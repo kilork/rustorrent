@@ -337,6 +337,11 @@ async fn torrent_file_download(
                     }))
                 }))
         }
+        Err(err @ RsbtError::TorrentNotFound(_)) | Err(err @ RsbtError::TorrentFileNotFound(_)) => {
+            HttpResponse::NotFound().json(Failure {
+                error: format!("{}", err),
+            })
+        }
         Err(err) => HttpResponse::InternalServerError().json(Failure {
             error: format!("{}", err),
         }),

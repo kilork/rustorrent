@@ -386,6 +386,7 @@ pub(crate) async fn download_torrent(
                 }
             }
             DownloadTorrentEvent::FileDownload(request_response) => {
+                debug!("processing file download");
                 let files_download = torrent_storage.download(*request_response.request()).await;
 
                 if let Err(err) = request_response.response(files_download) {

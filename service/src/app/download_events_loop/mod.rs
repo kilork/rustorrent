@@ -11,6 +11,7 @@ mod torrent_file_download;
 mod torrent_files;
 mod torrent_peers;
 
+pub use crate::storage::RsbtFileDownloadStream;
 use crate::storage::TorrentStorageState;
 use action::torrent_action;
 use add_torrent::add_torrent;
@@ -19,7 +20,6 @@ use delete_torrent::delete_torrent;
 use download_torrent::TorrentDownloadState;
 use torrent_announces::torrent_announces;
 use torrent_file_download::torrent_file_download;
-pub use torrent_file_download::RsbtFileDownloadStream;
 use torrent_files::torrent_files;
 
 use torrent_peers::torrent_peers;

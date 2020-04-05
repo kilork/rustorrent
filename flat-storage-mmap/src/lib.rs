@@ -32,12 +32,13 @@ struct FileHandle {
 impl MmapFlatStorage {
     pub fn create<P: AsRef<Path>>(
         download_path: P,
+        piece_count: usize,
         piece_size: usize,
         files: Vec<FlatStorageFile>,
         downloaded: &[u8],
     ) -> Result<Self, std::io::Error> {
         let mapping = map_pieces_to_files(piece_size, &files);
-        let file_handles = load_files(&download_path, &files, downloaded, &mapping)?;
+        let file_handles = load_files(&download_path, &files, downloaded, &mapping, piece_count)?;
         Ok(Self {
             files,
             file_handles,
@@ -69,6 +70,10 @@ impl MmapFlatStorage {
             .map(|x| x.lock().unwrap().saved)
             .collect()
     }
+
+    pub fn file_info(&self, file_id: usize) -> Option<()> {
+        None
+    }
 }
 
 fn load_files<P: AsRef<Path>>(
@@ -76,10 +81,11 @@ fn load_files<P: AsRef<Path>>(
     files: &[FlatStorageFile],
     downloaded: &[u8],
     mapping: &[MmapFlatStorageMapping],
+    pieces_count: usize,
 ) -> Result<Vec<Mutex<FileHandle>>, std::io::Error> {
     let mut result = vec![];
     for (index, file) in files.iter().enumerate() {
-        let saved = saved(index, mapping, downloaded);
+        let saved = calculate_saved(pieces_count, index, mapping, downloaded);
         let file_path = download_path.as_ref().join(&file.path);
         debug!("checking file: {:?}", file_path);
         if !file_path.is_file() {
@@ -195,13 +201,18 @@ fn map_pieces_to_files(
     mapping
 }
 
-fn saved(file_index: usize, mapping: &[MmapFlatStorageMapping], downloaded: &[u8]) -> usize {
+fn calculate_saved(
+    pieces_count: usize,
+    file_index: usize,
+    mapping: &[MmapFlatStorageMapping],
+    downloaded: &[u8],
+) -> usize {
     let mut saved = 0;
-    for (downloaded_block_index, downloaded_block) in downloaded.iter().enumerate() {
-        for subindex in 0..8 {
-            if downloaded_block & 1 << subindex != 0 {
-                let index = downloaded_block_index * 8 + subindex;
-                let mapping_block = &mapping[index];
+    for piece in 0..pieces_count {
+        let (piece_byte, piece_bit) = (piece / 8, (1 << (piece % 8)) as u8);
+        if let Some(&downloaded_block) = downloaded.get(piece_byte) {
+            if downloaded_block & piece_bit != 0 {
+                let mapping_block = &mapping[piece];
                 for file_block in &mapping_block.0 {
                     if file_block.file_index == file_index {
                         saved += file_block.size;

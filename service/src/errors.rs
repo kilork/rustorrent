@@ -79,6 +79,8 @@ pub enum RsbtError {
     TomlSerialize(toml::ser::Error),
     #[fail(display = "torrent with id {} not found", _0)]
     TorrentNotFound(usize),
+    #[fail(display = "torrent file with id {} not found", _0)]
+    TorrentFileNotFound(usize),
     #[fail(display = "torrent action not supported")]
     TorrentActionNotSupported,
     #[fail(display = "elapsed {}", _0)]

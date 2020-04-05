@@ -2,10 +2,16 @@ use super::*;
 use crate::types::Properties;
 use app::{RsbtFileView, TorrentProcess};
 use byteorder::{BigEndian, ReadBytesExt};
+use bytes::Bytes;
 use failure::ResultExt;
 use flat_storage::FlatStorage;
 use flat_storage_mmap::MmapFlatStorage;
 use std::{io::Read, thread};
+use std::{
+    pin::Pin,
+    sync::{Arc, Mutex},
+    task::{Context, Poll, Waker},
+};
 use tokio::{
     fs::{self, File},
     runtime::Builder,
@@ -36,6 +42,10 @@ enum TorrentStorageMessage {
         sender: oneshot::Sender<Result<(), RsbtError>>,
     },
     Files(oneshot::Sender<Result<Vec<RsbtFileView>, RsbtError>>),
+    FileInfo {
+        file_id: usize,
+        sender: oneshot::Sender<Result<(), RsbtError>>,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -95,6 +105,33 @@ impl TorrentStorageState {
                 )
             })
             .map_err(|x| x.into())
+    }
+}
+
+#[derive(Debug)]
+pub struct RsbtFileDownloadStream {
+    pub name: String,
+    pub size: usize,
+    torrent_process: Arc<TorrentProcess>,
+    sender: Sender<TorrentStorageMessage>,
+    receiver: watch::Receiver<TorrentStorageState>,
+    state: Arc<Mutex<RsbtFileDownload>>,
+}
+
+#[derive(Debug)]
+pub struct RsbtFileDownload {
+    pub index: usize,
+}
+
+impl Stream for RsbtFileDownloadStream {
+    type Item = Result<Bytes, RsbtError>;
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let state = self.state.lock().unwrap();
+        if state.index == self.size {
+            Poll::Ready(None)
+        } else {
+            unimplemented!()
+        }
     }
 }
 
@@ -176,7 +213,7 @@ impl TorrentStorage {
             torrent_process.clone(),
         )
         .await?;
-        let (sender, mut channel_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
+        let (sender, channel_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
         let (watch_sender, receiver) = watch::channel(state.clone());
 
@@ -185,134 +222,20 @@ impl TorrentStorage {
         let thread_torrent_name = PathBuf::from(torrent_name.as_ref());
 
         let handle = thread::spawn(move || {
-            let info = &thread_torrent_process.info;
-            let mut rt = Builder::new().basic_scheduler().enable_io().build()?;
-            let mmap_storage = Arc::new(MmapFlatStorage::create(
-                properties.save_to.clone(),
-                info.piece_length,
-                info.files.clone(),
-                &state.downloaded,
-            )?);
-            rt.block_on(async move {
-                while let Some(message) = channel_receiver.next().await {
-                    match message {
-                        TorrentStorageMessage::SavePiece {
-                            index,
-                            data,
-                            sender,
-                        } => {
-                            let (block_index, bit) = crate::messages::index_in_bitarray(index);
-
-                            let storage = mmap_storage.clone();
-                            let len = data.len();
-
-                            match spawn_blocking(move || storage.write_piece(index, data)).await? {
-                                Ok(()) => (),
-                                Err(err) => {
-                                    error!("cannot write piece: {}", err);
-                                    if sender.send(Err(err.into())).is_err() {
-                                        error!("cannot send piece with oneshot message");
-                                    }
-                                    continue;
-                                }
-                            }
-
-                            while state.downloaded.len() <= index {
-                                state.downloaded.push(0);
-                            }
-                            if state.downloaded[block_index] & bit == 0 {
-                                state.pieces_left -= 1;
-                                state.bytes_write += len as u64;
-                            }
-                            state.downloaded[block_index] |= bit;
-
-                            if let Err(err) = state.save(&state_file).await {
-                                error!("cannot save state: {}", err);
-                            }
-                            if let Err(err) = watch_sender.broadcast(state.clone()) {
-                                error!("cannot notify watchers: {}", err);
-                            }
-
-                            if sender.send(Ok(())).is_err() {
-                                error!("cannot send oneshot");
-                            }
-                        }
-                        TorrentStorageMessage::LoadPiece { index, sender } => {
-                            let storage = mmap_storage.clone();
-
-                            let piece =
-                                match spawn_blocking(move || storage.read_piece(index)).await? {
-                                    Ok(data) => data.map(TorrentPiece),
-                                    Err(err) => {
-                                        error!("cannot read piece: {}", err);
-                                        if sender.send(Err(err.into())).is_err() {
-                                            error!("cannot send piece with oneshot message");
-                                        }
-                                        continue;
-                                    }
-                                };
-
-                            if let Some(piece) = &piece {
-                                state.bytes_read += piece.as_ref().len() as u64;
-                            }
-
-                            if let Err(err) = state.save(&state_file).await {
-                                error!("cannot save state: {}", err);
-                            }
-                            if let Err(err) = watch_sender.broadcast(state.clone()) {
-                                error!("cannot notify watchers: {}", err);
-                            }
-
-                            if sender.send(Ok(piece)).is_err() {
-                                error!("cannot send piece with oneshot message");
-                            }
-                        }
-                        TorrentStorageMessage::Delete { files, sender } => {
-                            let mut result =
-                                cleanup_storage_state(properties.clone(), thread_torrent_name)
-                                    .await;
-                            if files {
-                                let storage = mmap_storage.clone();
-                                result = spawn_blocking(move || {
-                                    storage
-                                        .delete_files(properties.save_to.clone())
-                                        .map_err(RsbtError::from)
-                                })
-                                .await?;
-                            }
-                            if sender.send(result).is_err() {
-                                error!("cannot send delete result with oneshot message");
-                            }
-                            break;
-                        }
-                        TorrentStorageMessage::Files(sender) => {
-                            let storage = mmap_storage.clone();
-                            let saved = spawn_blocking(move || storage.saved())
-                                .await
-                                .map_err(RsbtError::from);
-                            let files_view = saved.map(|saved| {
-                                saved
-                                    .into_iter()
-                                    .zip(info.files.iter())
-                                    .enumerate()
-                                    .map(|(id, (saved, info))| RsbtFileView {
-                                        id,
-                                        name: info.path.to_string_lossy().into(),
-                                        saved,
-                                        size: info.length,
-                                    })
-                                    .collect()
-                            });
-                            if sender.send(files_view).is_err() {
-                                error!("cannot send files result with oneshot message");
-                            }
-                        }
-                    }
-                }
-                Ok::<(), RsbtError>(())
-            })?;
-
-            Ok(())
+            if let Err(err) = torrent_storage_message_loop(
+                properties,
+                thread_torrent_process,
+                thread_torrent_name,
+                state,
+                state_file,
+                channel_receiver,
+                watch_sender,
+            ) {
+                error!("torrent storage loop failure: {}", err);
+                Err(err)
+            } else {
+                Ok(())
+            }
         });
 
         Ok(Self {
@@ -357,12 +280,163 @@ impl TorrentStorage {
         self.message(TorrentStorageMessage::Files).await
     }
 
-    pub async fn download(
-        &self,
-        file_id: usize,
-    ) -> Result<crate::app::RsbtFileDownloadStream, RsbtError> {
+    pub async fn download(&self, file_id: usize) -> Result<RsbtFileDownloadStream, RsbtError> {
+        let file_info = self
+            .message(|sender| TorrentStorageMessage::FileInfo { file_id, sender })
+            .await?;
         Err(RsbtError::TorrentActionNotSupported)
     }
+}
+
+fn torrent_storage_message_loop(
+    properties: Arc<Properties>,
+    torrent_process: Arc<TorrentProcess>,
+    torrent_name: PathBuf,
+    mut state: TorrentStorageState,
+    state_file: PathBuf,
+    mut channel_receiver: Receiver<TorrentStorageMessage>,
+    watch_sender: watch::Sender<TorrentStorageState>,
+) -> Result<(), RsbtError> {
+    let info = &torrent_process.info;
+    let mut rt = Builder::new().basic_scheduler().enable_io().build()?;
+    let mmap_storage = Arc::new(MmapFlatStorage::create(
+        properties.save_to.clone(),
+        info.pieces.len(),
+        info.piece_length,
+        info.files.clone(),
+        &state.downloaded,
+    )?);
+    rt.block_on(async move {
+        while let Some(message) = channel_receiver.next().await {
+            match message {
+                TorrentStorageMessage::SavePiece {
+                    index,
+                    data,
+                    sender,
+                } => {
+                    let (block_index, bit) = crate::messages::index_in_bitarray(index);
+
+                    let storage = mmap_storage.clone();
+                    let len = data.len();
+
+                    match spawn_blocking(move || storage.write_piece(index, data)).await? {
+                        Ok(()) => (),
+                        Err(err) => {
+                            error!("cannot write piece: {}", err);
+                            if sender.send(Err(err.into())).is_err() {
+                                error!("cannot send piece with oneshot message");
+                            }
+                            continue;
+                        }
+                    }
+
+                    while state.downloaded.len() <= index {
+                        state.downloaded.push(0);
+                    }
+                    if state.downloaded[block_index] & bit == 0 {
+                        state.pieces_left -= 1;
+                        state.bytes_write += len as u64;
+                    }
+                    state.downloaded[block_index] |= bit;
+
+                    if let Err(err) = state.save(&state_file).await {
+                        error!("cannot save state: {}", err);
+                    }
+                    if let Err(err) = watch_sender.broadcast(state.clone()) {
+                        error!("cannot notify watchers: {}", err);
+                    }
+
+                    if sender.send(Ok(())).is_err() {
+                        error!("cannot send oneshot");
+                    }
+                }
+                TorrentStorageMessage::LoadPiece { index, sender } => {
+                    let storage = mmap_storage.clone();
+
+                    let piece = match spawn_blocking(move || storage.read_piece(index)).await? {
+                        Ok(data) => data.map(TorrentPiece),
+                        Err(err) => {
+                            error!("cannot read piece: {}", err);
+                            if sender.send(Err(err.into())).is_err() {
+                                error!("cannot send piece with oneshot message");
+                            }
+                            continue;
+                        }
+                    };
+
+                    if let Some(piece) = &piece {
+                        state.bytes_read += piece.as_ref().len() as u64;
+                    }
+
+                    if let Err(err) = state.save(&state_file).await {
+                        error!("cannot save state: {}", err);
+                    }
+                    if let Err(err) = watch_sender.broadcast(state.clone()) {
+                        error!("cannot notify watchers: {}", err);
+                    }
+
+                    if sender.send(Ok(piece)).is_err() {
+                        error!("cannot send piece with oneshot message");
+                    }
+                }
+                TorrentStorageMessage::Delete { files, sender } => {
+                    let mut result = cleanup_storage_state(properties.clone(), torrent_name).await;
+                    if files {
+                        let storage = mmap_storage.clone();
+                        result = spawn_blocking(move || {
+                            storage
+                                .delete_files(properties.save_to.clone())
+                                .map_err(RsbtError::from)
+                        })
+                        .await?;
+                    }
+                    if sender.send(result).is_err() {
+                        error!("cannot send delete result with oneshot message");
+                    }
+                    break;
+                }
+                TorrentStorageMessage::Files(sender) => {
+                    let storage = mmap_storage.clone();
+                    let saved = spawn_blocking(move || storage.saved())
+                        .await
+                        .map_err(RsbtError::from);
+                    let files_view = saved.map(|saved| {
+                        saved
+                            .into_iter()
+                            .zip(info.files.iter())
+                            .enumerate()
+                            .map(|(id, (saved, info))| RsbtFileView {
+                                id,
+                                name: info.path.to_string_lossy().into(),
+                                saved,
+                                size: info.length,
+                            })
+                            .collect()
+                    });
+                    if sender.send(files_view).is_err() {
+                        error!("cannot send files result with oneshot message");
+                    }
+                }
+                TorrentStorageMessage::FileInfo { file_id, sender } => {
+                    let storage = mmap_storage.clone();
+                    let file_info = spawn_blocking(move || storage.file_info(file_id))
+                        .await
+                        .map_err(RsbtError::from)
+                        .map_or_else(
+                            |x| Err(x),
+                            |v| v.ok_or_else(|| RsbtError::TorrentFileNotFound(file_id)),
+                        );
+
+                    if sender.send(file_info).is_err() {
+                        error!("cannot send files result with oneshot message");
+                    }
+                }
+            }
+        }
+        Ok::<(), RsbtError>(())
+    })?;
+
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
