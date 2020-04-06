@@ -1,7 +1,8 @@
 use super::*;
 use crate::{
+    bit_by_index,
     errors::RsbtError,
-    messages::{bit_by_index, index_in_bitarray},
+    index_in_bitarray,
     types::{
         info::TorrentInfo,
         message::{Message, MessageCodec},

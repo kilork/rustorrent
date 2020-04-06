@@ -45,6 +45,8 @@ pub mod types;
 pub use errors::RsbtError;
 pub use storage::{TorrentPiece, TorrentStorage};
 
+pub(crate) use flat_storage::{bit_by_index, index_in_bitarray};
+
 pub(crate) const SHA1_SIZE: usize = 20;
 
 pub(crate) const BLOCK_SIZE: usize = 1 << 14;

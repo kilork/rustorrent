@@ -10,7 +10,10 @@ use failure::ResultExt;
 use flat_storage::FlatStorage;
 use flat_storage_mmap::{FileInfo, MmapFlatStorage};
 use futures::future::BoxFuture;
-use std::{io::Read, thread};
+use std::{
+    io::{Read, Write},
+    thread,
+};
 use std::{
     pin::Pin,
     sync::{Arc, Mutex},
@@ -427,7 +430,7 @@ fn torrent_storage_message_loop(
                     data,
                     sender,
                 } => {
-                    let (block_index, bit) = crate::messages::index_in_bitarray(index);
+                    let (block_index, bit) = index_in_bitarray(index);
 
                     let storage = mmap_storage.clone();
                     let len = data.len();

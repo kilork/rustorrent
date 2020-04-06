@@ -231,14 +231,11 @@ fn calculate_saved(
 ) -> usize {
     let mut saved = 0;
     for piece in 0..pieces_count {
-        let (piece_byte, piece_bit) = (piece / 8, (1 << (piece % 8)) as u8);
-        if let Some(&downloaded_block) = downloaded.get(piece_byte) {
-            if downloaded_block & piece_bit != 0 {
-                let mapping_block = &mapping[piece];
-                for file_block in &mapping_block.0 {
-                    if file_block.file_index == file_index {
-                        saved += file_block.size;
-                    }
+        if bit_by_index(piece, downloaded).is_some() {
+            let mapping_block = &mapping[piece];
+            for file_block in &mapping_block.0 {
+                if file_block.file_index == file_index {
+                    saved += file_block.size;
                 }
             }
         }
