@@ -108,6 +108,19 @@ pub(crate) enum PeerMessage {
     },
 }
 
+impl Display for PeerMessage {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            PeerMessage::Piece {
+                index,
+                begin,
+                block,
+            } => write!(f, "Piece({}, {}, [{}])", index, begin, block.len()),
+            _ => write!(f, "{:?}", self),
+        }
+    }
+}
+
 pub(crate) enum TorrentDownloadMode {
     Normal,
     Final,

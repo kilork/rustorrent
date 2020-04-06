@@ -181,7 +181,7 @@ pub(crate) async fn download_torrent(
                 }
             }
             DownloadTorrentEvent::PeerConnected(peer_id, stream) => {
-                debug!("[{}] peer connected", peer_id);
+                debug!("[{}] peer connected to {:?}", peer_id, stream.peer_addr());
                 if let Err(err) = process_peer_connected(
                     torrent_process.clone(),
                     &mut peer_states,

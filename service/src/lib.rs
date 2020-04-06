@@ -1,8 +1,7 @@
 use futures::{
-    future::{join, AbortHandle, Abortable, Aborted},
+    future::{try_join, join, AbortHandle, Abortable, Aborted},
     prelude::*,
     stream::SplitSink,
-    try_join,
 };
 use http_body::Body;
 use hyper::Client;
@@ -55,7 +54,7 @@ pub(crate) const PEER_ID: [u8; 20] = *b"-rs0001-zzzzxxxxyyyy";
 
 //FIXME: pub(crate) const PEER_MAX_CONNECTIONS: usize = 50;
 
-pub const DEFAULT_CHANNEL_BUFFER: usize = 256;
+pub const DEFAULT_CHANNEL_BUFFER: usize = 512;
 
 //FIXME: pub(crate) const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(110);
 
