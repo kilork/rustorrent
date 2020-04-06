@@ -205,7 +205,6 @@ impl PeerLoopMessage {
 
     pub(crate) async fn peer_loop_message(&mut self, message: Message) -> Result<bool, RsbtError> {
         let peer_id = self.peer_id;
-        debug!("[{}] message {}", peer_id, message);
         self.message_count += 1;
         match message {
             Message::Bitfield(pieces) => {

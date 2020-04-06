@@ -116,6 +116,7 @@ impl Display for PeerMessage {
                 begin,
                 block,
             } => write!(f, "Piece({}, {}, [{}])", index, begin, block.len()),
+            PeerMessage::Message(message) => write!(f, "Message({})", message),
             _ => write!(f, "{:?}", self),
         }
     }
