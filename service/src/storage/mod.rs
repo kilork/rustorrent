@@ -278,6 +278,7 @@ async fn prepare_storage_state<P: AsRef<Path>>(
     torrent_storage_state_file.set_extension("torrent.state");
 
     let torrent_storage_state = if torrent_storage_state_file.is_file() {
+        debug!("loading state from: {:?}", torrent_storage_state_file);
         let data = fs::read(&torrent_storage_state_file)
             .await
             .with_context(|err| {
@@ -287,8 +288,11 @@ async fn prepare_storage_state<P: AsRef<Path>>(
                     err
                 )
             })?;
-        TorrentStorageState::from_reader(data.as_slice())?
+        let state = TorrentStorageState::from_reader(data.as_slice())?;
+        debug!("loaded state: {:?}", state);
+        state
     } else {
+        debug!("creating new state in: {:?}", torrent_storage_state_file);
         let state = TorrentStorageState {
             downloaded: vec![],
             bytes_write: 0,

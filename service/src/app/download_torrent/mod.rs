@@ -409,10 +409,12 @@ pub(crate) async fn download_torrent(
                 let request = request_response.request();
                 let piece_index = request.piece;
                 debug!("query piece event: search for piece index {}", piece_index);
-                let piece_bit = bit_by_index(
-                    piece_index,
-                    torrent_storage.receiver.borrow().downloaded.as_slice(),
-                );
+                let piece_bit = {
+                    let state = torrent_storage.receiver.borrow();
+                    let downloaded = state.downloaded.as_slice();
+                    debug!("query piece event: downloaded {:?}", downloaded);
+                    bit_by_index(piece_index, downloaded)
+                };
                 debug!("query piece event: {:?}", piece_bit);
                 if piece_bit.is_some() {
                     debug!("query piece event: found, loading from storage");
