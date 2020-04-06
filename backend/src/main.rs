@@ -181,6 +181,7 @@ async fn main() -> Result<(), ExitFailure> {
                     .service(torrent_peer_list)
                     .service(torrent_announce_list)
                     .service(torrent_file_list)
+                    .service(torrent_file_download)
                     .service(upload)
                     .service(account)
                     .service(logout)

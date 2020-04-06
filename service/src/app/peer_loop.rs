@@ -32,7 +32,7 @@ pub(crate) async fn peer_loop(
         };
 
         while let Some(message) = receiver.next().await {
-            debug!("[{}] peer loop received message", peer_id);
+            debug!("[{}] peer loop received message: {}", peer_id, message);
             match message {
                 PeerMessage::Bitfield(pieces) => {
                     processor.wtransport.send(Message::Bitfield(pieces)).await?;
@@ -145,7 +145,9 @@ pub(crate) async fn peer_loop(
         Ok::<(), RsbtError>(())
     };
 
-    let _ = try_join!(command_loop, receive_loop)?;
+    if let Err(err) = try_join(command_loop, receive_loop).await {
+        error!("[{}] peer join fail: {}", peer_id, err);
+    };
 
     broker_sender
         .send(DownloadTorrentEvent::PeerDisconnect(peer_id))

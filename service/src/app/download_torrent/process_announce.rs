@@ -10,6 +10,8 @@ pub(crate) async fn process_announce(
         download_torrent_broker_sender
             .send(DownloadTorrentEvent::PeerAnnounced(peer))
             .await?;
+
+        delay_for(Duration::from_secs(1)).await;
     }
 
     Ok(())

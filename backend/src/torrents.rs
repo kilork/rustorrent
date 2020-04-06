@@ -1,4 +1,5 @@
 use super::*;
+use futures::stream::TryStreamExt;
 
 struct Paging {
     page: Option<usize>,
@@ -228,11 +229,11 @@ async fn torrent_delete(
     }
 }
 
-async fn torrent_command<T, F, R: Serialize>(
+async fn torrent_command_result<T, F, R>(
     event_sender: web::Data<Sender<RsbtCommand>>,
     data: T,
     cmd: F,
-) -> impl Responder
+) -> Result<R, RsbtError>
 where
     F: FnOnce(RequestResponse<T, Result<R, RsbtError>>) -> RsbtCommand,
 {
@@ -242,22 +243,29 @@ where
         let mut event_sender = event_sender.as_ref().clone();
         if let Err(err) = event_sender.send(cmd(request_response)).await {
             error!("cannot send to torrent process: {}", err);
-            return HttpResponse::InternalServerError().json(Failure {
-                error: format!("cannot send to torrent process: {}", err),
-            });
+            return Err(RsbtError::SendToTorrentProcess(err));
         }
     }
 
-    match receiver.await {
-        Ok(Ok(peers)) => HttpResponse::Ok().json(peers),
-        Ok(Err(err @ RsbtError::TorrentNotFound(_))) => HttpResponse::NotFound().json(Failure {
-            error: format!("{}", err),
-        }),
-        Ok(Err(err)) => HttpResponse::InternalServerError().json(Failure {
+    receiver.await.map_err(RsbtError::from)?
+}
+
+async fn torrent_command<T, F, R: Serialize>(
+    event_sender: web::Data<Sender<RsbtCommand>>,
+    data: T,
+    cmd: F,
+) -> impl Responder
+where
+    F: FnOnce(RequestResponse<T, Result<R, RsbtError>>) -> RsbtCommand,
+{
+    let result = torrent_command_result(event_sender, data, cmd).await;
+    match result {
+        Ok(peers) => HttpResponse::Ok().json(peers),
+        Err(err @ RsbtError::TorrentNotFound(_)) => HttpResponse::NotFound().json(Failure {
             error: format!("{}", err),
         }),
         Err(err) => HttpResponse::InternalServerError().json(Failure {
-            error: format!("cannot receive from torrent process: {}", err),
+            error: format!("{}", err),
         }),
     }
 }
@@ -302,4 +310,43 @@ async fn torrent_file_list(
         RsbtCommand::TorrentFiles,
     )
     .await
+}
+
+#[get("/torrent/{id}/file/{file_id}/download")]
+async fn torrent_file_download(
+    event_sender: web::Data<Sender<RsbtCommand>>,
+    ids: web::Path<(usize, usize)>,
+    _user: User,
+) -> impl Responder {
+    let (id, file_id) = *ids;
+    let download_stream = torrent_command_result(
+        event_sender,
+        RsbtCommandTorrentFileDownload { id, file_id },
+        RsbtCommand::TorrentFileDownload,
+    )
+    .await;
+
+    match download_stream {
+        Ok(download_stream) => HttpResponse::Ok()
+            .keep_alive()
+            .no_chunking()
+            .set_header(
+                http::header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{}\"", download_stream.name),
+            )
+            .content_length(download_stream.size as u64)
+            .streaming(download_stream.map_err(|x| {
+                actix_web::Error::from(HttpResponse::InternalServerError().json(Failure {
+                    error: format!("{}", x),
+                }))
+            })),
+        Err(err @ RsbtError::TorrentNotFound(_)) | Err(err @ RsbtError::TorrentFileNotFound(_)) => {
+            HttpResponse::NotFound().json(Failure {
+                error: format!("{}", err),
+            })
+        }
+        Err(err) => HttpResponse::InternalServerError().json(Failure {
+            error: format!("{}", err),
+        }),
+    }
 }

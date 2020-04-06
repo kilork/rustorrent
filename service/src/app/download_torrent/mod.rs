@@ -1,5 +1,7 @@
 use super::*;
 
+use std::{sync::Mutex, task::Waker};
+
 mod process_announce;
 mod process_peer_announced;
 mod process_peer_connected;
@@ -23,6 +25,12 @@ use process_peer_piece_downloaded::process_peer_piece_downloaded;
 use process_peer_piece_request::process_peer_piece_request;
 use process_peer_pieces::process_peer_pieces;
 use process_peer_unchoke::process_peer_unchoke;
+
+#[derive(Debug)]
+pub(crate) struct DownloadTorrentEventQueryPiece {
+    pub(crate) piece: usize,
+    pub(crate) waker: Arc<Mutex<Option<Waker>>>,
+}
 
 #[derive(Debug)]
 pub(crate) enum DownloadTorrentEvent {
@@ -51,6 +59,8 @@ pub(crate) enum DownloadTorrentEvent {
     PeersView(RequestResponse<(), Result<Vec<RsbtPeerView>, RsbtError>>),
     AnnounceView(RequestResponse<(), Result<Vec<RsbtAnnounceView>, RsbtError>>),
     FilesView(RequestResponse<(), Result<Vec<RsbtFileView>, RsbtError>>),
+    FileDownload(RequestResponse<usize, Result<RsbtFileDownloadStream, RsbtError>>),
+    QueryPiece(RequestResponse<DownloadTorrentEventQueryPiece, Result<Vec<u8>, RsbtError>>),
 }
 
 impl Display for DownloadTorrentEvent {
@@ -87,6 +97,7 @@ pub(crate) async fn download_torrent(
     let mut mode = TorrentDownloadMode::Normal;
     let mut active = false;
     let mut announce_abort_handle = None;
+    let mut awaiting_for_piece = HashMap::new();
 
     let (mut statistic_sender, mut statistic_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
@@ -170,7 +181,7 @@ pub(crate) async fn download_torrent(
                 }
             }
             DownloadTorrentEvent::PeerConnected(peer_id, stream) => {
-                debug!("[{}] peer connected", peer_id);
+                debug!("[{}] peer connected to {:?}", peer_id, stream.peer_addr());
                 if let Err(err) = process_peer_connected(
                     torrent_process.clone(),
                     &mut peer_states,
@@ -242,8 +253,9 @@ pub(crate) async fn download_torrent(
                     &mut peer_states,
                     &mode,
                     peer_id,
-                    piece,
+                    piece.into(),
                     &mut torrent_storage,
+                    &mut awaiting_for_piece,
                 )
                 .await
                 {
@@ -383,6 +395,67 @@ pub(crate) async fn download_torrent(
                 if let Err(err) = request_response.response(files_result) {
                     error!("cannot send response for delete torrent: {}", err);
                 }
+            }
+            DownloadTorrentEvent::FileDownload(request_response) => {
+                debug!("processing file download");
+                let files_download = torrent_storage.download(*request_response.request()).await;
+
+                if let Err(err) = request_response.response(files_download) {
+                    error!("cannot send response for download torrent: {}", err);
+                }
+            }
+            DownloadTorrentEvent::QueryPiece(request_response) => {
+                debug!("query piece event: processing query piece");
+                let request = request_response.request();
+                let piece_index = request.piece;
+                debug!("query piece event: search for piece index {}", piece_index);
+                let piece_bit = {
+                    let state = torrent_storage.receiver.borrow();
+                    let downloaded = state.downloaded.as_slice();
+                    debug!("query piece event: downloaded {:?}", downloaded);
+                    bit_by_index(piece_index, downloaded)
+                };
+                debug!("query piece event: {:?}", piece_bit);
+                if piece_bit.is_some() {
+                    debug!("query piece event: found, loading from storage");
+                    match torrent_storage.load(piece_index).await {
+                        Ok(Some(piece)) => {
+                            debug!("query piece event: loaded piece {}", piece.as_ref().len());
+                            let waker = request.waker.lock().unwrap().take();
+                            {
+                                debug!("query piece event: sending piece to download stream");
+                                if let Err(err) =
+                                    request_response.response(Ok(piece.as_ref().into()))
+                                {
+                                    error!("cannot send response for query piece: {}", err);
+                                    continue;
+                                }
+                            }
+
+                            if let Some(waker) = waker {
+                                debug!("query piece event: wake up waker");
+                                waker.wake();
+                            }
+                            continue;
+                        }
+                        Ok(None) => {
+                            error!("query piece event: no piece loaded");
+                        }
+                        Err(err) => {
+                            error!("cannot load piece from storage: {}", err);
+                            if let Err(err) = request_response.response(Err(err)) {
+                                error!("cannot send response for query piece: {}", err);
+                            }
+                            continue;
+                        }
+                    }
+                }
+                error!("query piece event: register awaiter");
+                let awaiters = awaiting_for_piece
+                    .entry(piece_index)
+                    .or_insert_with(|| vec![]);
+                awaiters.push(request_response);
+                dbg!(&awaiters);
             }
         }
     }

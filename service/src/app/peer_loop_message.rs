@@ -197,6 +197,12 @@ impl PeerLoopMessage {
         Ok(false)
     }
 
+    pub(crate) async fn keep_alive(&mut self) -> Result<bool, RsbtError> {
+        debug!("[{}] send keep alive to peer", self.peer_id);
+        self.wtransport.send(Message::KeepAlive).await?;
+        Ok(false)
+    }
+
     pub(crate) async fn peer_loop_message(&mut self, message: Message) -> Result<bool, RsbtError> {
         let peer_id = self.peer_id;
         debug!("[{}] message {}", peer_id, message);
@@ -227,6 +233,9 @@ impl PeerLoopMessage {
                 length,
             } => {
                 return self.request(index, begin, length).await;
+            }
+            Message::KeepAlive => {
+                return self.keep_alive().await;
             }
             _ => debug!("[{}] unhandled message: {}", peer_id, message),
         }

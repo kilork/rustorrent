@@ -1,11 +1,16 @@
 use super::*;
+use std::borrow::Cow;
 
 pub(crate) async fn process_peer_piece_downloaded(
     peer_states: &mut HashMap<Uuid, PeerState>,
     mode: &TorrentDownloadMode,
     peer_id: Uuid,
-    piece: Vec<u8>,
+    piece: Cow<'_, [u8]>,
     storage: &mut TorrentStorage,
+    awaiters: &mut HashMap<
+        usize,
+        Vec<RequestResponse<DownloadTorrentEventQueryPiece, Result<Vec<u8>, RsbtError>>>,
+    >,
 ) -> Result<(), RsbtError> {
     debug!("[{}] peer piece downloaded", peer_id);
 
@@ -22,7 +27,7 @@ pub(crate) async fn process_peer_piece_downloaded(
             if let (Some(index), Some(_since)) =
                 (downloading_piece.take(), downloading_since.take())
             {
-                storage.save(index, piece).await?;
+                storage.save(index, piece.to_vec()).await?;
 
                 let mut downloadable = vec![];
                 for (i, &a) in pieces.iter().enumerate() {
@@ -77,6 +82,18 @@ pub(crate) async fn process_peer_piece_downloaded(
     }
 
     select_new_peer(&new_pieces, peer_states, mode, peer_id).await?;
+
+    if let Some(awaiters) = awaiters.remove(&index) {
+        for awaiter in awaiters {
+            let waker = awaiter.request().waker.lock().unwrap().take();
+            if let Err(err) = awaiter.response(Ok(piece.to_vec())) {
+                error!("cannot send to awaiter: {}", err);
+            }
+            if let Some(waker) = waker {
+                waker.wake();
+            }
+        }
+    }
 
     Ok(())
 }
