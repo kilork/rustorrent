@@ -327,16 +327,19 @@ async fn torrent_file_download(
     .await;
 
     match download_stream {
-        Ok(download_stream) => {
-            HttpResponse::Ok()
-                .keep_alive()
-                .no_chunking()
-                .streaming(download_stream.map_err(|x| {
-                    actix_web::Error::from(HttpResponse::InternalServerError().json(Failure {
-                        error: format!("{}", x),
-                    }))
+        Ok(download_stream) => HttpResponse::Ok()
+            .keep_alive()
+            .no_chunking()
+            .set_header(
+                http::header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{}\"", download_stream.name),
+            )
+            .content_length(download_stream.size as u64)
+            .streaming(download_stream.map_err(|x| {
+                actix_web::Error::from(HttpResponse::InternalServerError().json(Failure {
+                    error: format!("{}", x),
                 }))
-        }
+            })),
         Err(err @ RsbtError::TorrentNotFound(_)) | Err(err @ RsbtError::TorrentFileNotFound(_)) => {
             HttpResponse::NotFound().json(Failure {
                 error: format!("{}", err),

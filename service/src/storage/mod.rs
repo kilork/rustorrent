@@ -120,8 +120,6 @@ pub struct RsbtFileDownloadStream {
     pub piece: usize,
     pub piece_offset: usize,
     torrent_process: Arc<TorrentProcess>,
-    sender: Sender<TorrentStorageMessage>,
-    receiver: watch::Receiver<TorrentStorageState>,
     state: RsbtFileDownloadState,
     waker: Arc<Mutex<Option<Waker>>>,
 }
@@ -148,15 +146,18 @@ impl Stream for RsbtFileDownloadStream {
             self.get_mut().left = 0;
             Poll::Ready(None)
         } else {
+            debug!("going to poll stream");
             let mut that = self.as_mut();
             {
                 let mut waker = that.waker.lock().unwrap();
                 *waker = Some(cx.waker().clone());
             }
+            debug!("starting loop");
 
             loop {
                 match &mut that.state {
                     RsbtFileDownloadState::Idle => {
+                        debug!("idle state: send message");
                         let (request_response, receiver) =
                             RequestResponse::new(DownloadTorrentEventQueryPiece {
                                 piece: that.piece,
@@ -177,19 +178,29 @@ impl Stream for RsbtFileDownloadStream {
                         that.state = RsbtFileDownloadState::SendQueryPiece(sender, Some(receiver));
                     }
                     RsbtFileDownloadState::SendQueryPiece(ref mut sender, receiver) => {
+                        debug!("send query state: poll");
                         match sender.as_mut().poll(cx) {
                             Poll::Ready(Ok(())) => {
+                                debug!("send query piece: ok");
                                 that.state = RsbtFileDownloadState::ReceiveQueryPiece(
                                     receiver.take().unwrap(),
                                 )
                             }
-                            Poll::Ready(Err(err)) => return Poll::Ready(Some(Err(err))),
-                            Poll::Pending => return Poll::Pending,
+                            Poll::Ready(Err(err)) => {
+                                error!("send query piece: err: {}", err);
+                                return Poll::Ready(Some(Err(err)));
+                            }
+                            Poll::Pending => {
+                                debug!("send query piece: pending");
+                                return Poll::Pending;
+                            }
                         }
                     }
                     RsbtFileDownloadState::ReceiveQueryPiece(receiver) => {
+                        debug!("receive query state: poll");
                         match receiver.poll_unpin(cx) {
                             Poll::Ready(Ok(Ok(data))) => {
+                                debug!("receive query piece: received data");
                                 let remains = data.len() - that.piece_offset;
                                 let size = if remains < that.left {
                                     remains
@@ -201,11 +212,21 @@ impl Stream for RsbtFileDownloadStream {
                                 that.piece += 1;
                                 that.piece_offset = 0;
                                 that.state = RsbtFileDownloadState::Idle;
+                                debug!("receive query piece: return data {}", out.len());
                                 return Poll::Ready(Some(Ok(Bytes::from(out.to_owned()))));
                             }
-                            Poll::Ready(Ok(Err(err))) => return Poll::Ready(Some(Err(err))),
-                            Poll::Ready(Err(err)) => return Poll::Ready(Some(Err(err.into()))),
-                            Poll::Pending => return Poll::Pending,
+                            Poll::Ready(Ok(Err(err))) => {
+                                error!("receive query piece: received err: {}", err);
+                                return Poll::Ready(Some(Err(err)));
+                            }
+                            Poll::Ready(Err(err)) => {
+                                error!("receive query piece: received send err: {}", err);
+                                return Poll::Ready(Some(Err(err.into())));
+                            }
+                            Poll::Pending => {
+                                error!("receive query piece: pending");
+                                return Poll::Pending;
+                            }
                         }
                     }
                 }
@@ -363,7 +384,16 @@ impl TorrentStorage {
         let file_info = self
             .message(|sender| TorrentStorageMessage::FileInfo { file_id, sender })
             .await?;
-        Err(RsbtError::TorrentActionNotSupported)
+        Ok(RsbtFileDownloadStream {
+            name: file_info.file.path.to_string_lossy().into(),
+            size: file_info.file.length,
+            left: file_info.file.length,
+            piece: file_info.piece,
+            piece_offset: file_info.piece_offset,
+            state: RsbtFileDownloadState::Idle,
+            torrent_process: self.torrent_process.clone(),
+            waker: Arc::new(Mutex::new(None)),
+        })
     }
 }
 

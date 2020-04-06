@@ -97,6 +97,7 @@ pub(crate) async fn download_torrent(
     let mut mode = TorrentDownloadMode::Normal;
     let mut active = false;
     let mut announce_abort_handle = None;
+    let mut awaiting_for_piece = HashMap::new();
 
     let (mut statistic_sender, mut statistic_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
@@ -252,8 +253,9 @@ pub(crate) async fn download_torrent(
                     &mut peer_states,
                     &mode,
                     peer_id,
-                    piece,
+                    piece.into(),
                     &mut torrent_storage,
+                    &mut awaiting_for_piece,
                 )
                 .await
                 {
@@ -404,6 +406,44 @@ pub(crate) async fn download_torrent(
             }
             DownloadTorrentEvent::QueryPiece(request_response) => {
                 debug!("processing query piece");
+                let request = request_response.request();
+                let piece_index = request.piece;
+                let piece_bit = bit_by_index(
+                    piece_index,
+                    torrent_storage.receiver.borrow().downloaded.as_slice(),
+                );
+                if piece_bit.is_some() {
+                    match torrent_storage.load(piece_index).await {
+                        Ok(Some(piece)) => {
+                            let waker = request.waker.lock().unwrap().take();
+                            {
+                                if let Err(err) =
+                                    request_response.response(Ok(piece.as_ref().into()))
+                                {
+                                    error!("cannot send response for query piece: {}", err);
+                                    continue;
+                                }
+                            }
+
+                            if let Some(waker) = waker {
+                                waker.wake();
+                            }
+                            continue;
+                        }
+                        Ok(None) => {}
+                        Err(err) => {
+                            error!("cannot load piece from storage: {}", err);
+                            if let Err(err) = request_response.response(Err(err)) {
+                                error!("cannot send response for query piece: {}", err);
+                            }
+                            continue;
+                        }
+                    }
+                }
+                let awaiters = awaiting_for_piece
+                    .entry(piece_index)
+                    .or_insert_with(|| vec![]);
+                awaiters.push(request_response);
             }
         }
     }
