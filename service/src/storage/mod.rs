@@ -224,7 +224,7 @@ impl Stream for RsbtFileDownloadStream {
                                 return Poll::Ready(Some(Err(err.into())));
                             }
                             Poll::Pending => {
-                                error!("receive query piece: pending");
+                                debug!("receive query piece: pending");
                                 return Poll::Pending;
                             }
                         }

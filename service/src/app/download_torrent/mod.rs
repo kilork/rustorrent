@@ -405,18 +405,23 @@ pub(crate) async fn download_torrent(
                 }
             }
             DownloadTorrentEvent::QueryPiece(request_response) => {
-                debug!("processing query piece");
+                debug!("query piece event: processing query piece");
                 let request = request_response.request();
                 let piece_index = request.piece;
+                debug!("query piece event: search for piece index {}", piece_index);
                 let piece_bit = bit_by_index(
                     piece_index,
                     torrent_storage.receiver.borrow().downloaded.as_slice(),
                 );
+                debug!("query piece event: {:?}", piece_bit);
                 if piece_bit.is_some() {
+                    debug!("query piece event: found, loading from storage");
                     match torrent_storage.load(piece_index).await {
                         Ok(Some(piece)) => {
+                            debug!("query piece event: loaded piece {}", piece.as_ref().len());
                             let waker = request.waker.lock().unwrap().take();
                             {
+                                debug!("query piece event: sending piece to download stream");
                                 if let Err(err) =
                                     request_response.response(Ok(piece.as_ref().into()))
                                 {
@@ -426,11 +431,14 @@ pub(crate) async fn download_torrent(
                             }
 
                             if let Some(waker) = waker {
+                                debug!("query piece event: wake up waker");
                                 waker.wake();
                             }
                             continue;
                         }
-                        Ok(None) => {}
+                        Ok(None) => {
+                            error!("query piece event: no piece loaded");
+                        }
                         Err(err) => {
                             error!("cannot load piece from storage: {}", err);
                             if let Err(err) = request_response.response(Err(err)) {
@@ -440,10 +448,12 @@ pub(crate) async fn download_torrent(
                         }
                     }
                 }
+                error!("query piece event: register awaiter");
                 let awaiters = awaiting_for_piece
                     .entry(piece_index)
                     .or_insert_with(|| vec![]);
                 awaiters.push(request_response);
+                dbg!(&awaiters);
             }
         }
     }
