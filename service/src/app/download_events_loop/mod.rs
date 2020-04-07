@@ -7,9 +7,11 @@ mod add_torrent;
 mod current_torrents;
 mod delete_torrent;
 mod torrent_announces;
+mod torrent_detail;
 mod torrent_file_download;
 mod torrent_files;
 mod torrent_peers;
+mod torrent_pieces;
 
 pub use crate::storage::RsbtFileDownloadStream;
 use crate::storage::TorrentStorageState;
@@ -19,10 +21,11 @@ use current_torrents::{add_to_current_torrents, remove_from_current_torrents};
 use delete_torrent::delete_torrent;
 use download_torrent::TorrentDownloadState;
 use torrent_announces::torrent_announces;
+use torrent_detail::torrent_detail;
 use torrent_file_download::torrent_file_download;
 use torrent_files::torrent_files;
-
 use torrent_peers::torrent_peers;
+use torrent_pieces::torrent_pieces;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct TorrentDownloadView {
@@ -136,6 +139,16 @@ pub struct RsbtCommandTorrentFiles {
 }
 
 #[derive(Debug)]
+pub struct RsbtCommandTorrentPieces {
+    pub id: usize,
+}
+
+#[derive(Debug)]
+pub struct RsbtCommandTorrentDetail {
+    pub id: usize,
+}
+
+#[derive(Debug)]
 pub struct RsbtCommandTorrentFileDownload {
     pub id: usize,
     pub file_id: usize,
@@ -221,10 +234,14 @@ pub enum RsbtCommand {
     TorrentList(RequestResponse<(), Result<Vec<TorrentDownloadView>, RsbtError>>),
     TorrentAction(RequestResponse<RsbtCommandTorrentAction, Result<(), RsbtError>>),
     TorrentPeers(RequestResponse<RsbtCommandTorrentPeers, Result<Vec<RsbtPeerView>, RsbtError>>),
+    TorrentDetail(
+        RequestResponse<RsbtCommandTorrentDetail, Result<TorrentDownloadView, RsbtError>>,
+    ),
     TorrentAnnounces(
         RequestResponse<RsbtCommandTorrentAnnounce, Result<Vec<RsbtAnnounceView>, RsbtError>>,
     ),
     TorrentFiles(RequestResponse<RsbtCommandTorrentFiles, Result<Vec<RsbtFileView>, RsbtError>>),
+    TorrentPieces(RequestResponse<RsbtCommandTorrentPieces, Result<Vec<u8>, RsbtError>>),
     TorrentFileDownload(
         RequestResponse<RsbtCommandTorrentFileDownload, Result<RsbtFileDownloadStream, RsbtError>>,
     ),
@@ -328,6 +345,22 @@ pub(crate) async fn download_events_loop(
 
                 if let Err(err) = request_response.response(response) {
                     error!("cannot send response for torrent's files: {}", err);
+                }
+            }
+            RsbtCommand::TorrentPieces(request_response) => {
+                debug!("torrent's pieces");
+                let response = torrent_pieces(request_response.request(), &torrents).await;
+
+                if let Err(err) = request_response.response(response) {
+                    error!("cannot send response for torrent's pieces: {}", err);
+                }
+            }
+            RsbtCommand::TorrentDetail(request_response) => {
+                debug!("torrent's detail");
+                let response = torrent_detail(request_response.request(), &torrents).await;
+
+                if let Err(err) = request_response.response(response) {
+                    error!("cannot send response for torrent's detail: {}", err);
                 }
             }
         }

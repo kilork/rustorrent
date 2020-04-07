@@ -1,11 +1,10 @@
 use super::*;
-use std::borrow::Cow;
 
 pub(crate) async fn process_peer_piece_downloaded(
     peer_states: &mut HashMap<Uuid, PeerState>,
     mode: &TorrentDownloadMode,
     peer_id: Uuid,
-    piece: Cow<'_, [u8]>,
+    piece: Vec<u8>,
     storage: &mut TorrentStorage,
     awaiters: &mut HashMap<
         usize,

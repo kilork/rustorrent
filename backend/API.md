@@ -36,6 +36,20 @@ Attributes:
 - `length` : total size of torrent files in bytes.
 - `active` : is torrent enabled (true) or disabled (false).
 
+## GET /api/torrent/{id}
+
+Torrent details by id.
+
+```bash
+curl http://localhost:8080/api/torrent/1
+```
+
+Response:
+
+```json
+{"id":1,"name":"big-buck-bunny","write":5242880,"read":0,"tx":0,"rx":5652480,"pieces_total":1055,"pieces_left":1035,"piece_size":262144,"length":276445467,"active":true}
+```
+
 ## DELETE /api/torrent/{id}[?files=true|false]
 
 Delete torrent. Optional parameter `files` allows to delete also downloaded torrent data.
@@ -161,3 +175,14 @@ Attributes:
 - `name` : file name.
 - `size` : file size in bytes.
 - `saved` : how much bytes already saved.
+
+## GET /api/torrent/{id}/piece
+
+Returns byte array with pieces state. Content type is `application/octet-stream`.
+
+Each piece is represented with bit, bits come from left (higher) part to right part, pieces indexes start from 0. Piece 0 is 128 and piece 7 is 1. With index in array piece index multiplied by 8.
+`[128, 128, 1]` means we have pieces with indexes 0, 8, 23.
+
+```bash
+curl http://localhost:8080/api/torrent/2/piece
+```

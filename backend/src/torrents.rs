@@ -270,6 +270,20 @@ where
     }
 }
 
+#[get("/torrent/{id}")]
+async fn torrent_detail(
+    event_sender: web::Data<Sender<RsbtCommand>>,
+    id: web::Path<usize>,
+    _user: User,
+) -> impl Responder {
+    torrent_command(
+        event_sender,
+        RsbtCommandTorrentDetail { id: *id },
+        RsbtCommand::TorrentDetail,
+    )
+    .await
+}
+
 #[get("/torrent/{id}/peer")]
 async fn torrent_peer_list(
     event_sender: web::Data<Sender<RsbtCommand>>,
@@ -310,6 +324,36 @@ async fn torrent_file_list(
         RsbtCommand::TorrentFiles,
     )
     .await
+}
+
+#[get("/torrent/{id}/piece")]
+async fn torrent_piece_page(id: web::Path<usize>, _user: User) -> impl Responder {
+    HttpResponse::Ok()
+        .content_type("text/html")
+        .body(include_str!("../static/piece.html").replace("{id}", &id.to_string()))
+}
+
+#[get("/torrent/{id}/piece")]
+async fn torrent_piece_list(
+    event_sender: web::Data<Sender<RsbtCommand>>,
+    id: web::Path<usize>,
+    _user: User,
+) -> impl Responder {
+    let result = torrent_command_result(
+        event_sender,
+        RsbtCommandTorrentPieces { id: *id },
+        RsbtCommand::TorrentPieces,
+    )
+    .await;
+    match result {
+        Ok(peers) => HttpResponse::Ok().body(peers),
+        Err(err @ RsbtError::TorrentNotFound(_)) => HttpResponse::NotFound().json(Failure {
+            error: format!("{}", err),
+        }),
+        Err(err) => HttpResponse::InternalServerError().json(Failure {
+            error: format!("{}", err),
+        }),
+    }
 }
 
 #[get("/torrent/{id}/file/{file_id}/download")]
