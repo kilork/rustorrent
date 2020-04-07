@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RSBT Torrent Pieces View</title>
+    <style>
+        * {
+            margin: 0px;
+            padding: 0px;
+        }
+    </style>
+</head>
+
+<body>
+    <ul style="list-style-type:none" id="list">
+    </ul>
+    <script>
+        function timeout(interval) {
+            return new Promise((resolve, reject) => {
+                setTimeout(function () {
+                    resolve("done");
+                }, interval);
+            });
+        };
+
+        async function draw_loop() {
+            const response = await fetch("/api/torrent/{id}");
+            const piecesTotal = await response.json();
+            if (piecesTotal.error) {
+                throw piecesTotal.error;
+            }
+            for (; ;) {
+                try {
+                    const response = await fetch("/api/torrent/{id}/piece");
+                    const pieces = await response.arrayBuffer();
+                } catch (e) {
+                    console.log(`error: ${e}`);
+                }
+                await timeout(1000);
+            }
+        }
+
+        draw_loop();
+    </script>
+</body>
+
+</html>

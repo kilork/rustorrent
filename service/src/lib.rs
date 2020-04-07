@@ -1,5 +1,5 @@
 use futures::{
-    future::{try_join, join, AbortHandle, Abortable, Aborted},
+    future::{join, try_join, AbortHandle, Abortable},
     prelude::*,
     stream::SplitSink,
 };
@@ -13,7 +13,7 @@ use std::{
     collections::HashMap,
     convert::TryInto,
     fmt::{Display, Formatter},
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::SocketAddr,
     ops::Deref,
     path::{Path, PathBuf},
     sync::Arc,

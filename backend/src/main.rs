@@ -171,16 +171,19 @@ async fn main() -> Result<(), ExitFailure> {
             .service(
                 web::scope("/sandbox")
                     .service(upload_form)
-                    .service(stream_page),
+                    .service(stream_page)
+                    .service(torrent_piece_page),
             )
             .service(
                 web::scope("/api")
                     .service(torrent_list)
+                    .service(torrent_detail)
                     .service(torrent_delete)
                     .service(torrent_create_action)
                     .service(torrent_peer_list)
                     .service(torrent_announce_list)
                     .service(torrent_file_list)
+                    .service(torrent_piece_list)
                     .service(torrent_file_download)
                     .service(upload)
                     .service(account)
