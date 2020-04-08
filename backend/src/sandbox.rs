@@ -1,7 +1,7 @@
 use super::*;
 
 #[get("/")]
-async fn sandbox(_user: User) -> impl Responder {
+async fn sandbox() -> impl Responder {
     HttpResponse::Ok()
         .content_type("text/html")
         .body(include_str!("../static/sandbox.html"))

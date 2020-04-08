@@ -16,6 +16,18 @@ class TorrentService {
         this.torrentsTable = torrentsTable;
     }
 
+    torrentRow(torrent) {
+        return [
+            `${torrent.id}`,
+            `<strong>${torrent.name}</strong><br><span class="size" title="Size">${torrent.length}</span>`,
+            [
+                `<span class="upload"><span class="tx" title="Uploaded">⬆︎</span> ${torrent.tx}</span>`,
+                `<span class="download"><span class="rx" title="Downloaded">⬇︎</span> ${torrent.rx}</span>`,
+                `${torrent.pieces_left} / ${torrent.pieces_total}`
+            ].join('<br>')
+        ].map(value => `<td>${value}</td>`).join('')
+    }
+
     async refresh() {
         const torrents = await (await fetch("/api/torrent")).json();
 
@@ -27,7 +39,7 @@ class TorrentService {
 
         for (const torrent of torrents) {
             const newElement = document.createElement("tr");
-            newElement.innerHTML = `<td>${torrent.id}</td><td>${torrent.name}</td><td>${torrent.length}</td><td>tx: ${torrent.tx}<br>rx: ${torrent.rx}<br>${torrent.pieces_left}/${torrent.pieces_total}</td><td></td>`;
+            newElement.innerHTML = this.torrentRow(torrent);
             this.torrentsTable.appendChild(newElement);
         }
 

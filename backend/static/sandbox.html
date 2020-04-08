@@ -36,20 +36,21 @@
         </nav>
     </header>
 
-    <section id="actions">
+    <section id="actions" class="container">
         <form action="/api/upload" method="post" enctype="multipart/form-data">
-            <label for="torrent">Choose file to upload</label>
-            <input type="file" id="torrent" name="torrent" accept=".torrent">
-            <button type="submit">Upload</button>
+            <fieldset>
+                <label for="torrent">Choose torrent file to upload</label>
+                <input type="file" id="torrent" name="torrent" accept=".torrent">
+                <input class="button-primary" type="submit" value="Upload">
+            </fieldset>
         </form>
     </section>
-    <section id="content">
+    <section id="content" class="container">
         <table>
             <thead>
                 <tr>
                     <th>Id</th>
                     <th>Name</th>
-                    <th>Size</th>
                     <th>Stats</th>
                     <th>Actions</th>
                 </tr>

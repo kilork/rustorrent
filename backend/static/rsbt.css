@@ -1,9 +1,3 @@
-/*
-nav {
-    border-bottom: 1px solid black;
-}
-*/
-
 .crumbs ol {
     list-style-type: none;
     padding-left: 0;
@@ -22,8 +16,10 @@ nav {
     padding: 0 3px;
 }
 
-footer {
-    width: 100%;
-    bottom: 0;
-    position: fixed;
+.upload {
+    background-color: lightskyblue;
+}
+
+.download {
+    background-color: lightgreen;
 }
