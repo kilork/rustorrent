@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RSBT Sandbox</title>
+
+    <link rel="stylesheet" href="//fonts.googleapis.com/css?family=Roboto:300,300italic,700,700italic">
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/normalize/5.0.0/normalize.css">
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/milligram/1.3.0/milligram.css">
+
+    <link rel="stylesheet" type="text/css" href="./rsbt.css">
+
+    <script type="module">
+        import { timeout, TorrentService } from './rsbt.mjs';
+
+        async function load() {
+            let torrentService = new TorrentService(document.getElementById('torrents'));
+            torrentService.refresh();
+        }
+
+        document.body.onload = load;
+    </script>
+</head>
+
+<body>
+    <header>
+        <h1 class="title">RSBT - Another Rust BitTorrent Client</h1>
+        <nav class="crumbs">
+            <ol>
+                <li class="crumb">
+                    <a href=".">Torrents</a>
+                </li>
+            </ol>
+        </nav>
+    </header>
+
+    <section id="actions">
+        <form action="/api/upload" method="post" enctype="multipart/form-data">
+            <label for="torrent">Choose file to upload</label>
+            <input type="file" id="torrent" name="torrent" accept=".torrent">
+            <button type="submit">Upload</button>
+        </form>
+    </section>
+    <section id="content">
+        <table>
+            <thead>
+                <tr>
+                    <th>Id</th>
+                    <th>Name</th>
+                    <th>Size</th>
+                    <th>Stats</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="torrents">
+            </tbody>
+        </table>
+    </section>
+
+    <footer>
+        <h5>2020 @ RSBT Team</h5>
+    </footer>
+</body>
+
+</html>

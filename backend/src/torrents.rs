@@ -327,13 +327,6 @@ async fn torrent_file_list(
 }
 
 #[get("/torrent/{id}/piece")]
-async fn torrent_piece_page(id: web::Path<usize>, _user: User) -> impl Responder {
-    HttpResponse::Ok()
-        .content_type("text/html")
-        .body(include_str!("../static/piece.html").replace("{id}", &id.to_string()))
-}
-
-#[get("/torrent/{id}/piece")]
 async fn torrent_piece_list(
     event_sender: web::Data<Sender<RsbtCommand>>,
     id: web::Path<usize>,

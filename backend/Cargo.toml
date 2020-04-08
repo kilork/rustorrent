@@ -6,9 +6,10 @@ edition = "2018"
 
 [features]
 
-default = []
+default = [ "sandbox" ]
 
 ui = ["rsbt-frontend"]
+sandbox = []
 
 [dependencies]
 actix = "0.9"

@@ -1,12 +1,5 @@
 use super::*;
 
-#[get("/upload")]
-async fn upload_form(_user: User) -> impl Responder {
-    HttpResponse::Ok()
-        .content_type("text/html")
-        .body(include_str!("../static/upload.html"))
-}
-
 #[post("/upload")]
 async fn upload(
     _user: User,

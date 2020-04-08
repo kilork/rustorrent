@@ -46,12 +46,16 @@ mod cli;
 mod event_stream;
 mod login;
 mod model;
+#[cfg(feature = "sandbox")]
+mod sandbox;
 mod session;
 mod torrents;
 mod uploads;
 
 use event_stream::*;
 use login::*;
+#[cfg(feature = "sandbox")]
+use sandbox::*;
 use session::*;
 use torrents::*;
 use uploads::*;
@@ -169,12 +173,6 @@ async fn main() -> Result<(), ExitFailure> {
             .service(authorize)
             .service(login_get)
             .service(
-                web::scope("/sandbox")
-                    .service(upload_form)
-                    .service(stream_page)
-                    .service(torrent_piece_page),
-            )
-            .service(
                 web::scope("/api")
                     .service(torrent_list)
                     .service(torrent_detail)
@@ -192,6 +190,19 @@ async fn main() -> Result<(), ExitFailure> {
             );
         if let Some(client) = &client {
             app = app.app_data(client.clone());
+        }
+        #[cfg(feature = "sandbox")]
+        {
+            debug!("adding sandbox at /sandbox...");
+            app = app.service(
+                web::scope("/sandbox")
+                    .service(sandbox)
+                    .service(rsbt_javascript_module)
+                    .service(rsbt_css)
+                    .service(upload_form)
+                    .service(stream_page)
+                    .service(torrent_piece_page),
+            );
         }
         #[cfg(feature = "ui")]
         {

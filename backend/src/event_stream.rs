@@ -1,13 +1,6 @@
 use super::*;
 
 #[get("/stream")]
-async fn stream_page(_user: User) -> impl Responder {
-    HttpResponse::Ok()
-        .content_type("text/html")
-        .body(include_str!("../static/stream.html"))
-}
-
-#[get("/stream")]
 async fn stream(broadcaster: web::Data<Broadcaster>, _user: User) -> impl Responder {
     let rx = broadcaster.new_client().await;
     HttpResponse::Ok()
