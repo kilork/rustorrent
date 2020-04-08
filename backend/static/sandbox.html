@@ -17,6 +17,7 @@
 
         async function load() {
             let torrentService = new TorrentService(document.getElementById('torrents'));
+            document.torrentService = torrentService
             torrentService.refresh();
         }
 
