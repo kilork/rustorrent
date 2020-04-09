@@ -103,4 +103,11 @@ export class TorrentComponent implements OnInit, OnDestroy {
   protected onError(): void {
     this.ngbPaginationPage = this.page;
   }
+
+  protected toggleTorrentState(selectedTorrent: ITorrent): void {
+    const action = selectedTorrent.active ? { action: 'disable' } : { action: 'enable' };
+    this.torrentService.executeAction(selectedTorrent, action).subscribe(() => {
+      this.eventManager.broadcast('torrentListModification');
+    });
+  }
 }

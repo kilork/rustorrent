@@ -21,6 +21,16 @@
       "fileSelect": {
         "choose": "Datei auswählen",
         "upload": "Hochladen"
+      },
+      "action": {
+        "label": "Aktion",
+        "start": "Start",
+        "pause": "Pause"
+      },
+      "state": {
+        "label": "Status",
+        "running": "Läuft",
+        "paused": "Angehalten"
       }
     }
   }

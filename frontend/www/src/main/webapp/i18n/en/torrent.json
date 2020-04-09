@@ -21,6 +21,16 @@
       "fileSelect": {
         "choose": "Choose a file",
         "upload": "Upload"
+      },
+      "action": {
+        "label": "Action",
+        "start": "Start",
+        "pause": "Pause"
+      },
+      "state": {
+        "label": "State",
+        "running": "Running",
+        "paused": "Paused"
       }
     }
   }

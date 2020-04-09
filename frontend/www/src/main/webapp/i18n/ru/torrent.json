@@ -16,11 +16,21 @@
       "detail": {
         "title": "Торрент"
       },
-      "name": "Name",
+      "name": "Имя",
       "file": "Торрент Файл",
       "fileSelect": {
         "choose": "Выбрать файл",
         "upload": "Загрузить"
+      },
+      "action": {
+        "label": "Действие",
+        "start": "Запустить",
+        "pause": "Остановить"
+      },
+      "state": {
+        "label": "Состояние",
+        "running": "Активен",
+        "paused": "Неактивен"
       }
     }
   }
