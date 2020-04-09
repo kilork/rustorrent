@@ -17,7 +17,7 @@
 
         async function load() {
             let torrentService = new TorrentService(document.getElementById('torrents'));
-            document.torrentService = torrentService
+            window.torrentService = torrentService
             torrentService.refresh();
         }
 
@@ -36,8 +36,31 @@
             </ol>
         </nav>
     </header>
+    <section id="modal">
+        <div id="modal-delete" class="modal">
+            <div class="modal-inner">
+                <a class="js-close-modal">&times;</a>
+                <div class="modal-content">
+                    <h3 id="modal-delete-header">Delete</h3>
+                    <form>
+                        <fieldset>
+                            <div>
+                                <input type="checkbox" id="modal-delete-files" name="modal-delete-files">
+                                <label class="label-inline" for="modal-delete-files">Delete saved files</label>
+                            </div>
+                            <input id="modal-delete-submit" class="button-primary" type="submit" value="Confirm">
+                        </fieldset>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+    <section id="errors-container" class="container">
+        <ul id="errors">
 
-    <section id="actions" class="container">
+        </ul>
+    </section>
+    <section id="actions-container" class="container">
         <form action="/api/upload" method="post" enctype="multipart/form-data">
             <fieldset>
                 <label for="torrent">Choose torrent file to upload</label>
