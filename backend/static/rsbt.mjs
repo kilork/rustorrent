@@ -53,6 +53,14 @@ class TorrentService {
     }
 
 
+    torrentActionActive(torrent) {
+        if (torrent.active) {
+            return `<input type="button" class="button-primary torrent-action torrent-action-disable" data-id="${torrent.id}" title="Pause" value="❚❚" onclick="torrentService.disable(this)">`;
+        } else {
+            return `<input type="button" class="button-primary torrent-action torrent-action-enable" data-id="${torrent.id}" title="Start" value="▶︎" onclick="torrentService.enable(this)">`;
+        }
+    }
+
     torrentRow(torrent) {
         return [
             `${torrent.id}`,
@@ -60,11 +68,11 @@ class TorrentService {
             [
                 `<div class="upload">${torrent.tx}</div>`,
                 `<div class="download">${torrent.rx}</div>`,
-                `<div class="ratio">${torrent.pieces_left}<span class="ratio-split"></span>${torrent.pieces_total}</div>`
+                `<div class="ratio">${torrent.pieces_total - torrent.pieces_left}<span class="ratio-split"></span>${torrent.pieces_total}</div>`
             ].join(''),
-            [
-                torrent.active ? `<input type="button" class="button-primary torrent-action torrent-action-disable" data-id="${torrent.id}" title="Pause" value="❚❚" onclick="torrentService.disable(this)">` : `<input type="button" class="button-primary torrent-action torrent-action-enable" data-id="${torrent.id}" title="Start" value="▶︎" onclick="torrentService.enable(this)">`
-            ].join('')
+            '<div class="torrent-actions">' + [
+                this.torrentActionActive(torrent)
+            ].join('') + '</div>'
         ].map(value => `<td>${value}</td>`).join('')
     }
 
