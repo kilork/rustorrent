@@ -21,13 +21,20 @@
     position: relative;
 }
 
-.upload:after {
-    content: "Uploaded";
+.tip:after {
     position: absolute;
-    background-color: lightyellow;
+    background-color: white;
     border: 1px solid black;
     opacity: 0;
     z-index: 100;
+    left: 50%;
+    top: 50%;
+    padding-left: 1em;
+    padding-right: 1em;
+}
+
+.upload:after {
+    content: "Uploaded";
 }
 
 .upload:hover:after {
@@ -47,11 +54,6 @@
 
 .download:after {
     content: "Downloaded";
-    position: absolute;
-    background-color: lightyellow;
-    border: 1px solid black;
-    opacity: 0;
-    z-index: 100;
 }
 
 .download:hover:after {
@@ -77,11 +79,6 @@
 
 .ratio:after {
     content: "Ratio";
-    position: absolute;
-    background-color: lightyellow;
-    border: 1px solid black;
-    opacity: 0;
-    z-index: 100;
 }
 
 .ratio:hover:after {
@@ -99,4 +96,16 @@
     width: 2em;
     font-size: larger;
     margin-bottom: 0;
+}
+
+.size {
+    position: relative;
+}
+
+.size:after {
+    content: "Size in bytes";
+}
+
+.size:hover:after {
+    opacity: 1;
 }

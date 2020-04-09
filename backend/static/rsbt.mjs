@@ -64,11 +64,11 @@ class TorrentService {
     torrentRow(torrent) {
         return [
             `${torrent.id}`,
-            `<strong>${torrent.name}</strong><br><span class="size" title="Size">${torrent.length}</span>`,
+            `<strong>${torrent.name}</strong><br><span class="tip size">${torrent.length}</span>`,
             [
-                `<div class="upload">${torrent.tx}</div>`,
-                `<div class="download">${torrent.rx}</div>`,
-                `<div class="ratio">${torrent.pieces_total - torrent.pieces_left}<span class="ratio-split"></span>${torrent.pieces_total}</div>`
+                `<div class="tip upload">${torrent.tx}</div>`,
+                `<div class="tip download">${torrent.rx}</div>`,
+                `<div class="tip ratio">${torrent.pieces_total - torrent.pieces_left}<span class="ratio-split"></span>${torrent.pieces_total}</div>`
             ].join(''),
             '<div class="torrent-actions">' + [
                 this.torrentActionActive(torrent)
