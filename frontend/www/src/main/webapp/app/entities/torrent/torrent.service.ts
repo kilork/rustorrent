@@ -1,12 +1,10 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
-import * as moment from 'moment';
 
 import { SERVER_API_URL } from 'app/app.constants';
 import { createRequestOption } from 'app/shared/util/request-util';
-import { ITorrent } from 'app/shared/model/torrent.model';
+import { ITorrent, Torrent } from 'app/shared/model/torrent.model';
 
 type EntityResponseType = HttpResponse<ITorrent>;
 type EntityArrayResponseType = HttpResponse<ITorrent[]>;
@@ -43,5 +41,9 @@ export class TorrentService {
     const formData: FormData = new FormData();
     formData.append('torrent', torrent, torrent.name);
     return this.http.post(this.uploadUrl, formData, { observe: 'response' });
+  }
+
+  executeAction(torrent: Torrent, action: { action: string }): Observable<EntityResponseType> {
+    return this.http.post(`${this.resourceUrl}/${torrent.id}/action`, action, { observe: 'response' });
   }
 }
