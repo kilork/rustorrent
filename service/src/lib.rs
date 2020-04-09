@@ -1,8 +1,7 @@
 use futures::{
-    future::{join, AbortHandle, Abortable, Aborted},
+    future::{join, try_join, AbortHandle, Abortable},
     prelude::*,
     stream::SplitSink,
-    try_join,
 };
 use http_body::Body;
 use hyper::Client;
@@ -14,7 +13,7 @@ use std::{
     collections::HashMap,
     convert::TryInto,
     fmt::{Display, Formatter},
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::SocketAddr,
     ops::Deref,
     path::{Path, PathBuf},
     sync::Arc,
@@ -26,7 +25,7 @@ use tokio::{
     prelude::*,
     sync::{
         mpsc::{self, Receiver, Sender},
-        oneshot,
+        oneshot, watch,
     },
     task::JoinHandle,
     time::delay_for,
@@ -45,6 +44,8 @@ pub mod types;
 pub use errors::RsbtError;
 pub use storage::{TorrentPiece, TorrentStorage};
 
+pub(crate) use flat_storage::{bit_by_index, index_in_bitarray};
+
 pub(crate) const SHA1_SIZE: usize = 20;
 
 pub(crate) const BLOCK_SIZE: usize = 1 << 14;
@@ -53,7 +54,7 @@ pub(crate) const PEER_ID: [u8; 20] = *b"-rs0001-zzzzxxxxyyyy";
 
 //FIXME: pub(crate) const PEER_MAX_CONNECTIONS: usize = 50;
 
-pub const DEFAULT_CHANNEL_BUFFER: usize = 256;
+pub const DEFAULT_CHANNEL_BUFFER: usize = 512;
 
 //FIXME: pub(crate) const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(110);
 

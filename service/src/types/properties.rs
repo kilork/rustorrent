@@ -20,12 +20,14 @@ pub struct Properties {
     pub save_to: PathBuf,
     /// Storage path
     pub storage: PathBuf,
+    /// Config path
+    pub config_dir: PathBuf,
 }
 
-impl From<Settings> for Properties {
-    fn from(value: Settings) -> Self {
-        let config = value.config;
-        let config_dir = crate::default_app_dir();
+impl From<(Settings, PathBuf)> for Properties {
+    fn from(value: (Settings, PathBuf)) -> Self {
+        let config = value.0.config;
+        let config_dir = value.1;
         let (save_to, storage) = match (
             config.save_to.map(PathBuf::from),
             config.storage.map(PathBuf::from),
@@ -44,6 +46,7 @@ impl From<Settings> for Properties {
             port_max: config.port_max,
             save_to,
             storage,
+            config_dir,
         }
     }
 }

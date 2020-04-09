@@ -26,6 +26,8 @@ WEB UI (requires npm to build):
 
 ## Development
 
+Read design documents: [DESIGN](DESIGN.md)
+
 Install dependencies (requires npm):
 
     cargo xtask install
@@ -46,12 +48,21 @@ Run rsbt cli in Docker to check interaction with popular torrent clients:
 
     docker-compose up
 
+## Web client info
+
+[README](backend/README.md)
+
 ## Configuration
 
+### Web version
+
+Configuration stored following locations:
+
+| Location                  | Description           |
+|---------------------------|-----------------------|
+| $HOME/.rsbt/torrents.toml | Current torrents      |
+| $HOME/.rsbt/download/     | Default download path |
+
+### CLI version
+
 We use [confy](https://docs.rs/confy) for configuration. Configuration is stored in `toml` format.
-
-Locations:
-
-| OS  | Location                                                       |
-|-----|----------------------------------------------------------------|
-| Mac | ~/Library/Preferences/rs.rsbt.rsbt/rsbt.toml |

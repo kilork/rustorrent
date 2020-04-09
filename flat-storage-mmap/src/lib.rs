@@ -2,7 +2,7 @@ use flat_storage::*;
 use log::debug;
 use memmap::MmapMut;
 use std::{
-    fs::{create_dir_all, OpenOptions},
+    fs::{create_dir_all, remove_file, OpenOptions},
     path::Path,
     sync::Mutex,
 };
@@ -16,7 +16,7 @@ pub struct MmapFlatStorage {
 #[derive(Debug, PartialEq)]
 struct MmapFlatStorageMapping(Vec<FileBlock>);
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 struct FileBlock {
     offset: usize,
     file_index: usize,
@@ -24,24 +24,76 @@ struct FileBlock {
     size: usize,
 }
 
+#[derive(Debug)]
+pub struct FileInfo {
+    pub file: FlatStorageFile,
+    pub piece: usize,
+    pub piece_offset: usize,
+}
+
 struct FileHandle {
-    mmap: MmapMut,
+    mmap: Option<MmapMut>,
     saved: usize,
 }
 
 impl MmapFlatStorage {
     pub fn create<P: AsRef<Path>>(
         download_path: P,
+        piece_count: usize,
         piece_size: usize,
         files: Vec<FlatStorageFile>,
         downloaded: &[u8],
     ) -> Result<Self, std::io::Error> {
         let mapping = map_pieces_to_files(piece_size, &files);
-        let file_handles = load_files(&download_path, &files, downloaded)?;
+        let file_handles = load_files(&download_path, &files, downloaded, &mapping, piece_count)?;
         Ok(Self {
             files,
             file_handles,
             mapping,
+        })
+    }
+
+    pub fn delete_files<P: AsRef<Path>>(&self, download_path: P) -> Result<(), std::io::Error> {
+        for file_handle in &self.file_handles {
+            if let Some(mut file_handle) = file_handle.lock().ok() {
+                if let Some(mmap) = file_handle.mmap.take() {
+                    mmap.flush()?;
+                }
+            }
+        }
+        for file in &self.files {
+            let file_path = download_path.as_ref().join(&file.path);
+            debug!("deleting file: {:?}", file_path);
+            if file_path.is_file() {
+                remove_file(file_path)?
+            }
+        }
+        Ok(())
+    }
+
+    pub fn saved(&self) -> Vec<usize> {
+        self.file_handles
+            .iter()
+            .map(|x| x.lock().unwrap().saved)
+            .collect()
+    }
+
+    pub fn file_info(&self, file_id: usize) -> Option<FileInfo> {
+        self.files.get(file_id).cloned().and_then(|file| {
+            self.mapping
+                .iter()
+                .enumerate()
+                .find_map(move |(piece, m)| {
+                    m.0.iter()
+                        .filter(|x| x.file_index == file_id)
+                        .map(|x| (piece, x.offset))
+                        .next()
+                })
+                .map(|(piece, piece_offset)| FileInfo {
+                    file,
+                    piece,
+                    piece_offset,
+                })
         })
     }
 }
@@ -49,10 +101,13 @@ impl MmapFlatStorage {
 fn load_files<P: AsRef<Path>>(
     download_path: P,
     files: &[FlatStorageFile],
-    _downloaded: &[u8],
+    downloaded: &[u8],
+    mapping: &[MmapFlatStorageMapping],
+    pieces_count: usize,
 ) -> Result<Vec<Mutex<FileHandle>>, std::io::Error> {
     let mut result = vec![];
-    for file in files {
+    for (index, file) in files.iter().enumerate() {
+        let saved = calculate_saved(pieces_count, index, mapping, downloaded);
         let file_path = download_path.as_ref().join(&file.path);
         debug!("checking file: {:?}", file_path);
         if !file_path.is_file() {
@@ -70,8 +125,8 @@ fn load_files<P: AsRef<Path>>(
         debug!("set len");
         f.set_len(file.length as u64)?;
         debug!("creating mmap...");
-        let mmap = unsafe { MmapMut::map_mut(&f)? };
-        result.push(Mutex::new(FileHandle { mmap, saved: 0 }));
+        let mmap = Some(unsafe { MmapMut::map_mut(&f)? });
+        result.push(Mutex::new(FileHandle { mmap, saved }));
         debug!("processed file: {:?}", file_path);
     }
     Ok(result)
@@ -90,9 +145,10 @@ impl FlatStorage for MmapFlatStorage {
         let mut result = vec![];
         for file_block in &map_to_files.0 {
             let f = &self.file_handles[file_block.file_index];
-            let data = &f.lock().unwrap().mmap
-                [file_block.file_offset..file_block.file_offset + file_block.size];
-            result.extend_from_slice(data);
+            if let Some(data) = &f.lock().unwrap().mmap {
+                let data = &data[file_block.file_offset..file_block.file_offset + file_block.size];
+                result.extend_from_slice(data);
+            }
         }
 
         Ok(Some(result))
@@ -106,9 +162,13 @@ impl FlatStorage for MmapFlatStorage {
         let map_to_files = &self.mapping[*index.into()];
         for file_block in &map_to_files.0 {
             let f = &self.file_handles[file_block.file_index];
-            let data = &mut f.lock().unwrap().mmap
-                [file_block.file_offset..file_block.file_offset + file_block.size];
-            data.copy_from_slice(&block[file_block.offset..file_block.offset + file_block.size])
+            let mut f_lock = f.lock().unwrap();
+            f_lock.saved += file_block.size;
+            if let Some(data) = f_lock.mmap.as_mut() {
+                let data =
+                    &mut data[file_block.file_offset..file_block.file_offset + file_block.size];
+                data.copy_from_slice(&block[file_block.offset..file_block.offset + file_block.size])
+            }
         }
 
         Ok(())
@@ -161,6 +221,26 @@ fn map_pieces_to_files(
     }
 
     mapping
+}
+
+fn calculate_saved(
+    pieces_count: usize,
+    file_index: usize,
+    mapping: &[MmapFlatStorageMapping],
+    downloaded: &[u8],
+) -> usize {
+    let mut saved = 0;
+    for piece in 0..pieces_count {
+        if bit_by_index(piece, downloaded).is_some() {
+            let mapping_block = &mapping[piece];
+            for file_block in &mapping_block.0 {
+                if file_block.file_index == file_index {
+                    saved += file_block.size;
+                }
+            }
+        }
+    }
+    saved
 }
 
 #[cfg(test)]

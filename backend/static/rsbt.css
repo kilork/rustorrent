@@ -1,0 +1,101 @@
+.crumbs ol {
+    list-style-type: none;
+    padding-left: 0;
+}
+
+.crumb {
+    display: inline-block;
+}
+
+.crumb a::after {
+    display: inline-block;
+    color: #000;
+    content: '>';
+    font-size: 80%;
+    font-weight: bold;
+    padding: 0 3px;
+}
+
+.upload {
+    background-color: lightskyblue;
+    position: relative;
+}
+
+.upload:after {
+    content: "Uploaded";
+    position: absolute;
+    background-color: lightyellow;
+    border: 1px solid black;
+    opacity: 0;
+    z-index: 100;
+}
+
+.upload:hover:after {
+    opacity: 1;
+}
+
+.upload:before {
+    content: "⬆︎";
+    padding-left: 0.5em;
+    padding-right: 1em;
+}
+
+.download {
+    background-color: lightgreen;
+    position: relative;
+}
+
+.download:after {
+    content: "Downloaded";
+    position: absolute;
+    background-color: lightyellow;
+    border: 1px solid black;
+    opacity: 0;
+    z-index: 100;
+}
+
+.download:hover:after {
+    opacity: 1;
+}
+
+.download:before {
+    content: "⬇︎";
+    padding-left: 0.5em;
+    padding-right: 1em;
+}
+
+.ratio {
+    background-color: lightyellow;
+    position: relative;
+}
+
+.ratio:before {
+    content: "⁒";
+    padding-left: 0.6em;
+    padding-right: 1em;
+}
+
+.ratio:after {
+    content: "Ratio";
+    position: absolute;
+    background-color: lightyellow;
+    border: 1px solid black;
+    opacity: 0;
+    z-index: 100;
+}
+
+.ratio:hover:after {
+    opacity: 1;
+}
+
+.ratio-split:before {
+    content: "/";
+    padding-right: 0.5em;
+    padding-left: 0.5em;
+}
+
+.button-primary.torrent-action {
+    padding: 0 1rem;
+    width: 2em;
+    font-size: larger;
+}

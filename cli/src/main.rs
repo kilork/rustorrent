@@ -31,7 +31,11 @@ async fn main() -> Result<(), ExitFailure> {
 
     info!("starting torrent client");
 
-    let properties: Properties = load_settings()?.override_with(cli.config).into();
+    let properties: Properties = (
+        load_settings()?.override_with(cli.config),
+        rsbt_service::default_app_dir(),
+    )
+        .into();
 
     debug!("calculated properties {:#?}", properties);
 

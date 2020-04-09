@@ -50,6 +50,12 @@ impl From<SocketAddr> for Peer {
     }
 }
 
+impl Into<SocketAddr> for Peer {
+    fn into(self) -> SocketAddr {
+        SocketAddr::new(self.ip, self.port)
+    }
+}
+
 #[derive(Debug)]
 pub struct Handshake {
     pub protocol_prefix: [u8; 20],

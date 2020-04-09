@@ -1,7 +1,8 @@
 use super::*;
 use crate::{
+    bit_by_index,
     errors::RsbtError,
-    messages::{bit_by_index, index_in_bitarray},
+    index_in_bitarray,
     types::{
         info::TorrentInfo,
         message::{Message, MessageCodec},
@@ -17,6 +18,7 @@ mod connect_to_peer;
 mod determine_download_mode;
 mod download_events_loop;
 pub(crate) mod download_torrent;
+pub mod events;
 mod peer_connection;
 mod peer_loop;
 mod peer_loop_message;
@@ -72,17 +74,19 @@ impl Default for TorrentPeerState {
 }
 
 #[serde(rename_all = "lowercase")]
-#[derive(Serialize, Deserialize, Copy, Clone)]
+#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
 pub enum RsbtTorrentAction {
     Enable,
     Disable,
 }
 
+#[derive(Debug)]
 pub struct RsbtCommandTorrentAction {
     pub id: usize,
     pub action: RsbtTorrentAction,
 }
 
+#[derive(Debug)]
 pub(crate) struct PeerState {
     peer: Peer,
     state: TorrentPeerState,
@@ -102,6 +106,20 @@ pub(crate) enum PeerMessage {
         begin: u32,
         block: Vec<u8>,
     },
+}
+
+impl Display for PeerMessage {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            PeerMessage::Piece {
+                index,
+                begin,
+                block,
+            } => write!(f, "Piece({}, {}, [{}])", index, begin, block.len()),
+            PeerMessage::Message(message) => write!(f, "Message({})", message),
+            _ => write!(f, "{:?}", self),
+        }
+    }
 }
 
 pub(crate) enum TorrentDownloadMode {
@@ -131,7 +149,7 @@ impl RsbtApp {
 
         let accept_incoming_connections = accept_connections_loop(addr, sender.clone());
 
-        join(accept_incoming_connections, download_events).await;
+        join(accept_incoming_connections, download_events).await.0?;
 
         Ok(())
     }
@@ -145,7 +163,7 @@ impl RsbtApp {
             fs::create_dir_all(&properties.storage).await?;
         }
 
-        let torrents_path = properties.storage.join(TORRENTS_TOML);
+        let torrents_path = properties.config_dir.join(TORRENTS_TOML);
 
         if torrents_path.is_file() {
             let torrents_toml = fs::read_to_string(torrents_path).await?;
@@ -172,7 +190,7 @@ impl RsbtApp {
                         .to_str()
                         .unwrap_or_default()
                         .into(),
-                    state: TorrentDownloadState::Enabled,
+                    state: TorrentDownloadStatus::Enabled,
                 },
             )))
             .await?;

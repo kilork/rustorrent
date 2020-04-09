@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RSBT Torrent Pieces View</title>
+    <style>
+        * {
+            margin: 0px;
+            padding: 0px;
+            line-height: 0px;
+        }
+
+        span.ok {
+            background-color: limegreen;
+        }
+
+        span {
+            margin: 1px;
+            width: 5px;
+            height: 5px;
+            border: 1px solid black;
+            display: inline-block;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="list">
+    </div>
+    <script>
+        function timeout(interval) {
+            return new Promise((resolve, reject) => {
+                setTimeout(function () {
+                    resolve("done");
+                }, interval);
+            });
+        };
+
+        const pieceList = document.getElementById('list');
+
+        function createPiece(index) {
+            const newElement = document.createElement("span");
+            newElement.title = index;
+            pieceList.appendChild(newElement);
+            return newElement;
+        }
+
+        async function draw_loop() {
+            const response = await (await fetch("/api/torrent/{id}")).json();
+
+            if (response.error) {
+                throw response.error;
+            }
+
+            const piecesTotal = response.pieces_total;
+
+            let pieces = new Array();
+
+            for (let i = 0; i < piecesTotal; i++) {
+                pieces.push(createPiece(i));
+            }
+
+            for (; ;) {
+                try {
+                    const response = await fetch("/api/torrent/{id}/piece");
+                    const pieces_update = new Uint8Array(await response.arrayBuffer());
+                    for (let i = 0; i < piecesTotal; i++) {
+                        let bit_index = i >> 3;
+                        let bit = 128 >> (i % 8);
+                        if ((pieces_update[bit_index] & bit) === bit) {
+                            pieces[i].className = "ok";
+                        }
+                    }
+                } catch (e) {
+                    console.log(`error: ${e}`);
+                }
+                await timeout(1000);
+            }
+        }
+
+        draw_loop();
+    </script>
+</body>
+
+</html>

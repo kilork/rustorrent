@@ -7,7 +7,6 @@ use rsbt_frontend::*;
 use actix::prelude::*;
 use actix_identity::{CookieIdentityPolicy, Identity, IdentityService};
 use actix_multipart::Multipart;
-use actix_service::Service;
 use actix_web::{
     dev::Payload, error::ErrorUnauthorized, http, middleware, web, App, Error, FromRequest,
     HttpRequest, HttpResponse, HttpServer, Responder,
@@ -15,11 +14,15 @@ use actix_web::{
 use bytes::Bytes;
 use dotenv::dotenv;
 use exitfailure::ExitFailure;
-use futures::StreamExt;
-use log::{debug, error, info};
+use futures::{future::abortable, stream::select_all, StreamExt};
+use log::{debug, error, info, trace};
 use openid::{DiscoveredClient, Options, Token, Userinfo};
 use reqwest;
-use rsbt_service::{app::*, types::*, RsbtError};
+use rsbt_service::{
+    app::{events::TorrentEvent, *},
+    types::*,
+    RsbtError,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
@@ -33,9 +36,9 @@ use tokio::{
     fs,
     sync::{
         mpsc::{self, Receiver, Sender},
-        oneshot, Mutex, RwLock,
+        RwLock,
     },
-    time::{interval_at, Duration, Instant},
+    time::{delay_for, Duration},
 };
 use url::Url;
 
@@ -43,13 +46,16 @@ mod cli;
 mod event_stream;
 mod login;
 mod model;
+#[cfg(feature = "sandbox")]
+mod sandbox;
 mod session;
 mod torrents;
 mod uploads;
 
 use event_stream::*;
 use login::*;
-use model::*;
+#[cfg(feature = "sandbox")]
+use sandbox::*;
 use session::*;
 use torrents::*;
 use uploads::*;
@@ -106,7 +112,7 @@ async fn main() -> Result<(), ExitFailure> {
     };
 
     debug!("starting torrents process with settings: {:?}", settings);
-    let properties = settings.into();
+    let properties = (settings, config_path).into();
     debug!("properties: {:?}", properties);
 
     let sessions = web::Data::new(Sessions::new(&properties, local).await?);
@@ -117,7 +123,7 @@ async fn main() -> Result<(), ExitFailure> {
 
     let current_torrents = rsbt_app.init_storage().await?;
 
-    let broadcaster = init_broadcaster();
+    let (broadcaster, mut broadcaster_sender) = init_broadcaster();
 
     let mut download_events_sender = init_rsbt_app(rsbt_app);
 
@@ -138,11 +144,19 @@ async fn main() -> Result<(), ExitFailure> {
                 .await
                 .map_err(RsbtError::from)?;
 
-            let _ = receiver.await?;
+            let torrent_download = receiver.await??;
+
+            if let Err(err) = broadcaster_sender
+                .send(BroadcasterMessage::Subscribe(torrent_download))
+                .await
+            {
+                error!("cannot send subscribe message: {}", err);
+            }
         }
     }
 
-    let sender = web::Data::new(Mutex::new(download_events_sender));
+    let sender = web::Data::new(download_events_sender);
+    let broadcaster_sender = web::Data::new(broadcaster_sender);
 
     HttpServer::new(move || {
         let mut app = App::new()
@@ -155,20 +169,20 @@ async fn main() -> Result<(), ExitFailure> {
             .app_data(broadcaster.clone())
             .app_data(sessions.clone())
             .app_data(sender.clone())
+            .app_data(broadcaster_sender.clone())
             .service(authorize)
             .service(login_get)
             .service(
                 web::scope("/api")
-                    .wrap_fn(|req, srv| {
-                        let fut = srv.call(req);
-                        async {
-                            let res = fut.await?;
-                            Ok(res)
-                        }
-                    })
                     .service(torrent_list)
+                    .service(torrent_detail)
+                    .service(torrent_delete)
                     .service(torrent_create_action)
-                    .service(upload_form)
+                    .service(torrent_peer_list)
+                    .service(torrent_announce_list)
+                    .service(torrent_file_list)
+                    .service(torrent_piece_list)
+                    .service(torrent_file_download)
                     .service(upload)
                     .service(account)
                     .service(logout)
@@ -176,6 +190,19 @@ async fn main() -> Result<(), ExitFailure> {
             );
         if let Some(client) = &client {
             app = app.app_data(client.clone());
+        }
+        #[cfg(feature = "sandbox")]
+        {
+            debug!("adding sandbox at /sandbox...");
+            app = app.service(
+                web::scope("/sandbox")
+                    .service(sandbox)
+                    .service(rsbt_javascript_module)
+                    .service(rsbt_css)
+                    .service(upload_form)
+                    .service(stream_page)
+                    .service(torrent_piece_page),
+            );
         }
         #[cfg(feature = "ui")]
         {
@@ -213,25 +240,76 @@ fn init_rsbt_app(rsbt_app: RsbtApp) -> Sender<RsbtCommand> {
 
     download_events_sender
 }
+enum BroadcasterMessage {
+    Send(TorrentEvent),
+    Subscribe(TorrentDownload),
+    Unsubscribe(usize),
+}
 
-fn init_broadcaster() -> web::Data<Broadcaster> {
+fn init_broadcaster() -> (web::Data<Broadcaster>, Sender<BroadcasterMessage>) {
     let broadcaster = web::Data::new(Broadcaster::new());
     let broadcaster_timer = broadcaster.clone();
 
+    let (broadcaster_sender, mut broadcaster_receiver) =
+        mpsc::channel(rsbt_service::DEFAULT_CHANNEL_BUFFER);
+
+    let task_broadcaster_sender = broadcaster_sender.clone();
     let task = async move {
-        let mut timer = interval_at(Instant::now(), Duration::from_secs(10));
-
-        loop {
-            timer.tick().await;
-
-            debug!("timer event");
-
-            if let Err(ok_clients) = broadcaster_timer.message("ping").await {
-                debug!("refresh client list");
-                *broadcaster_timer.clients.write().await = ok_clients;
+        let mut subscriptions = HashMap::new();
+        while let Some(message) = broadcaster_receiver.next().await {
+            match message {
+                BroadcasterMessage::Send(torrent_event) => {
+                    let json_message = serde_json::to_string(&torrent_event).unwrap();
+                    debug!("sending broadcast: {}", json_message);
+                    if let Err(ok_clients) = broadcaster_timer.message(&json_message).await {
+                        debug!("refresh client list");
+                        *broadcaster_timer.clients.write().await = ok_clients;
+                    }
+                }
+                BroadcasterMessage::Subscribe(torrent_download) => {
+                    let id = torrent_download.id;
+                    let mut task_broadcaster_sender = task_broadcaster_sender.clone();
+                    let (subscription_task, subscription_abort_handle) = abortable(async move {
+                        let mut messages = select_all(vec![
+                            torrent_download
+                                .storage_state_watch
+                                .map(move |x| TorrentEvent::Storage {
+                                    id,
+                                    read: x.bytes_read,
+                                    write: x.bytes_write,
+                                    left: x.pieces_left,
+                                })
+                                .boxed(),
+                            torrent_download
+                                .statistics_watch
+                                .map(move |x| TorrentEvent::Stat {
+                                    id,
+                                    tx: x.uploaded,
+                                    rx: x.downloaded,
+                                })
+                                .boxed(),
+                        ]);
+                        while let Some(message) = messages.next().await {
+                            if let Err(err) = task_broadcaster_sender
+                                .send(BroadcasterMessage::Send(message))
+                                .await
+                            {
+                                error!("cannot send from subscription: {}", err)
+                            }
+                            delay_for(Duration::from_millis(500)).await;
+                        }
+                    });
+                    tokio::spawn(subscription_task);
+                    subscriptions.insert(id, subscription_abort_handle);
+                }
+                BroadcasterMessage::Unsubscribe(id) => {
+                    if let Some(abort_handle) = subscriptions.remove(&id) {
+                        abort_handle.abort();
+                    }
+                }
             }
         }
     };
     Arbiter::spawn(task);
-    broadcaster
+    (broadcaster, broadcaster_sender)
 }

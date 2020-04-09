@@ -1,5 +1,7 @@
 use super::*;
 
+use std::{sync::Mutex, task::Waker};
+
 mod process_announce;
 mod process_peer_announced;
 mod process_peer_connected;
@@ -25,6 +27,12 @@ use process_peer_pieces::process_peer_pieces;
 use process_peer_unchoke::process_peer_unchoke;
 
 #[derive(Debug)]
+pub(crate) struct DownloadTorrentEventQueryPiece {
+    pub(crate) piece: usize,
+    pub(crate) waker: Arc<Mutex<Option<Waker>>>,
+}
+
+#[derive(Debug)]
 pub(crate) enum DownloadTorrentEvent {
     Announce(Vec<Peer>),
     PeerAnnounced(Peer),
@@ -46,6 +54,13 @@ pub(crate) enum DownloadTorrentEvent {
     },
     Enable(RequestResponse<(), Result<(), RsbtError>>),
     Disable(RequestResponse<(), Result<(), RsbtError>>),
+    Subscribe(RequestResponse<(), watch::Receiver<TorrentDownloadState>>),
+    Delete(RequestResponse<bool, Result<(), RsbtError>>),
+    PeersView(RequestResponse<(), Result<Vec<RsbtPeerView>, RsbtError>>),
+    AnnounceView(RequestResponse<(), Result<Vec<RsbtAnnounceView>, RsbtError>>),
+    FilesView(RequestResponse<(), Result<Vec<RsbtFileView>, RsbtError>>),
+    FileDownload(RequestResponse<usize, Result<RsbtFileDownloadStream, RsbtError>>),
+    QueryPiece(RequestResponse<DownloadTorrentEventQueryPiece, Result<Vec<u8>, RsbtError>>),
 }
 
 impl Display for DownloadTorrentEvent {
@@ -59,6 +74,19 @@ impl Display for DownloadTorrentEvent {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct TorrentDownloadState {
+    pub downloaded: u64,
+    pub uploaded: u64,
+}
+
+pub enum TorrentStatisticMessage {
+    Subscribe(RequestResponse<(), watch::Receiver<TorrentDownloadState>>),
+    Downloaded(u64),
+    Uploaded(u64),
+    Quit,
+}
+
 pub(crate) async fn download_torrent(
     properties: Arc<Properties>,
     mut torrent_storage: TorrentStorage,
@@ -69,6 +97,46 @@ pub(crate) async fn download_torrent(
     let mut mode = TorrentDownloadMode::Normal;
     let mut active = false;
     let mut announce_abort_handle = None;
+    let mut awaiting_for_piece = HashMap::new();
+
+    let (mut statistic_sender, mut statistic_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
+
+    let mut torrent_download_state = {
+        let storage_state = torrent_storage.receiver.borrow();
+        TorrentDownloadState {
+            downloaded: storage_state.bytes_write,
+            uploaded: storage_state.bytes_read,
+        }
+    };
+    let statistic_task = async move {
+        let (watch_sender, watch_receiver) = watch::channel(torrent_download_state.clone());
+        while let Some(message) = statistic_receiver.next().await {
+            match message {
+                TorrentStatisticMessage::Subscribe(request_response) => {
+                    if let Err(err) = request_response.response(watch_receiver.clone()) {
+                        error!(
+                            "cannot send subscription response to torrent statistics: {}",
+                            err
+                        );
+                    }
+                }
+                TorrentStatisticMessage::Uploaded(count) => {
+                    torrent_download_state.uploaded += count;
+                    if let Err(err) = watch_sender.broadcast(torrent_download_state) {
+                        error!("cannot broadcast uploaded torrent statistics: {}", err);
+                    }
+                }
+                TorrentStatisticMessage::Downloaded(count) => {
+                    torrent_download_state.downloaded += count;
+                    if let Err(err) = watch_sender.broadcast(torrent_download_state) {
+                        error!("cannot broadcast downloaded torrent statistics: {}", err);
+                    }
+                }
+                TorrentStatisticMessage::Quit => break,
+            }
+        }
+    };
+    tokio::spawn(statistic_task);
 
     while let Some(event) = broker_receiver.next().await {
         debug!("received event: {}", event);
@@ -105,6 +173,7 @@ pub(crate) async fn download_torrent(
                     &mut peer_states,
                     stream,
                     &mut torrent_storage,
+                    statistic_sender.clone(),
                 )
                 .await
                 {
@@ -112,12 +181,13 @@ pub(crate) async fn download_torrent(
                 }
             }
             DownloadTorrentEvent::PeerConnected(peer_id, stream) => {
-                debug!("[{}] peer connected", peer_id);
+                debug!("[{}] peer connected to {:?}", peer_id, stream.peer_addr());
                 if let Err(err) = process_peer_connected(
                     torrent_process.clone(),
                     &mut peer_states,
                     peer_id,
                     stream,
+                    statistic_sender.clone(),
                 )
                 .await
                 {
@@ -183,8 +253,9 @@ pub(crate) async fn download_torrent(
                     &mut peer_states,
                     &mode,
                     peer_id,
-                    piece,
+                    piece.into(),
                     &mut torrent_storage,
+                    &mut awaiting_for_piece,
                 )
                 .await
                 {
@@ -288,7 +359,109 @@ pub(crate) async fn download_torrent(
                 }
                 active = false;
             }
+            DownloadTorrentEvent::Subscribe(request_response) => {
+                if let Err(err) = statistic_sender
+                    .send(TorrentStatisticMessage::Subscribe(request_response))
+                    .await
+                {
+                    error!("cannot subscribe: {}", err);
+                }
+            }
+            DownloadTorrentEvent::Delete(request_response) => {
+                let delete_result = torrent_storage.delete(*request_response.request()).await;
+
+                if let Err(err) = request_response.response(delete_result) {
+                    error!("cannot send response for delete torrent: {}", err);
+                }
+                break;
+            }
+            DownloadTorrentEvent::PeersView(request_response) => {
+                let peers_view = peer_states.values().map(RsbtPeerView::from).collect();
+
+                if let Err(err) = request_response.response(Ok(peers_view)) {
+                    error!("cannot send response for delete torrent: {}", err);
+                }
+            }
+            DownloadTorrentEvent::AnnounceView(request_response) => {
+                if let Err(err) = request_response.response(Ok(vec![RsbtAnnounceView {
+                    url: torrent_process.torrent.announce_url.clone(),
+                }])) {
+                    error!("cannot send response for delete torrent: {}", err);
+                }
+            }
+            DownloadTorrentEvent::FilesView(request_response) => {
+                let files_result = torrent_storage.files().await;
+
+                if let Err(err) = request_response.response(files_result) {
+                    error!("cannot send response for delete torrent: {}", err);
+                }
+            }
+            DownloadTorrentEvent::FileDownload(request_response) => {
+                debug!("processing file download");
+                let files_download = torrent_storage.download(*request_response.request()).await;
+
+                if let Err(err) = request_response.response(files_download) {
+                    error!("cannot send response for download torrent: {}", err);
+                }
+            }
+            DownloadTorrentEvent::QueryPiece(request_response) => {
+                debug!("query piece event: processing query piece");
+                let request = request_response.request();
+                let piece_index = request.piece;
+                debug!("query piece event: search for piece index {}", piece_index);
+                let piece_bit = {
+                    let state = torrent_storage.receiver.borrow();
+                    let downloaded = state.downloaded.as_slice();
+                    debug!("query piece event: downloaded {:?}", downloaded);
+                    bit_by_index(piece_index, downloaded)
+                };
+                debug!("query piece event: {:?}", piece_bit);
+                if piece_bit.is_some() {
+                    debug!("query piece event: found, loading from storage");
+                    match torrent_storage.load(piece_index).await {
+                        Ok(Some(piece)) => {
+                            debug!("query piece event: loaded piece {}", piece.as_ref().len());
+                            let waker = request.waker.lock().unwrap().take();
+                            {
+                                debug!("query piece event: sending piece to download stream");
+                                if let Err(err) =
+                                    request_response.response(Ok(piece.as_ref().into()))
+                                {
+                                    error!("cannot send response for query piece: {}", err);
+                                    continue;
+                                }
+                            }
+
+                            if let Some(waker) = waker {
+                                debug!("query piece event: wake up waker");
+                                waker.wake();
+                            }
+                            continue;
+                        }
+                        Ok(None) => {
+                            error!("query piece event: no piece loaded");
+                        }
+                        Err(err) => {
+                            error!("cannot load piece from storage: {}", err);
+                            if let Err(err) = request_response.response(Err(err)) {
+                                error!("cannot send response for query piece: {}", err);
+                            }
+                            continue;
+                        }
+                    }
+                }
+                error!("query piece event: register awaiter");
+                let awaiters = awaiting_for_piece
+                    .entry(piece_index)
+                    .or_insert_with(|| vec![]);
+                awaiters.push(request_response);
+                dbg!(&awaiters);
+            }
         }
+    }
+
+    if let Err(err) = statistic_sender.send(TorrentStatisticMessage::Quit).await {
+        error!("cannot send quit to statistic: {}", err);
     }
 
     debug!("download_torrent done");

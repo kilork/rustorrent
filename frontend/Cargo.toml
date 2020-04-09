@@ -5,6 +5,11 @@ authors = ["Alexander Korolev <kilork@yandex.ru>"]
 edition = "2018"
 build = "build.rs"
 
+[features]
+default = []
+
+ui = []
+
 [dependencies]
 actix-web-static-files = "2"
 

@@ -1,4 +1,7 @@
-use crate::types::{message::MessageCodecError, udp_tracker::UdpTrackerCodecError};
+use crate::{
+    app::RsbtCommand,
+    types::{message::MessageCodecError, udp_tracker::UdpTrackerCodecError},
+};
 use failure::*;
 use log::error;
 
@@ -44,6 +47,8 @@ pub enum RsbtError {
     WrongConfig,
     #[fail(display = "send error {}", _0)]
     SendError(futures::channel::mpsc::SendError),
+    #[fail(display = "cannot send to torrent process: {}", _0)]
+    SendToTorrentProcess(tokio::sync::mpsc::error::SendError<RsbtCommand>),
     #[fail(display = "oneshot recv error {}", _0)]
     TokioMpscOneshotRecvError(tokio::sync::oneshot::error::RecvError),
     #[fail(display = "cannot parse uri {}", _0)]
@@ -74,8 +79,12 @@ pub enum RsbtError {
     TomlSerialize(toml::ser::Error),
     #[fail(display = "torrent with id {} not found", _0)]
     TorrentNotFound(usize),
+    #[fail(display = "torrent file with id {} not found", _0)]
+    TorrentFileNotFound(usize),
     #[fail(display = "torrent action not supported")]
     TorrentActionNotSupported,
+    #[fail(display = "elapsed {}", _0)]
+    Elapsed(tokio::time::Elapsed),
 }
 
 macro_rules! from_rsbt_error {
@@ -108,6 +117,7 @@ from_rsbt_error!(flat_storage::FlatStorageError, Storage);
 from_rsbt_error!(failure::Context<String>, Failure);
 from_rsbt_error!(toml::de::Error, TomlDeserialize);
 from_rsbt_error!(toml::ser::Error, TomlSerialize);
+from_rsbt_error!(tokio::time::Elapsed, Elapsed);
 
 impl From<futures::future::Aborted> for RsbtError {
     fn from(_: futures::future::Aborted) -> Self {

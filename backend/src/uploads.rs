@@ -1,16 +1,10 @@
 use super::*;
 
-#[get("/upload")]
-async fn upload_form(_user: User) -> impl Responder {
-    HttpResponse::Ok()
-        .content_type("text/html")
-        .body(include_str!("../static/upload.html"))
-}
-
 #[post("/upload")]
 async fn upload(
     _user: User,
-    event_sender: web::Data<Mutex<Sender<RsbtCommand>>>,
+    event_sender: web::Data<Sender<RsbtCommand>>,
+    broadcaster_sender: web::Data<Sender<BroadcasterMessage>>,
     mut payload: Multipart,
 ) -> Result<HttpResponse, Error> {
     if let Some(item) = payload.next().await {
@@ -27,10 +21,10 @@ async fn upload(
         let (request_response, receiver) = RequestResponse::new(RsbtCommandAddTorrent {
             data: torrent,
             filename: filename.to_string(),
-            state: TorrentDownloadState::Enabled,
+            state: TorrentDownloadStatus::Enabled,
         });
         {
-            let mut event_sender = event_sender.lock().await;
+            let mut event_sender = event_sender.as_ref().clone();
             if let Err(err) = event_sender
                 .send(RsbtCommand::AddTorrent(request_response))
                 .await
@@ -43,14 +37,18 @@ async fn upload(
         }
 
         return Ok(match receiver.await {
-            Ok(Ok(torrent)) => HttpResponse::Ok().json(BackendTorrentDownload {
-                id: torrent.id,
-                name: torrent.name.as_str().into(),
-                received: 0,
-                uploaded: 0,
-                length: torrent.process.info.length,
-                active: true,
-            }),
+            Ok(Ok(ref torrent)) => {
+                let torrent_view: TorrentDownloadView = torrent.into();
+                if let Err(err) = broadcaster_sender
+                    .as_ref()
+                    .clone()
+                    .send(BroadcasterMessage::Subscribe(torrent.clone()))
+                    .await
+                {
+                    error!("cannot send subscribe message: {}", err);
+                }
+                HttpResponse::Ok().json(torrent_view)
+            }
             Ok(Err(err)) => {
                 error!("error in update call: {}", err);
                 HttpResponse::InternalServerError().json(Failure {
