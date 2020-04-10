@@ -58,6 +58,27 @@
                     </div>
                 </div>
             </div>
+            <div id="modal-files" class="modal">
+                <div class="modal-inner">
+                    <a class="js-close-modal">&times;</a>
+                    <div class="modal-content">
+                        <h3 id="modal-files-header">Files</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Id</th>
+                                    <th>Name</th>
+                                    <th>Stats</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="modal-files-list">
+                            </tbody>
+                        </table>
+                        <input id="modal-files-close" class="button-primary" type="button" value="Close">
+                    </div>
+                </div>
+            </div>
         </div>
         <div id="errors-container" class="container">
             <ul id="errors"></ul>
@@ -66,13 +87,6 @@
             <p>Please <a href="/oauth2/authorization/oidc?state=/sandbox/">login</a></p>
         </div>
         <div id="authorized">
-            <nav class="crumbs">
-                <ol>
-                    <li class="crumb">
-                        <a href=".">Torrents</a>
-                    </li>
-                </ol>
-            </nav>
             <section id="actions-container" class="container">
                 <form action="/api/upload" method="post" enctype="multipart/form-data">
                     <fieldset>
@@ -88,7 +102,7 @@
                         <tr>
                             <th>Id</th>
                             <th>Name</th>
-                            <th>Stats</th>
+                            <th>Info</th>
                             <th>Actions</th>
                         </tr>
                     </thead>

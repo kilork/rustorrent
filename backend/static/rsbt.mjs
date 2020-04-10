@@ -62,15 +62,15 @@ async function method_request(url, method, body) {
 }
 
 async function post(url, body) {
-    return await method_request(url, "POST", body);
+    return await method_request(url, 'POST', body);
 }
 
 async function put(url, body) {
-    return await method_request(url, "PUT", body);
+    return await method_request(url, 'PUT', body);
 }
 
 async function delete_(url) {
-    return await method_request(url, "DELETE");
+    return await method_request(url, 'DELETE');
 }
 
 
@@ -78,7 +78,9 @@ class TorrentService {
     constructor(torrentsTable) {
         this.torrentsTable = torrentsTable;
         this.torrents = [];
+
         this.modal = new Modal();
+
         this.modalDeleteHeader = document.getElementById('modal-delete-header');
         this.modalDeleteFiles = document.getElementById('modal-delete-files');
         this.modalDeleteSubmit = document.getElementById('modal-delete-submit');
@@ -86,6 +88,13 @@ class TorrentService {
             this.doModalDeleteSubmit();
             e.preventDefault();
         };
+
+        this.modalFilesCloseElement = document.getElementById('modal-files-close');
+        this.modalFilesListElement = document.getElementById('modal-files-list');
+        this.modalFilesCloseElement.onclick = (e) => {
+            Modal.hideModal();
+        };
+
         this.loadingElement = document.getElementById('loading');
         this.allElement = document.getElementById('all');
         this.errorsElement = document.getElementById('errors');
@@ -94,7 +103,7 @@ class TorrentService {
 
         this.stream = new EventSource('/api/stream');
         this.stream.onmessage = async (event) => {
-            if (event.data === "connected") {
+            if (event.data === 'connected') {
                 return;
             }
             await this.processEvent(JSON.parse(event.data));
@@ -109,7 +118,6 @@ class TorrentService {
 
     async updateTorrent(id, new_state) {
         let torrent = this.torrents.find(t => t.data.id === id);
-        console.log(torrent);
         if (torrent) {
             if (new_state.rx !== undefined) {
                 torrent.data.rx = new_state.rx;
@@ -126,7 +134,7 @@ class TorrentService {
             if (new_state.left !== undefined) {
                 torrent.data.pieces_left = new_state.left;
             }
-            torrent.element.innerHTML = this.torrentRow(torrent.data);
+            torrent.stat.innerHTML = this.torrentStats(torrent.data);
         }
     }
 
@@ -158,16 +166,42 @@ class TorrentService {
         }
     }
 
-    delete(input) {
-        let id = input.dataset.id;
+    async files(input) {
+        try {
+            let id = input.dataset.id;
 
-        this.modalDeleteSubmit.dataset.id = id;
+            let fileList = this.modalFilesListElement;
 
-        let deletedTorrent = this.torrents.find(t => `${t.data.id}` === id);
+            fileList.innerHTML = '';
 
-        this.modalDeleteHeader.innerHTML = `Delete ${deletedTorrent.data.name}`;
+            let files = await get(`/api/torrent/${id}/file`)
 
-        this.modal.openModal('modal-delete');
+            for (const file of files) {
+                const newElement = document.createElement('tr');
+                newElement.innerHTML = this.fileRow(id, file);
+                fileList.appendChild(newElement);
+            }
+
+            this.modal.openModal('modal-files');
+        } catch (e) {
+            await this.handleException(e);
+        }
+    }
+
+    async delete(input) {
+        try {
+            let id = input.dataset.id;
+
+            this.modalDeleteSubmit.dataset.id = id;
+
+            let deletedTorrent = this.torrents.find(t => `${t.data.id}` === id);
+
+            this.modalDeleteHeader.innerHTML = `Delete ${deletedTorrent.data.name}`;
+
+            this.modal.openModal('modal-delete');
+        } catch (e) {
+            await this.handleException(e);
+        }
     }
 
     async enable(input) {
@@ -197,10 +231,28 @@ class TorrentService {
             if (updatedTorrent) {
                 updatedTorrent.data = torrent;
                 updatedTorrent.element.innerHTML = this.torrentRow(torrent);
+                updatedTorrent.stat = document.getElementById(`torrent-stat-${id}`)
             }
         } catch (e) {
             await this.handleException(e);
         }
+    }
+
+    downloadFile(torrent_id, file_id) {
+        window.open(`/api/torrent/${torrent_id}/file/${file_id}/download`, 'Download');
+    }
+
+    fileActionInput(action, torrent_id, file) {
+        return `<input type="button" class="button-primary file-action file-action-${action.id}" title="${action.title}" value="${action.icon}" onclick="torrentService.${action.method}(${torrent_id}, ${file.id})">`;
+    }
+
+    fileActionDownload(torrent_id, file) {
+        return this.fileActionInput({
+            id: 'download',
+            method: 'downloadFile',
+            title: 'Download',
+            icon: '⬇︎'
+        }, torrent_id, file);
     }
 
     torrentActionInput(action, torrent) {
@@ -218,30 +270,54 @@ class TorrentService {
     torrentActionDelete(torrent) {
         return this.torrentActionInput({
             id: 'delete',
-            title: 'Title',
+            title: 'Delete',
             icon: 'x'
         }, torrent);
+    }
+
+    torrentActionFiles(torrent) {
+        return this.torrentActionInput({
+            id: 'files',
+            title: 'Files',
+            icon: '⬇︎'
+        }, torrent);
+    }
+
+    torrentStats(torrent) {
+        return [
+            `<div class="tip upload">${torrent.tx}</div>`,
+            `<div class="tip download">${torrent.rx}</div>`,
+            `<div class="tip ratio">${torrent.pieces_total - torrent.pieces_left}<span class="ratio-split"></span>${torrent.pieces_total}</div>`
+        ].join('');
     }
 
     torrentRow(torrent) {
         return [
             `${torrent.id}`,
             `<strong>${torrent.name}</strong><br><span class="tip size">${torrent.length}</span>`,
-            [
-                `<div class="tip upload">${torrent.tx}</div>`,
-                `<div class="tip download">${torrent.rx}</div>`,
-                `<div class="tip ratio">${torrent.pieces_total - torrent.pieces_left}<span class="ratio-split"></span>${torrent.pieces_total}</div>`
-            ].join(''),
+            `<div id="torrent-stat-${torrent.id}">` + this.torrentStats(torrent) + '</div>',
             '<div class="torrent-actions">' + [
                 this.torrentActionActive(torrent),
+                this.torrentActionFiles(torrent),
                 this.torrentActionDelete(torrent)
+            ].join('') + '</div>'
+        ].map(value => `<td>${value}</td>`).join('')
+    }
+
+    fileRow(torrent_id, file) {
+        return [
+            `${file.id}`,
+            `<strong>${file.name}</strong><br>`,
+            `<span class="tip size">${file.size}</span>`,
+            '<div class="file-actions">' + [
+                this.fileActionDownload(torrent_id, file)
             ].join('') + '</div>'
         ].map(value => `<td>${value}</td>`).join('')
     }
 
     async refresh() {
         try {
-            const torrents = await get("/api/torrent");
+            const torrents = await get('/api/torrent');
 
             if (torrents.error) {
                 throw torrents.error;
@@ -251,12 +327,13 @@ class TorrentService {
             this.torrents = [];
 
             for (const torrent of torrents) {
-                const newElement = document.createElement("tr");
+                const newElement = document.createElement('tr');
                 newElement.innerHTML = this.torrentRow(torrent);
                 this.torrentsTable.appendChild(newElement);
                 this.torrents.push({
                     element: newElement,
-                    data: torrent
+                    data: torrent,
+                    stat: document.getElementById(`torrent-stat-${torrent.id}`)
                 })
             }
         } catch (e) {
