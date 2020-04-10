@@ -80,9 +80,6 @@
                 </div>
             </div>
         </div>
-        <div id="errors-container" class="container">
-            <ul id="errors"></ul>
-        </div>
         <div id="unauthorized" class="hide">
             <p>Please <a href="/oauth2/authorization/oidc?state=/sandbox/">login</a></p>
         </div>
@@ -92,7 +89,7 @@
                     <fieldset>
                         <label for="torrent">Choose torrent file to upload</label>
                         <input type="file" id="torrent" name="torrent" accept=".torrent">
-                        <input class="button-primary" type="submit" value="Upload">
+                        <input id="upload" class="button-primary" type="button" value="Upload">
                     </fieldset>
                 </form>
             </section>
