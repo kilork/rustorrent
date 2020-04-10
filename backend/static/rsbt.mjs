@@ -91,6 +91,43 @@ class TorrentService {
         this.errorsElement = document.getElementById('errors');
         this.authorizedElement = document.getElementById('authorized');
         this.unauthorizedElement = document.getElementById('unauthorized');
+
+        this.stream = new EventSource('/api/stream');
+        this.stream.onmessage = async (event) => {
+            if (event.data === "connected") {
+                return;
+            }
+            await this.processEvent(JSON.parse(event.data));
+        };
+
+    }
+
+    async processEvent(event) {
+        let state = event.stat || event.storage;
+        await this.updateTorrent(state.id, state);
+    }
+
+    async updateTorrent(id, new_state) {
+        let torrent = this.torrents.find(t => t.data.id === id);
+        console.log(torrent);
+        if (torrent) {
+            if (new_state.rx !== undefined) {
+                torrent.data.rx = new_state.rx;
+            }
+            if (new_state.tx !== undefined) {
+                torrent.data.tx = new_state.tx;
+            }
+            if (new_state.read !== undefined) {
+                torrent.data.read = new_state.read;
+            }
+            if (new_state.write !== undefined) {
+                torrent.data.write = new_state.write;
+            }
+            if (new_state.left !== undefined) {
+                torrent.data.pieces_left = new_state.left;
+            }
+            torrent.element.innerHTML = this.torrentRow(torrent.data);
+        }
     }
 
     async doModalDeleteSubmit() {
@@ -158,7 +195,7 @@ class TorrentService {
             let updatedTorrent = this.torrents.find(t => `${t.data.id}` === id);
 
             if (updatedTorrent) {
-                updatedTorrent.torrent = torrent;
+                updatedTorrent.data = torrent;
                 updatedTorrent.element.innerHTML = this.torrentRow(torrent);
             }
         } catch (e) {
