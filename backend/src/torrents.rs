@@ -187,7 +187,7 @@ async fn torrent_delete(
     event_sender: web::Data<Sender<RsbtCommand>>,
     broadcast_sender: web::Data<Sender<BroadcasterMessage>>,
     id: web::Path<usize>,
-    body: web::Query<DeleteQuery>,
+    query: web::Query<DeleteQuery>,
     _user: User,
 ) -> impl Responder {
     if let Err(err) = broadcast_sender
@@ -204,7 +204,7 @@ async fn torrent_delete(
     let (delete_request_response, delete_response) =
         RequestResponse::new(RsbtCommandDeleteTorrent {
             id: *id,
-            files: body.files,
+            files: query.files,
         });
     if let Err(err) = event_sender
         .as_ref()

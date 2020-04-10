@@ -11,6 +11,69 @@ function timeout(interval) {
     });
 };
 
+class RequestException {
+    constructor(response) {
+        this.response = response;
+    }
+}
+
+class UnauthorizedException {
+    constructor(response) {
+        this.response = response;
+    }
+}
+
+async function request(url, init_params) {
+    let params = init_params || {};
+    params.credentials = 'same-origin';
+    const response = await fetch(url, params);
+    if (!response.ok) {
+        if (response.status === 401) {
+            throw new UnauthorizedException(response);
+        } else {
+            throw new RequestException(response);
+        }
+    }
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.indexOf("application/json") !== -1) {
+        return await response.json();
+    } else if (contentType && contentType.indexOf("text") !== -1) {
+        return await response.text();
+    } else {
+        return await response.arrayBuffer();
+    }
+}
+
+async function get(url) {
+    return await method_request(url, "GET");
+}
+
+async function method_request(url, method, body) {
+    let params = {
+        method,
+    };
+    if (body !== undefined) {
+        params.body = JSON.stringify(body);
+        params.headers = {
+            'Content-Type': 'application/json'
+        };
+    }
+    return await request(url, params);
+}
+
+async function post(url, body) {
+    return await method_request(url, "POST", body);
+}
+
+async function put(url, body) {
+    return await method_request(url, "PUT", body);
+}
+
+async function delete_(url) {
+    return await method_request(url, "DELETE");
+}
+
+
 class TorrentService {
     constructor(torrentsTable) {
         this.torrentsTable = torrentsTable;
@@ -23,18 +86,39 @@ class TorrentService {
             this.doModalDeleteSubmit();
             e.preventDefault();
         };
+        this.loadingElement = document.getElementById('loading');
+        this.allElement = document.getElementById('all');
+        this.errorsElement = document.getElementById('errors');
+        this.authorizedElement = document.getElementById('authorized');
+        this.unauthorizedElement = document.getElementById('unauthorized');
     }
 
     async doModalDeleteSubmit() {
-        let id = this.modalDeleteSubmit.dataset.id;
-        let files = this.modalDeleteFiles.checked;
+        try {
+            let id = this.modalDeleteSubmit.dataset.id;
+            let files = this.modalDeleteFiles.checked;
 
-        await fetch(`/api/torrent/${id}?files=${files}`, {
-            method: "DELETE",
-        });
+            await delete_(`/api/torrent/${id}?files=${files}`);
 
-        await this.refresh();
-        Modal.hideModal();
+            await this.refresh();
+            Modal.hideModal();
+        } catch (e) {
+            Modal.hideModal();
+            await this.handleException(e);
+        }
+    }
+
+    async handleException(e) {
+        console.log(e);
+        if (e instanceof UnauthorizedException) {
+            this.hideAuthorized();
+            this.showUnauthorized();
+            throw e;
+        } else if (e instanceof RequestException) {
+            alert(e.response.error);
+        } else {
+            alert(e);
+        }
     }
 
     delete(input) {
@@ -58,29 +142,27 @@ class TorrentService {
     }
 
     async action(input, action) {
-        let id = input.dataset.id;
+        try {
+            let id = input.dataset.id;
 
-        let response = await fetch(`/api/torrent/${id}/action`, {
-            method: "POST",
-            body: JSON.stringify({
+            await post(`/api/torrent/${id}/action`, {
                 "action": action
-            }),
-            headers: {
-                'Content-Type': 'application/json'
+            });
+
+            const torrent = await get(`/api/torrent/${id}`);
+
+            if (torrent.error) {
+                throw torrent.error;
             }
-        });
 
-        const torrent = await (await fetch(`/api/torrent/${id}`)).json();
+            let updatedTorrent = this.torrents.find(t => `${t.data.id}` === id);
 
-        if (torrent.error) {
-            throw torrent.error;
-        }
-
-        let updatedTorrent = this.torrents.find(t => `${t.data.id}` === id);
-
-        if (updatedTorrent) {
-            updatedTorrent.torrent = torrent;
-            updatedTorrent.element.innerHTML = this.torrentRow(torrent);
+            if (updatedTorrent) {
+                updatedTorrent.torrent = torrent;
+                updatedTorrent.element.innerHTML = this.torrentRow(torrent);
+            }
+        } catch (e) {
+            await this.handleException(e);
         }
     }
 
@@ -121,25 +203,63 @@ class TorrentService {
     }
 
     async refresh() {
-        const torrents = await (await fetch("/api/torrent")).json();
+        try {
+            const torrents = await get("/api/torrent");
 
-        if (torrents.error) {
-            throw torrents.error;
+            if (torrents.error) {
+                throw torrents.error;
+            }
+
+            this.torrentsTable.innerHTML = '';
+            this.torrents = [];
+
+            for (const torrent of torrents) {
+                const newElement = document.createElement("tr");
+                newElement.innerHTML = this.torrentRow(torrent);
+                this.torrentsTable.appendChild(newElement);
+                this.torrents.push({
+                    element: newElement,
+                    data: torrent
+                })
+            }
+        } catch (e) {
+            this.handleException(e);
         }
+    }
 
-        this.torrentsTable.innerHTML = '';
-        this.torrents = [];
+    hideElement(el) {
+        el.classList.add('hide');
+    }
+    showElement(el) {
+        el.classList.remove('hide');
+    }
 
-        for (const torrent of torrents) {
-            const newElement = document.createElement("tr");
-            newElement.innerHTML = this.torrentRow(torrent);
-            this.torrentsTable.appendChild(newElement);
-            this.torrents.push({
-                element: newElement,
-                data: torrent
-            })
-        }
+    hideAll() {
+        this.hideElement(this.allElement);
+    }
+    showAll() {
+        this.showElement(this.allElement);
+    }
 
+    hideLoading() {
+        this.hideElement(this.loadingElement);
+    }
+    showLoading() {
+        this.showElement(this.loadingElement);
+    }
+
+    hideUnauthorized() {
+        this.hideElement(this.unauthorizedElement);
+    }
+    showUnauthorized() {
+        this.showElement(this.unauthorizedElement);
+    }
+
+    hideAuthorized() {
+        this.hideElement(this.authorizedElement);
+    }
+    showAuthorized() {
+        this.showElement(this.authorizedElement);
     }
 }
 

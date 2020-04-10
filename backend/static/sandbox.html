@@ -11,14 +11,21 @@
     <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/milligram/1.3.0/milligram.css">
 
     <link rel="stylesheet" type="text/css" href="./rsbt.css">
+    <style>
+        .hide {
+            display: none;
+        }
+    </style>
 
     <script type="module">
         import { timeout, TorrentService } from './rsbt.mjs';
 
         async function load() {
             let torrentService = new TorrentService(document.getElementById('torrents'));
-            window.torrentService = torrentService
-            torrentService.refresh();
+            window.torrentService = torrentService;
+            torrentService.showAll();
+            torrentService.hideLoading();
+            await torrentService.refresh();
         }
 
         document.body.onload = load;
@@ -26,67 +33,75 @@
 </head>
 
 <body>
-    <header>
-        <h1 class="title">RSBT - Another Rust BitTorrent Client</h1>
-        <nav class="crumbs">
-            <ol>
-                <li class="crumb">
-                    <a href=".">Torrents</a>
-                </li>
-            </ol>
-        </nav>
-    </header>
-    <section id="modal">
-        <div id="modal-delete" class="modal">
-            <div class="modal-inner">
-                <a class="js-close-modal">&times;</a>
-                <div class="modal-content">
-                    <h3 id="modal-delete-header">Delete</h3>
-                    <form>
-                        <fieldset>
-                            <div>
-                                <input type="checkbox" id="modal-delete-files" name="modal-delete-files">
-                                <label class="label-inline" for="modal-delete-files">Delete saved files</label>
-                            </div>
-                            <input id="modal-delete-submit" class="button-primary" type="submit" value="Confirm">
-                        </fieldset>
-                    </form>
+    <div id="loading">
+        <p>Loading...</p>
+    </div>
+    <div id="all" class="hide">
+        <header>
+            <h1 class="title">RSBT - Another Rust BitTorrent Client</h1>
+        </header>
+        <div id="modal">
+            <div id="modal-delete" class="modal">
+                <div class="modal-inner">
+                    <a class="js-close-modal">&times;</a>
+                    <div class="modal-content">
+                        <h3 id="modal-delete-header">Delete</h3>
+                        <form>
+                            <fieldset>
+                                <div>
+                                    <input type="checkbox" id="modal-delete-files" name="modal-delete-files">
+                                    <label class="label-inline" for="modal-delete-files">Delete saved files</label>
+                                </div>
+                                <input id="modal-delete-submit" class="button-primary" type="submit" value="Confirm">
+                            </fieldset>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>
-    </section>
-    <section id="errors-container" class="container">
-        <ul id="errors">
+        <div id="errors-container" class="container">
+            <ul id="errors"></ul>
+        </div>
+        <div id="unauthorized" class="hide">
+            <p>Please <a href="/oauth2/authorization/oidc?state=/sandbox/">login</a></p>
+        </div>
+        <div id="authorized">
+            <nav class="crumbs">
+                <ol>
+                    <li class="crumb">
+                        <a href=".">Torrents</a>
+                    </li>
+                </ol>
+            </nav>
+            <section id="actions-container" class="container">
+                <form action="/api/upload" method="post" enctype="multipart/form-data">
+                    <fieldset>
+                        <label for="torrent">Choose torrent file to upload</label>
+                        <input type="file" id="torrent" name="torrent" accept=".torrent">
+                        <input class="button-primary" type="submit" value="Upload">
+                    </fieldset>
+                </form>
+            </section>
+            <section id="content" class="container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Id</th>
+                            <th>Name</th>
+                            <th>Stats</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="torrents">
+                    </tbody>
+                </table>
+            </section>
+        </div>
 
-        </ul>
-    </section>
-    <section id="actions-container" class="container">
-        <form action="/api/upload" method="post" enctype="multipart/form-data">
-            <fieldset>
-                <label for="torrent">Choose torrent file to upload</label>
-                <input type="file" id="torrent" name="torrent" accept=".torrent">
-                <input class="button-primary" type="submit" value="Upload">
-            </fieldset>
-        </form>
-    </section>
-    <section id="content" class="container">
-        <table>
-            <thead>
-                <tr>
-                    <th>Id</th>
-                    <th>Name</th>
-                    <th>Stats</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="torrents">
-            </tbody>
-        </table>
-    </section>
-
-    <footer>
-        <h5>2020 @ RSBT Team</h5>
-    </footer>
+        <footer>
+            <h5>2020 @ RSBT Team</h5>
+        </footer>
+    </div>
 </body>
 
 </html>

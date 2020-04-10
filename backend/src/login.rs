@@ -72,10 +72,19 @@ impl FromRequest for User {
     }
 }
 
+#[derive(Deserialize)]
+struct AuthorizeQuery {
+    state: Option<String>,
+}
+
 #[get("/oauth2/authorization/oidc")]
-async fn authorize(oidc_client: web::Data<DiscoveredClient>) -> impl Responder {
+async fn authorize(
+    oidc_client: web::Data<DiscoveredClient>,
+    authorize_query: web::Query<AuthorizeQuery>,
+) -> impl Responder {
     let auth_url = oidc_client.auth_url(&Options {
         scope: Some("email".into()),
+        state: authorize_query.state.clone(),
         ..Default::default()
     });
 
@@ -94,6 +103,7 @@ async fn account(user: User) -> impl Responder {
 #[derive(Deserialize, Debug)]
 struct LoginQuery {
     code: String,
+    state: Option<String>,
 }
 
 async fn request_token(
@@ -117,13 +127,14 @@ async fn request_token(
 #[get("/login/oauth2/code/oidc")]
 async fn login_get(
     oidc_client: web::Data<DiscoveredClient>,
-    query: web::Query<LoginQuery>,
+    login_query: web::Query<LoginQuery>,
     sessions: web::Data<Sessions>,
     identity: Identity,
 ) -> impl Responder {
-    debug!("login: {:?}", query);
+    debug!("login: {:?}", login_query);
 
-    match request_token(oidc_client, query).await {
+    let state = login_query.state.clone();
+    match request_token(oidc_client, login_query).await {
         Ok(Some((token, userinfo))) => {
             let id = uuid::Uuid::new_v4().to_string();
 
@@ -158,7 +169,10 @@ async fn login_get(
             );
 
             HttpResponse::Found()
-                .header(http::header::LOCATION, host("/"))
+                .header(
+                    http::header::LOCATION,
+                    host(&state.unwrap_or_else(|| "/".into())),
+                )
                 .finish()
         }
         Ok(None) => {

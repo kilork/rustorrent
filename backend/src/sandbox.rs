@@ -8,14 +8,14 @@ async fn sandbox() -> impl Responder {
 }
 
 #[get("/rsbt.mjs")]
-async fn rsbt_javascript_module(_user: User) -> impl Responder {
+async fn rsbt_javascript_module() -> impl Responder {
     HttpResponse::Ok()
         .content_type("text/javascript")
         .body(include_str!("../static/rsbt.mjs"))
 }
 
 #[get("/rsbt.css")]
-async fn rsbt_css(_user: User) -> impl Responder {
+async fn rsbt_css() -> impl Responder {
     HttpResponse::Ok()
         .content_type("text/css")
         .body(include_str!("../static/rsbt.css"))
