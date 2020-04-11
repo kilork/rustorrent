@@ -1,5 +1,4 @@
 use super::*;
-use futures::stream::TryStreamExt;
 
 struct Paging {
     page: Option<usize>,
@@ -229,7 +228,7 @@ async fn torrent_delete(
     }
 }
 
-async fn torrent_command_result<T, F, R>(
+pub(crate) async fn torrent_command_result<T, F, R>(
     event_sender: web::Data<Sender<RsbtCommand>>,
     data: T,
     cmd: F,
@@ -343,45 +342,6 @@ async fn torrent_piece_list(
         Err(err @ RsbtError::TorrentNotFound(_)) => HttpResponse::NotFound().json(Failure {
             error: format!("{}", err),
         }),
-        Err(err) => HttpResponse::InternalServerError().json(Failure {
-            error: format!("{}", err),
-        }),
-    }
-}
-
-#[get("/torrent/{id}/file/{file_id}/download")]
-async fn torrent_file_download(
-    event_sender: web::Data<Sender<RsbtCommand>>,
-    ids: web::Path<(usize, usize)>,
-    _user: User,
-) -> impl Responder {
-    let (id, file_id) = *ids;
-    let download_stream = torrent_command_result(
-        event_sender,
-        RsbtCommandTorrentFileDownload { id, file_id },
-        RsbtCommand::TorrentFileDownload,
-    )
-    .await;
-
-    match download_stream {
-        Ok(download_stream) => HttpResponse::Ok()
-            .keep_alive()
-            .no_chunking()
-            .set_header(
-                http::header::CONTENT_DISPOSITION,
-                format!("attachment; filename=\"{}\"", download_stream.name),
-            )
-            .content_length(download_stream.size as u64)
-            .streaming(download_stream.map_err(|x| {
-                actix_web::Error::from(HttpResponse::InternalServerError().json(Failure {
-                    error: format!("{}", x),
-                }))
-            })),
-        Err(err @ RsbtError::TorrentNotFound(_)) | Err(err @ RsbtError::TorrentFileNotFound(_)) => {
-            HttpResponse::NotFound().json(Failure {
-                error: format!("{}", err),
-            })
-        }
         Err(err) => HttpResponse::InternalServerError().json(Failure {
             error: format!("{}", err),
         }),
