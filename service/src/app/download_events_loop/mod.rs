@@ -241,8 +241,10 @@ pub enum RsbtCommand {
         RequestResponse<RsbtCommandTorrentAnnounce, Result<Vec<RsbtAnnounceView>, RsbtError>>,
     ),
     TorrentFiles(RequestResponse<RsbtCommandTorrentFiles, Result<Vec<RsbtFileView>, RsbtError>>),
-    TorrentFile(RequestResponse<RsbtCommandTorrentFileDownload, Result<RsbtFileView, RsbtError>>),
     TorrentPieces(RequestResponse<RsbtCommandTorrentPieces, Result<Vec<u8>, RsbtError>>),
+    TorrentFileDownloadHeader(
+        RequestResponse<RsbtCommandTorrentFileDownload, Result<RsbtFileView, RsbtError>>,
+    ),
     TorrentFileDownload(
         RequestResponse<RsbtCommandTorrentFileDownload, Result<RsbtFileDownloadStream, RsbtError>>,
     ),
@@ -340,7 +342,7 @@ pub(crate) async fn download_events_loop(
                     error!("cannot send response for torrent's files: {}", err);
                 }
             }
-            RsbtCommand::TorrentFile(request_response) => {
+            RsbtCommand::TorrentFileDownloadHeader(request_response) => {
                 debug!("torrent's files");
                 let response = torrent_file(request_response.request(), &torrents).await;
 

@@ -22,7 +22,7 @@ async fn torrent_file_download_head(
     let torrent_file = torrent_command_result(
         event_sender,
         RsbtCommandTorrentFileDownload { id, file_id },
-        RsbtCommand::TorrentFile,
+        RsbtCommand::TorrentFileDownloadHeader,
     )
     .await;
     match torrent_file {
