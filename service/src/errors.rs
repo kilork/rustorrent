@@ -81,6 +81,8 @@ pub enum RsbtError {
     TorrentNotFound(usize),
     #[fail(display = "torrent file with id {} not found", _0)]
     TorrentFileNotFound(usize),
+    #[fail(display = "torrent file range invalid")]
+    TorrentFileRangeInvalid { file_size: usize },
     #[fail(display = "torrent action not supported")]
     TorrentActionNotSupported,
     #[fail(display = "elapsed {}", _0)]

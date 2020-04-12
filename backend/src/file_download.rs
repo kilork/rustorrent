@@ -68,6 +68,14 @@ async fn torrent_file_download_head(
         Err(RsbtError::TorrentNotFound(_)) | Err(RsbtError::TorrentFileNotFound(_)) => {
             HttpResponse::NotFound().finish()
         }
+        Err(RsbtError::TorrentFileRangeInvalid { file_size }) => {
+            HttpResponse::RangeNotSatisfiable()
+                .header(
+                    http::header::CONTENT_RANGE,
+                    format!("bytes: */{}", file_size),
+                )
+                .finish()
+        }
         Err(_) => HttpResponse::InternalServerError().finish(),
     }
 }
@@ -92,26 +100,47 @@ async fn torrent_file_download(
     .await;
 
     match download_stream {
-        Ok(download_stream) => HttpResponse::Ok()
-            .keep_alive()
-            .no_chunking()
-            .set(http::header::ContentDisposition {
-                disposition: http::header::DispositionType::Attachment,
-                parameters: vec![http::header::DispositionParam::Filename(
-                    download_stream.name.clone(),
-                )],
-            })
-            .set_header(http::header::ACCEPT_RANGES, "bytes")
-            .content_length(download_stream.size as u64)
-            .streaming(download_stream.map_err(|x| {
-                actix_web::Error::from(HttpResponse::InternalServerError().json(Failure {
-                    error: format!("{}", x),
+        Ok(download_stream) => {
+            let mut response = if download_stream.range.is_some() {
+                HttpResponse::PartialContent()
+            } else {
+                HttpResponse::Ok()
+            };
+            if let Some(Range { start, end }) = download_stream.range {
+                response.set_header(
+                    http::header::CONTENT_RANGE,
+                    format!("bytes {}-{}/{}", start, end - 1, download_stream.file_size),
+                );
+            }
+            response
+                .keep_alive()
+                .no_chunking()
+                .set(http::header::ContentDisposition {
+                    disposition: http::header::DispositionType::Attachment,
+                    parameters: vec![http::header::DispositionParam::Filename(
+                        download_stream.name.clone(),
+                    )],
+                })
+                .set_header(http::header::ACCEPT_RANGES, "bytes")
+                .content_length(download_stream.size as u64)
+                .streaming(download_stream.map_err(|x| {
+                    actix_web::Error::from(HttpResponse::InternalServerError().json(Failure {
+                        error: format!("{}", x),
+                    }))
                 }))
-            })),
+        }
         Err(err @ RsbtError::TorrentNotFound(_)) | Err(err @ RsbtError::TorrentFileNotFound(_)) => {
             HttpResponse::NotFound().json(Failure {
                 error: format!("{}", err),
             })
+        }
+        Err(RsbtError::TorrentFileRangeInvalid { file_size }) => {
+            HttpResponse::RangeNotSatisfiable()
+                .header(
+                    http::header::CONTENT_RANGE,
+                    format!("bytes: */{}", file_size),
+                )
+                .finish()
         }
         Err(err) => HttpResponse::InternalServerError().json(Failure {
             error: format!("{}", err),

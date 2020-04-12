@@ -15,6 +15,7 @@ use std::{
     thread,
 };
 use std::{
+    ops::Range,
     pin::Pin,
     sync::{Arc, Mutex},
     task::{Context, Poll, Waker},
@@ -114,19 +115,6 @@ impl TorrentStorageState {
             .map_err(|x| x.into())
     }
 }
-
-#[derive(Debug)]
-pub struct RsbtFileDownloadStream {
-    pub name: String,
-    pub size: usize,
-    pub left: usize,
-    pub piece: usize,
-    pub piece_offset: usize,
-    torrent_process: Arc<TorrentProcess>,
-    state: RsbtFileDownloadState,
-    waker: Arc<Mutex<Option<Waker>>>,
-}
-
 enum RsbtFileDownloadState {
     Idle,
     SendQueryPiece(
@@ -140,6 +128,20 @@ impl std::fmt::Debug for RsbtFileDownloadState {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(f, "")
     }
+}
+
+#[derive(Debug)]
+pub struct RsbtFileDownloadStream {
+    pub name: String,
+    pub file_size: usize,
+    pub size: usize,
+    pub left: usize,
+    pub piece: usize,
+    pub piece_offset: usize,
+    pub range: Option<Range<usize>>,
+    torrent_process: Arc<TorrentProcess>,
+    state: RsbtFileDownloadState,
+    waker: Arc<Mutex<Option<Waker>>>,
 }
 
 impl Stream for RsbtFileDownloadStream {
@@ -387,16 +389,36 @@ impl TorrentStorage {
         self.message(TorrentStorageMessage::Files).await
     }
 
-    pub async fn download(&self, file_id: usize) -> Result<RsbtFileDownloadStream, RsbtError> {
+    pub async fn download(
+        &self,
+        file_id: usize,
+        range: Option<Range<usize>>,
+    ) -> Result<RsbtFileDownloadStream, RsbtError> {
         let file_info = self
             .message(|sender| TorrentStorageMessage::FileInfo { file_id, sender })
             .await?;
+        let file_size = file_info.file.length;
+        let (size, piece, piece_offset) = if let Some(Range { start, end }) = range {
+            if end > file_size {
+                return Err(RsbtError::TorrentFileRangeInvalid { file_size });
+            }
+            let range_len = end - start;
+            let piece_length = self.torrent_process.info.piece_length;
+            let mut piece_offset = file_info.piece_offset + start;
+            let piece = file_info.piece + piece_offset / piece_length;
+            piece_offset %= piece_length;
+            (range_len, piece, piece_offset)
+        } else {
+            (file_size, file_info.piece, file_info.piece_offset)
+        };
         Ok(RsbtFileDownloadStream {
             name: file_info.file.path.to_string_lossy().into(),
-            size: file_info.file.length,
-            left: file_info.file.length,
-            piece: file_info.piece,
-            piece_offset: file_info.piece_offset,
+            file_size,
+            size,
+            left: size,
+            piece,
+            piece_offset,
+            range,
             state: RsbtFileDownloadState::Idle,
             torrent_process: self.torrent_process.clone(),
             waker: Arc::new(Mutex::new(None)),

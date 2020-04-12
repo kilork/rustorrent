@@ -1,6 +1,6 @@
 use super::*;
 
-use std::{sync::Mutex, task::Waker};
+use std::{ops::Range, sync::Mutex, task::Waker};
 
 mod process_announce;
 mod process_peer_announced;
@@ -59,7 +59,9 @@ pub(crate) enum DownloadTorrentEvent {
     PeersView(RequestResponse<(), Result<Vec<RsbtPeerView>, RsbtError>>),
     AnnounceView(RequestResponse<(), Result<Vec<RsbtAnnounceView>, RsbtError>>),
     FilesView(RequestResponse<(), Result<Vec<RsbtFileView>, RsbtError>>),
-    FileDownload(RequestResponse<usize, Result<RsbtFileDownloadStream, RsbtError>>),
+    FileDownload(
+        RequestResponse<(usize, Option<Range<usize>>), Result<RsbtFileDownloadStream, RsbtError>>,
+    ),
     QueryPiece(RequestResponse<DownloadTorrentEventQueryPiece, Result<Vec<u8>, RsbtError>>),
 }
 
@@ -398,7 +400,8 @@ pub(crate) async fn download_torrent(
             }
             DownloadTorrentEvent::FileDownload(request_response) => {
                 debug!("processing file download");
-                let files_download = torrent_storage.download(*request_response.request()).await;
+                let (file_id, range) = request_response.request();
+                let files_download = torrent_storage.download(*file_id, range.clone()).await;
 
                 if let Err(err) = request_response.response(files_download) {
                     error!("cannot send response for download torrent: {}", err);
