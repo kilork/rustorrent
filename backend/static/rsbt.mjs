@@ -309,6 +309,11 @@ class TorrentService {
         window.open(`/api/torrent/${torrent_id}/file/${file_id}/download`, 'Download');
     }
 
+    pieces(input) {
+        let id = input.dataset.id;
+        window.open(`/sandbox/torrent/${id}/piece`, `Pieces ${id}`);
+    }
+
     fileActionInput(action, torrent_id, file) {
         return `<input type="button" class="button-primary file-action file-action-${action.id}" title="${action.title}" value="${action.icon}" onclick="torrentService.${action.method}(${torrent_id}, ${file.id})">`;
     }
@@ -350,6 +355,14 @@ class TorrentService {
         }, torrent);
     }
 
+    torrentActionPieces(torrent) {
+        return this.torrentActionInput({
+            id: 'pieces',
+            title: 'Pieces',
+            icon: '👀'
+        }, torrent);
+    }
+
     torrentStats(torrent) {
         return [
             `<div class="tip upload">${torrent.tx}</div>`,
@@ -366,6 +379,7 @@ class TorrentService {
             '<div class="torrent-actions">' + [
                 this.torrentActionActive(torrent),
                 this.torrentActionFiles(torrent),
+                this.torrentActionPieces(torrent),
                 this.torrentActionDelete(torrent)
             ].join('') + '</div>'
         ].map(value => `<td>${value}</td>`).join('')
