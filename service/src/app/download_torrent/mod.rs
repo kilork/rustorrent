@@ -415,10 +415,8 @@ pub(crate) async fn download_torrent(
                 let piece_bit = {
                     let state = torrent_storage.receiver.borrow();
                     let downloaded = state.downloaded.as_slice();
-                    debug!("query piece event: downloaded {:?}", downloaded);
                     bit_by_index(piece_index, downloaded)
                 };
-                debug!("query piece event: {:?}", piece_bit);
                 if piece_bit.is_some() {
                     debug!("query piece event: found, loading from storage");
                     match torrent_storage.load(piece_index).await {
@@ -453,12 +451,11 @@ pub(crate) async fn download_torrent(
                         }
                     }
                 }
-                error!("query piece event: register awaiter");
+                debug!("query piece event: register awaiter");
                 let awaiters = awaiting_for_piece
                     .entry(piece_index)
                     .or_insert_with(|| vec![]);
                 awaiters.push(request_response);
-                dbg!(&awaiters);
             }
         }
     }

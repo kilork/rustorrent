@@ -256,7 +256,6 @@ mod tests {
                 length: 1000,
             }],
         );
-        dbg!(&result);
         assert_eq!(result.len(), 10);
 
         let result = map_pieces_to_files(

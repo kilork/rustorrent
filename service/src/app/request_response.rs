@@ -9,6 +9,17 @@ pub enum RequestResponse<T, R> {
     },
 }
 
+impl<T: Display, R: Display> Display for RequestResponse<T, R> {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            RequestResponse::RequestOnly(_) => write!(f, "{}", self),
+            RequestResponse::Full { request, .. } => {
+                write!(f, "Full {{ request: {}, .. }}", request)
+            }
+        }
+    }
+}
+
 impl<T, R> RequestResponse<T, R> {
     pub fn new(request: T) -> (Self, oneshot::Receiver<R>) {
         let (sender, receiver) = oneshot::channel();
