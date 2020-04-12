@@ -221,7 +221,11 @@ class TorrentService {
                 message: errorMessage
             });
         } else {
-            alert(e);
+            let contextMessage = context !== undefined ? context() : undefined;
+            this.addError({
+                title: contextMessage,
+                message: `${e.message || e}`
+            });
         }
     }
 

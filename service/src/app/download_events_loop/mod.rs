@@ -1,6 +1,6 @@
 use super::*;
 use serde_with::skip_serializing_none;
-use std::path::PathBuf;
+use std::{ops::Range, path::PathBuf};
 
 mod action;
 mod add_torrent;
@@ -23,7 +23,7 @@ use download_torrent::TorrentDownloadState;
 use torrent_announces::torrent_announces;
 use torrent_detail::torrent_detail;
 use torrent_file_download::torrent_file_download;
-use torrent_files::torrent_files;
+use torrent_files::{torrent_file, torrent_files};
 use torrent_peers::torrent_peers;
 use torrent_pieces::torrent_pieces;
 
@@ -152,6 +152,7 @@ pub struct RsbtCommandTorrentDetail {
 pub struct RsbtCommandTorrentFileDownload {
     pub id: usize,
     pub file_id: usize,
+    pub range: Option<Range<usize>>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -161,10 +162,10 @@ pub struct RsbtAnnounceView {
 
 #[derive(Serialize, Clone, Debug)]
 pub struct RsbtFileView {
-    pub(crate) id: usize,
-    pub(crate) name: String,
-    pub(crate) saved: usize,
-    pub(crate) size: usize,
+    pub id: usize,
+    pub name: String,
+    pub saved: usize,
+    pub size: usize,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -242,6 +243,9 @@ pub enum RsbtCommand {
     ),
     TorrentFiles(RequestResponse<RsbtCommandTorrentFiles, Result<Vec<RsbtFileView>, RsbtError>>),
     TorrentPieces(RequestResponse<RsbtCommandTorrentPieces, Result<Vec<u8>, RsbtError>>),
+    TorrentFileDownloadHeader(
+        RequestResponse<RsbtCommandTorrentFileDownload, Result<RsbtFileView, RsbtError>>,
+    ),
     TorrentFileDownload(
         RequestResponse<RsbtCommandTorrentFileDownload, Result<RsbtFileDownloadStream, RsbtError>>,
     ),
@@ -334,6 +338,14 @@ pub(crate) async fn download_events_loop(
             RsbtCommand::TorrentFiles(request_response) => {
                 debug!("torrent's files");
                 let response = torrent_files(request_response.request(), &torrents).await;
+
+                if let Err(err) = request_response.response(response) {
+                    error!("cannot send response for torrent's files: {}", err);
+                }
+            }
+            RsbtCommand::TorrentFileDownloadHeader(request_response) => {
+                debug!("torrent's files");
+                let response = torrent_file(request_response.request(), &torrents).await;
 
                 if let Err(err) = request_response.response(response) {
                     error!("cannot send response for torrent's files: {}", err);

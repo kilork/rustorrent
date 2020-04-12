@@ -197,6 +197,7 @@
 
 #modal-delete .modal-content {
     margin-top: 2em;
+    padding: 0 2em;
 }
 
 .modal-inner.modal-reveal {

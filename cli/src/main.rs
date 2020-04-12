@@ -46,7 +46,7 @@ async fn main() -> Result<(), ExitFailure> {
     Ok(())
 }
 
-fn load_settings() -> std::io::Result<Settings> {
+fn load_settings() -> Result<Settings, confy::ConfyError> {
     debug!("loading settings");
 
     confy::load(env!("CARGO_PKG_NAME"))

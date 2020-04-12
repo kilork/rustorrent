@@ -8,13 +8,20 @@ use actix::prelude::*;
 use actix_identity::{CookieIdentityPolicy, Identity, IdentityService};
 use actix_multipart::Multipart;
 use actix_web::{
-    dev::Payload, error::ErrorUnauthorized, http, middleware, web, App, Error, FromRequest,
-    HttpRequest, HttpResponse, HttpServer, Responder,
+    body::{Body, BodySize, MessageBody},
+    dev::Payload,
+    error::ErrorUnauthorized,
+    http, middleware, web, App, Error, FromRequest, HttpRequest, HttpResponse, HttpServer,
+    Responder,
 };
 use bytes::Bytes;
 use dotenv::dotenv;
 use exitfailure::ExitFailure;
-use futures::{future::abortable, stream::select_all, StreamExt};
+use futures::{
+    future::abortable,
+    stream::{select_all, TryStreamExt},
+    StreamExt,
+};
 use log::{debug, error, info, trace};
 use openid::{DiscoveredClient, Options, Token, Userinfo};
 use reqwest;
@@ -44,6 +51,7 @@ use url::Url;
 
 mod cli;
 mod event_stream;
+mod file_download;
 mod login;
 mod model;
 #[cfg(feature = "sandbox")]
@@ -53,6 +61,7 @@ mod torrents;
 mod uploads;
 
 use event_stream::*;
+use file_download::*;
 use login::*;
 #[cfg(feature = "sandbox")]
 use sandbox::*;
@@ -182,6 +191,7 @@ async fn main() -> Result<(), ExitFailure> {
                     .service(torrent_announce_list)
                     .service(torrent_file_list)
                     .service(torrent_piece_list)
+                    .service(torrent_file_download_head)
                     .service(torrent_file_download)
                     .service(upload)
                     .service(account)
