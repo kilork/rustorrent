@@ -466,7 +466,7 @@ fn torrent_storage_message_loop(
                         }
                     }
 
-                    while state.downloaded.len() <= index {
+                    while state.downloaded.len() <= block_index {
                         state.downloaded.push(0);
                     }
                     if state.downloaded[block_index] & bit == 0 {

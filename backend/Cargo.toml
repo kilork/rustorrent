@@ -8,7 +8,7 @@ edition = "2018"
 
 default = [ "sandbox" ]
 
-ui = ["rsbt-frontend"]
+ui = ["rsbt-frontend", "actix-web-static-files"]
 sandbox = []
 
 [dependencies]
@@ -18,7 +18,7 @@ actix-multipart = "0.2"
 actix-rt = "1.1"
 actix-service = "1.0"
 actix-web = { version = "2.0", features = ["rustls"] }
-actix-web-static-files = "2"
+actix-web-static-files = { version = "2", optional = true }
 bytes = "0.5"
 dotenv = "0.15"
 dirs = "2"
