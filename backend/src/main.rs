@@ -134,7 +134,7 @@ async fn main() -> Result<(), ExitFailure> {
 
     let (broadcaster, mut broadcaster_sender) = init_broadcaster();
 
-    let mut download_events_sender = init_rsbt_app(rsbt_app);
+    let mut rsbt_command_sender = init_rsbt_app(rsbt_app);
 
     for torrent in current_torrents.torrents {
         let torrent_path = storage_path.join(&torrent.file);
@@ -148,7 +148,7 @@ async fn main() -> Result<(), ExitFailure> {
                 state: torrent.state,
             });
 
-            download_events_sender
+            rsbt_command_sender
                 .send(RsbtCommand::AddTorrent(request_response))
                 .await
                 .map_err(RsbtError::from)?;
@@ -164,7 +164,7 @@ async fn main() -> Result<(), ExitFailure> {
         }
     }
 
-    let sender = web::Data::new(download_events_sender);
+    let sender = web::Data::new(rsbt_command_sender);
     let broadcaster_sender = web::Data::new(broadcaster_sender);
 
     HttpServer::new(move || {
@@ -233,22 +233,21 @@ async fn main() -> Result<(), ExitFailure> {
 }
 
 fn init_rsbt_app(rsbt_app: RsbtApp) -> Sender<RsbtCommand> {
-    let (download_events_sender, download_events_receiver) =
+    let (command_sender, command_receiver) =
         mpsc::channel(rsbt_service::DEFAULT_CHANNEL_BUFFER);
 
-    let download_events_task_sender = download_events_sender.clone();
+    let command_task_sender = command_sender.clone();
 
-    let rsbt_app_task = async move {
+    Arbiter::spawn(async move {
         if let Err(err) = rsbt_app
-            .processing_loop(download_events_task_sender, download_events_receiver)
+            .processing_loop(command_task_sender, command_receiver)
             .await
         {
             error!("problem detected: {}", err);
         }
-    };
-    Arbiter::spawn(rsbt_app_task);
+    });
 
-    download_events_sender
+    command_sender
 }
 enum BroadcasterMessage {
     Send(TorrentEvent),
