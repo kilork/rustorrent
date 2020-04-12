@@ -11,14 +11,12 @@ use flat_storage::FlatStorage;
 use flat_storage_mmap::{FileInfo, MmapFlatStorage};
 use futures::future::BoxFuture;
 use std::{
-    io::{Read, Write},
-    thread,
-};
-use std::{
+    io::Read,
     ops::Range,
     pin::Pin,
     sync::{Arc, Mutex},
     task::{Context, Poll, Waker},
+    thread,
 };
 use tokio::{
     fs::{self, File},

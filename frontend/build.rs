@@ -1,9 +1,9 @@
-use actix_web_static_files;
-use std::{env, path::Path};
-
 fn main() {
     #[cfg(feature = "ui")]
     {
+        use actix_web_static_files;
+        use std::{env, path::Path};
+
         let out_dir = env::var("OUT_DIR").unwrap();
 
         let generated_files = Path::new(&out_dir).join("generated_www.rs");
