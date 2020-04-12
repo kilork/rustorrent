@@ -12,9 +12,10 @@ pub(crate) async fn torrent_file(
     request: &RsbtCommandTorrentFileDownload,
     torrents: &[TorrentDownload],
 ) -> Result<RsbtFileView, RsbtError> {
-    let torrent = find_torrent(torrents, request.id)?;
+    let RsbtCommandTorrentFileDownload { id, file_id, range } = request;
+    let torrent = find_torrent(torrents, *id)?;
     let files = torrent.files().await?;
-    let file_id = request.file_id;
+    let file_id = *file_id;
     files
         .into_iter()
         .find(|x| x.id == file_id)

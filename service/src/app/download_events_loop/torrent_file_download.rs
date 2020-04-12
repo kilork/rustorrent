@@ -4,8 +4,9 @@ pub(crate) async fn torrent_file_download(
     request: &RsbtCommandTorrentFileDownload,
     torrents: &[TorrentDownload],
 ) -> Result<RsbtFileDownloadStream, RsbtError> {
-    let torrent = find_torrent(torrents, request.id)?;
-    torrent.download_file(request.file_id).await
+    let RsbtCommandTorrentFileDownload { id, file_id, range } = request;
+    let torrent = find_torrent(torrents, *id)?;
+    torrent.download_file(*file_id).await
 }
 
 impl TorrentDownload {

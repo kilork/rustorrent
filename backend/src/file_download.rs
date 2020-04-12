@@ -1,4 +1,5 @@
 use super::*;
+use std::ops::Range;
 
 struct SizedBody(usize);
 
@@ -12,8 +13,35 @@ impl MessageBody for SizedBody {
     }
 }
 
+const RANGE_BYTES_PREFIX: &str = "bytes=";
+
+fn range(request: &HttpRequest) -> Option<Range<usize>> {
+    if let Some(range_header) = request
+        .headers()
+        .get(&http::header::RANGE)
+        .map(|x| x.to_str().ok())
+        .flatten()
+        .filter(|x| x.starts_with(RANGE_BYTES_PREFIX))
+        .map(|x| &x[RANGE_BYTES_PREFIX.len()..])
+    {
+        if let [Ok(start), Ok(end)] = range_header
+            .split('-')
+            .map(&str::parse)
+            .collect::<Vec<Result<usize, _>>>()
+            .as_slice()
+        {
+            return Some(Range {
+                start: *start,
+                end: end + 1,
+            });
+        }
+    }
+    None
+}
+
 #[head("/torrent/{id}/file/{file_id}/download")]
 async fn torrent_file_download_head(
+    request: HttpRequest,
     event_sender: web::Data<Sender<RsbtCommand>>,
     ids: web::Path<(usize, usize)>,
     _user: User,
@@ -21,16 +49,20 @@ async fn torrent_file_download_head(
     let (id, file_id) = *ids;
     let torrent_file = torrent_command_result(
         event_sender,
-        RsbtCommandTorrentFileDownload { id, file_id },
+        RsbtCommandTorrentFileDownload {
+            id,
+            file_id,
+            range: range(&request),
+        },
         RsbtCommand::TorrentFileDownloadHeader,
     )
     .await;
     match torrent_file {
         Ok(torrent_file) => HttpResponse::Ok()
-            .set_header(
-                http::header::CONTENT_DISPOSITION,
-                format!("attachment; filename=\"{}\"", torrent_file.name),
-            )
+            .set(http::header::ContentDisposition {
+                disposition: http::header::DispositionType::Attachment,
+                parameters: vec![http::header::DispositionParam::Filename(torrent_file.name)],
+            })
             .set_header(http::header::ACCEPT_RANGES, "bytes")
             .body(Body::from_message(SizedBody(torrent_file.size))),
         Err(RsbtError::TorrentNotFound(_)) | Err(RsbtError::TorrentFileNotFound(_)) => {
@@ -42,6 +74,7 @@ async fn torrent_file_download_head(
 
 #[get("/torrent/{id}/file/{file_id}/download")]
 async fn torrent_file_download(
+    request: HttpRequest,
     event_sender: web::Data<Sender<RsbtCommand>>,
     ids: web::Path<(usize, usize)>,
     _user: User,
@@ -49,7 +82,11 @@ async fn torrent_file_download(
     let (id, file_id) = *ids;
     let download_stream = torrent_command_result(
         event_sender,
-        RsbtCommandTorrentFileDownload { id, file_id },
+        RsbtCommandTorrentFileDownload {
+            id,
+            file_id,
+            range: range(&request),
+        },
         RsbtCommand::TorrentFileDownload,
     )
     .await;
@@ -58,10 +95,13 @@ async fn torrent_file_download(
         Ok(download_stream) => HttpResponse::Ok()
             .keep_alive()
             .no_chunking()
-            .set_header(
-                http::header::CONTENT_DISPOSITION,
-                format!("attachment; filename=\"{}\"", download_stream.name),
-            )
+            .set(http::header::ContentDisposition {
+                disposition: http::header::DispositionType::Attachment,
+                parameters: vec![http::header::DispositionParam::Filename(
+                    download_stream.name.clone(),
+                )],
+            })
+            .set_header(http::header::ACCEPT_RANGES, "bytes")
             .content_length(download_stream.size as u64)
             .streaming(download_stream.map_err(|x| {
                 actix_web::Error::from(HttpResponse::InternalServerError().json(Failure {

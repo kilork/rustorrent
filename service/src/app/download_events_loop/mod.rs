@@ -1,6 +1,6 @@
 use super::*;
 use serde_with::skip_serializing_none;
-use std::path::PathBuf;
+use std::{ops::Range, path::PathBuf};
 
 mod action;
 mod add_torrent;
@@ -152,6 +152,7 @@ pub struct RsbtCommandTorrentDetail {
 pub struct RsbtCommandTorrentFileDownload {
     pub id: usize,
     pub file_id: usize,
+    pub range: Option<Range<usize>>,
 }
 
 #[derive(Serialize, Clone, Debug)]
