@@ -4,7 +4,6 @@ use crate::{
     types::{Handshake, Peer},
     RsbtError,
 };
-use futures::prelude::*;
 use log::error;
 use std::{convert::TryInto, net::SocketAddr, sync::Arc};
 use tokio::{net::TcpStream, prelude::*};

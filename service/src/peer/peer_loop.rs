@@ -1,26 +1,16 @@
 use crate::{
-    event::{TorrentDownloadMode, TorrentEvent, TorrentEventQueryPiece, TorrentStatisticMessage},
-    peer::{
-        connect_to_peer, request_message, PeerLoopMessage, PeerMessage, PeerState, TorrentPeerState,
-    },
+    event::{TorrentEvent, TorrentStatisticMessage},
+    peer::{request_message, PeerLoopMessage, PeerMessage},
     process::TorrentToken,
-    request_response::RequestResponse,
-    spawn_and_log_error,
-    storage::TorrentStorage,
-    types::{Message, MessageCodec, Peer},
-    RsbtError, DEFAULT_CHANNEL_BUFFER,
+    types::{Message, MessageCodec},
+    RsbtError,
 };
-use futures::{
-    future::{join, try_join, AbortHandle, Abortable},
-    prelude::*,
-    stream::SplitSink,
-    StreamExt,
-};
+use futures::{future::try_join, prelude::*, StreamExt};
 use log::{debug, error};
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 use tokio::{
     net::TcpStream,
-    sync::mpsc::{self, Receiver, Sender},
+    sync::mpsc::{Receiver, Sender},
 };
 use tokio_util::codec::Framed;
 use uuid::Uuid;

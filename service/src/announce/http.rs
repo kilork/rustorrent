@@ -1,5 +1,4 @@
 use crate::{
-    announce::{http, udp, Announce},
     errors::RsbtError,
     event::TorrentEvent,
     process::TorrentToken,
@@ -9,9 +8,8 @@ use crate::{
 use http_body::Body;
 use hyper::Client;
 use log::{debug, error};
-use percent_encoding::{percent_encode, percent_encode_byte, NON_ALPHANUMERIC};
+use percent_encoding::percent_encode_byte;
 use std::{convert::TryInto, sync::Arc, time::Duration};
-use tokio::time::delay_for;
 
 fn url_encode(data: &[u8]) -> String {
     data.iter()

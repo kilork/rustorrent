@@ -10,17 +10,12 @@ use crate::{
     RsbtError, DEFAULT_CHANNEL_BUFFER,
 };
 use flat_storage::{bit_by_index, index_in_bitarray};
-use futures::{
-    future::{join, try_join, AbortHandle, Abortable},
-    prelude::*,
-    stream::SplitSink,
-    StreamExt,
-};
+use futures::future::AbortHandle;
 use log::{debug, error};
 use std::{collections::HashMap, sync::Arc, time::Instant};
 use tokio::{
     net::TcpStream,
-    sync::mpsc::{self, Receiver, Sender},
+    sync::mpsc::{self, Sender},
 };
 use uuid::Uuid;
 

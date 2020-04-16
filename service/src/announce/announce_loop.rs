@@ -1,10 +1,8 @@
 use crate::{
     announce::{http, udp, Announce},
     errors::RsbtError,
-    event::TorrentEvent,
     process::TorrentToken,
     types::Properties,
-    PEER_ID,
 };
 use log::{debug, error};
 use std::{sync::Arc, time::Duration};

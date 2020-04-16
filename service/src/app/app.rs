@@ -22,7 +22,6 @@ use crate::{
 };
 use futures::{future::join, prelude::*};
 use log::{debug, error};
-use sha1::Digest;
 use std::{
     net::SocketAddr,
     path::{Path, PathBuf},

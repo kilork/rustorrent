@@ -26,17 +26,16 @@ use tokio::sync::{
 
 pub(crate) async fn torrent_event_loop(
     properties: Arc<Properties>,
-    mut torrent_storage: TorrentStorage,
+    torrent_storage: TorrentStorage,
     torrent_process: Arc<TorrentToken>,
     mut broker_receiver: Receiver<TorrentEvent>,
 ) {
-    let mut peer_states = HashMap::new();
-    let mut mode = TorrentDownloadMode::Normal;
-    let mut active = false;
-    let mut announce_abort_handle = None;
-    let mut awaiting_for_piece = HashMap::new();
+    let peer_states = HashMap::new();
+    let mode = TorrentDownloadMode::Normal;
+    let announce_abort_handle = None;
+    let awaiting_for_piece = HashMap::new();
 
-    let (mut statistic_sender, mut statistic_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
+    let (statistic_sender, mut statistic_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
     let mut torrent_download_state = {
         let storage_state = torrent_storage.receiver.borrow();
@@ -51,7 +50,7 @@ pub(crate) async fn torrent_event_loop(
         torrent_process,
         peer_states,
         mode,
-        active,
+        active: false,
         announce_abort_handle,
         awaiting_for_piece,
         statistic_sender,
@@ -190,7 +189,7 @@ pub(crate) async fn torrent_event_loop(
                 }
             }
             TorrentEvent::Enable(request_response) => {
-                if active {
+                if peer_manager.active {
                     if let Err(err) = request_response.response(Ok(())) {
                         error!("cannot send response for disable torrent: {}", err);
                     }
@@ -214,10 +213,10 @@ pub(crate) async fn torrent_event_loop(
                 if let Err(err) = request_response.response(Ok(())) {
                     error!("cannot send response for enable torrent: {}", err);
                 }
-                active = true;
+                peer_manager.active = true;
             }
             TorrentEvent::Disable(request_response) => {
-                if !active {
+                if !peer_manager.active {
                     if let Err(err) = request_response.response(Ok(())) {
                         error!("cannot send response for disable torrent: {}", err);
                     }
@@ -248,7 +247,7 @@ pub(crate) async fn torrent_event_loop(
                 if let Err(err) = request_response.response(Ok(())) {
                     error!("cannot send response for disable torrent: {}", err);
                 }
-                active = false;
+                peer_manager.active = false;
             }
             TorrentEvent::Subscribe(request_response) => {
                 if let Err(err) = peer_manager
