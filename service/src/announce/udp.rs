@@ -1,14 +1,19 @@
-use super::*;
 use crate::types::udp_tracker::{
     UdpTrackerCodec, UdpTrackerRequest, UdpTrackerResponse, UdpTrackerResponseData,
 };
+use crate::{errors::RsbtError, event::TorrentEvent, process::TorrentToken, types::Properties};
+use futures::{SinkExt, StreamExt};
+use log::{debug, error};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
+use tokio::net::UdpSocket;
 use tokio::{net::lookup_host, time};
+use tokio_util::udp::UdpFramed;
 
 const UDP_PREFIX: &str = "udp://";
 
 pub(crate) async fn udp_announce(
     properties: Arc<Properties>,
-    torrent_process: Arc<TorrentProcess>,
+    torrent_process: Arc<TorrentToken>,
     announce_url: &str,
 ) -> Result<Duration, RsbtError> {
     let addr = SocketAddr::new(properties.listen, properties.port);
@@ -72,7 +77,7 @@ pub(crate) async fn udp_announce(
                             torrent_process
                                 .broker_sender
                                 .clone()
-                                .send(DownloadTorrentEvent::Announce(peers))
+                                .send(TorrentEvent::Announce(peers))
                                 .await?;
                             return Ok(Duration::from_secs(interval as u64));
                         }

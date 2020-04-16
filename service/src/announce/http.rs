@@ -1,4 +1,17 @@
-use super::*;
+use crate::{
+    announce::{http, udp, Announce},
+    errors::RsbtError,
+    event::TorrentEvent,
+    process::TorrentToken,
+    types::{Properties, TrackerAnnounce},
+    PEER_ID,
+};
+use http_body::Body;
+use hyper::Client;
+use log::{debug, error};
+use percent_encoding::{percent_encode, percent_encode_byte, NON_ALPHANUMERIC};
+use std::{convert::TryInto, sync::Arc, time::Duration};
+use tokio::time::delay_for;
 
 fn url_encode(data: &[u8]) -> String {
     data.iter()
@@ -8,7 +21,7 @@ fn url_encode(data: &[u8]) -> String {
 
 pub(crate) async fn http_announce(
     properties: Arc<Properties>,
-    torrent_process: Arc<TorrentProcess>,
+    torrent_process: Arc<TorrentToken>,
     announce_url: &str,
 ) -> Result<Duration, RsbtError> {
     let client: Client<_> = Client::new();
@@ -68,7 +81,7 @@ pub(crate) async fn http_announce(
             torrent_process
                 .broker_sender
                 .clone()
-                .send(DownloadTorrentEvent::Announce(tracker_announce.peers))
+                .send(TorrentEvent::Announce(tracker_announce.peers))
                 .await?;
             Duration::from_secs(interval_to_reannounce)
         }

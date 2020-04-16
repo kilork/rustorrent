@@ -1,10 +1,7 @@
 use env_logger::Builder as LoggerBuilder;
 use exitfailure::ExitFailure;
 use log::{debug, info, Level};
-use rsbt_service::{
-    app::RsbtApp,
-    types::{Properties, Settings},
-};
+use rsbt_service::{RsbtApp, RsbtProperties, RsbtSettings};
 
 mod cli;
 
@@ -31,7 +28,7 @@ async fn main() -> Result<(), ExitFailure> {
 
     info!("starting torrent client");
 
-    let properties: Properties = (
+    let properties: RsbtProperties = (
         load_settings()?.override_with(cli.config),
         rsbt_service::default_app_dir(),
     )
@@ -39,14 +36,14 @@ async fn main() -> Result<(), ExitFailure> {
 
     debug!("calculated properties {:#?}", properties);
 
-    let app = RsbtApp::new(properties);
+    let mut app = RsbtApp::new(properties);
 
     app.download(cli.torrent).await?;
 
     Ok(())
 }
 
-fn load_settings() -> Result<Settings, confy::ConfyError> {
+fn load_settings() -> Result<RsbtSettings, confy::ConfyError> {
     debug!("loading settings");
 
     confy::load(env!("CARGO_PKG_NAME"))

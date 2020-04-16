@@ -1,4 +1,4 @@
-use crate::types::message::Message;
+use crate::types::Message;
 use nom::number::streaming::*;
 use nom::*;
 

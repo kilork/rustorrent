@@ -1,7 +1,4 @@
-use crate::types::{
-    peer::Peer,
-    udp_tracker::{UdpTrackerResponse, UdpTrackerResponseData, UdpTrackerScrape},
-};
+use crate::types::{Peer, UdpTrackerResponse, UdpTrackerResponseData, UdpTrackerScrape};
 use nom::combinator::map;
 use nom::*;
 use nom::{bytes::complete::take, number::complete::*};

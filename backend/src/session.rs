@@ -1,5 +1,4 @@
 use super::*;
-use rsbt_service::types::Properties;
 
 pub(crate) struct Sessions {
     local: bool,
@@ -8,7 +7,7 @@ pub(crate) struct Sessions {
 }
 
 impl Sessions {
-    pub(crate) async fn new(properties: &Properties, local: bool) -> Result<Self, ExitFailure> {
+    pub(crate) async fn new(properties: &RsbtProperties, local: bool) -> Result<Self, ExitFailure> {
         Ok(Self {
             local,
             storage_path: None,

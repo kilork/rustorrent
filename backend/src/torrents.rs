@@ -60,7 +60,7 @@ async fn torrent_list(
     event_sender: web::Data<Sender<RsbtCommand>>,
     _user: User,
 ) -> impl Responder {
-    let (request_response, receiver) = RequestResponse::new(());
+    let (request_response, receiver) = RsbtRequestResponse::new(());
 
     {
         let mut event_sender = event_sender.as_ref().clone();
@@ -78,7 +78,7 @@ async fn torrent_list(
     match receiver.await {
         Ok(Ok(mut torrents)) => {
             {
-                type TD<'a> = &'a TorrentDownloadView;
+                type TD<'a> = &'a RsbtTorrentDownloadView;
                 let mut fields_order: Box<dyn Fn(TD, TD) -> Ordering> =
                     Box::new(|_, _| Ordering::Equal);
                 let mut sorted_fields = paging
@@ -143,7 +143,7 @@ async fn torrent_create_action(
     body: web::Json<Action>,
     _user: User,
 ) -> impl Responder {
-    let (request_response, receiver) = RequestResponse::new(RsbtCommandTorrentAction {
+    let (request_response, receiver) = RsbtRequestResponse::new(RsbtCommandTorrentAction {
         id: *id,
         action: body.action,
     });
@@ -201,7 +201,7 @@ async fn torrent_delete(
     }
 
     let (delete_request_response, delete_response) =
-        RequestResponse::new(RsbtCommandDeleteTorrent {
+        RsbtRequestResponse::new(RsbtCommandDeleteTorrent {
             id: *id,
             files: query.files,
         });
@@ -234,15 +234,15 @@ pub(crate) async fn torrent_command_result<T, F, R>(
     cmd: F,
 ) -> Result<R, RsbtError>
 where
-    F: FnOnce(RequestResponse<T, Result<R, RsbtError>>) -> RsbtCommand,
+    F: FnOnce(RsbtRequestResponse<T, Result<R, RsbtError>>) -> RsbtCommand,
 {
-    let (request_response, receiver) = RequestResponse::new(data);
+    let (request_response, receiver) = RsbtRequestResponse::new(data);
 
     {
         let mut event_sender = event_sender.as_ref().clone();
         if let Err(err) = event_sender.send(cmd(request_response)).await {
             error!("cannot send to torrent process: {}", err);
-            return Err(RsbtError::SendToTorrentProcess(err));
+            return Err(RsbtError::SendToTorrentToken(err));
         }
     }
 
@@ -255,7 +255,7 @@ async fn torrent_command<T, F, R: Serialize>(
     cmd: F,
 ) -> impl Responder
 where
-    F: FnOnce(RequestResponse<T, Result<R, RsbtError>>) -> RsbtCommand,
+    F: FnOnce(RsbtRequestResponse<T, Result<R, RsbtError>>) -> RsbtCommand,
 {
     let result = torrent_command_result(event_sender, data, cmd).await;
     match result {
