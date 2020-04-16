@@ -18,10 +18,10 @@ async fn upload(
             torrent.extend(&data);
         }
 
-        let (request_response, receiver) = RequestResponse::new(RsbtCommandAddTorrent {
+        let (request_response, receiver) = RsbtRequestResponse::new(RsbtCommandAddTorrent {
             data: torrent,
             filename: filename.to_string(),
-            state: TorrentDownloadStatus::Enabled,
+            state: RsbtTorrentProcessStatus::Enabled,
         });
         {
             let mut event_sender = event_sender.as_ref().clone();
@@ -38,7 +38,7 @@ async fn upload(
 
         return Ok(match receiver.await {
             Ok(Ok(ref torrent)) => {
-                let torrent_view: TorrentDownloadView = torrent.into();
+                let torrent_view: RsbtTorrentDownloadView = torrent.into();
                 if let Err(err) = broadcaster_sender
                     .as_ref()
                     .clone()

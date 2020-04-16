@@ -1,5 +1,4 @@
-use super::*;
-use crate::types::peer::Handshake;
+use crate::{types::Handshake, RsbtError};
 use nom::*;
 
 use std::convert::TryInto;

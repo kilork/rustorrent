@@ -1,6 +1,6 @@
 use flat_storage::FlatStorageFile as TorrentInfoFile;
-use rsbt_service::types::torrent::Torrent;
 use rsbt_service::RsbtError;
+use rsbt_service::RsbtTorrent;
 
 use std::convert::TryInto;
 use std::path::PathBuf;
@@ -8,7 +8,7 @@ use std::path::PathBuf;
 #[test]
 fn parse_plan_9_torrent() -> Result<(), RsbtError> {
     let torrent_bytes = include_bytes!("Plan_9_from_Outer_Space_1959_archive.torrent");
-    let torrent: Torrent = torrent_bytes.to_vec().try_into()?;
+    let torrent: RsbtTorrent = torrent_bytes.to_vec().try_into()?;
 
     let info = torrent.info()?;
 
@@ -80,7 +80,7 @@ fn parse_plan_9_torrent() -> Result<(), RsbtError> {
 #[test]
 fn parse_ferris_torrent() -> Result<(), RsbtError> {
     let torrent_bytes = include_bytes!("ferris.gif.torrent");
-    let torrent: Torrent = torrent_bytes.to_vec().try_into()?;
+    let torrent: RsbtTorrent = torrent_bytes.to_vec().try_into()?;
 
     let info = torrent.info()?;
 

@@ -1,5 +1,5 @@
 use clap_verbosity_flag::Verbosity;
-use rsbt_service::types::Config;
+use rsbt_service::RsbtConfig;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -12,7 +12,7 @@ pub(crate) struct Cli {
     #[structopt(flatten)]
     pub verbose: Verbosity,
     #[structopt(flatten)]
-    pub config: Config,
+    pub config: RsbtConfig,
 }
 
 pub(crate) fn from_args() -> Cli {

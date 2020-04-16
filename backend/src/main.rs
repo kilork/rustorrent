@@ -26,9 +26,12 @@ use log::{debug, error, info, trace};
 use openid::{DiscoveredClient, Options, Token, Userinfo};
 use reqwest;
 use rsbt_service::{
-    app::{events::TorrentEvent, *},
-    types::*,
-    RsbtError,
+    RsbtApp, RsbtCommand, RsbtCommandAddTorrent, RsbtCommandDeleteTorrent,
+    RsbtCommandTorrentAction, RsbtCommandTorrentAnnounce, RsbtCommandTorrentDetail,
+    RsbtCommandTorrentFileDownload, RsbtCommandTorrentFiles, RsbtCommandTorrentPeers,
+    RsbtCommandTorrentPieces, RsbtError, RsbtProperties, RsbtRequestResponse, RsbtSettings,
+    RsbtTorrentAction, RsbtTorrentDownloadView, RsbtTorrentProcess, RsbtTorrentProcessStatus,
+    RsbtTorrentStatisticsEvent,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -87,10 +90,10 @@ fn host(path: &str) -> String {
     RSBT_UI_HOST.clone() + path
 }
 
-async fn load_settings<P: AsRef<Path>>(config_path: P) -> Result<Settings, std::io::Error> {
+async fn load_settings<P: AsRef<Path>>(config_path: P) -> Result<RsbtSettings, std::io::Error> {
     let config_file = config_path.as_ref().join("rsbt.toml");
     if !config_file.is_file() {
-        return Ok(Settings::default());
+        return Ok(RsbtSettings::default());
     }
     let config_file = fs::read_to_string(config_file).await?;
     Ok(toml::from_str(&config_file)?)
@@ -134,7 +137,7 @@ async fn main() -> Result<(), ExitFailure> {
 
     let (broadcaster, mut broadcaster_sender) = init_broadcaster();
 
-    let mut download_events_sender = init_rsbt_app(rsbt_app);
+    let mut rsbt_command_sender = init_rsbt_app(rsbt_app);
 
     for torrent in current_torrents.torrents {
         let torrent_path = storage_path.join(&torrent.file);
@@ -142,13 +145,13 @@ async fn main() -> Result<(), ExitFailure> {
         if torrent_path.exists() {
             let data = fs::read(&torrent_path).await?;
 
-            let (request_response, receiver) = RequestResponse::new(RsbtCommandAddTorrent {
+            let (request_response, receiver) = RsbtRequestResponse::new(RsbtCommandAddTorrent {
                 data,
                 filename: torrent.file,
                 state: torrent.state,
             });
 
-            download_events_sender
+            rsbt_command_sender
                 .send(RsbtCommand::AddTorrent(request_response))
                 .await
                 .map_err(RsbtError::from)?;
@@ -164,7 +167,7 @@ async fn main() -> Result<(), ExitFailure> {
         }
     }
 
-    let sender = web::Data::new(download_events_sender);
+    let sender = web::Data::new(rsbt_command_sender);
     let broadcaster_sender = web::Data::new(broadcaster_sender);
 
     HttpServer::new(move || {
@@ -232,27 +235,25 @@ async fn main() -> Result<(), ExitFailure> {
     Ok(())
 }
 
-fn init_rsbt_app(rsbt_app: RsbtApp) -> Sender<RsbtCommand> {
-    let (download_events_sender, download_events_receiver) =
-        mpsc::channel(rsbt_service::DEFAULT_CHANNEL_BUFFER);
+fn init_rsbt_app(mut rsbt_app: RsbtApp) -> Sender<RsbtCommand> {
+    let (command_sender, command_receiver) = mpsc::channel(rsbt_service::DEFAULT_CHANNEL_BUFFER);
 
-    let download_events_task_sender = download_events_sender.clone();
+    let command_task_sender = command_sender.clone();
 
-    let rsbt_app_task = async move {
+    Arbiter::spawn(async move {
         if let Err(err) = rsbt_app
-            .processing_loop(download_events_task_sender, download_events_receiver)
+            .processing_loop(command_task_sender, command_receiver)
             .await
         {
             error!("problem detected: {}", err);
         }
-    };
-    Arbiter::spawn(rsbt_app_task);
+    });
 
-    download_events_sender
+    command_sender
 }
 enum BroadcasterMessage {
-    Send(TorrentEvent),
-    Subscribe(TorrentDownload),
+    Send(RsbtTorrentStatisticsEvent),
+    Subscribe(RsbtTorrentProcess),
     Unsubscribe(usize),
 }
 
@@ -283,7 +284,7 @@ fn init_broadcaster() -> (web::Data<Broadcaster>, Sender<BroadcasterMessage>) {
                         let mut messages = select_all(vec![
                             torrent_download
                                 .storage_state_watch
-                                .map(move |x| TorrentEvent::Storage {
+                                .map(move |x| RsbtTorrentStatisticsEvent::Storage {
                                     id,
                                     read: x.bytes_read,
                                     write: x.bytes_write,
@@ -292,7 +293,7 @@ fn init_broadcaster() -> (web::Data<Broadcaster>, Sender<BroadcasterMessage>) {
                                 .boxed(),
                             torrent_download
                                 .statistics_watch
-                                .map(move |x| TorrentEvent::Stat {
+                                .map(move |x| RsbtTorrentStatisticsEvent::Stat {
                                     id,
                                     tx: x.uploaded,
                                     rx: x.downloaded,

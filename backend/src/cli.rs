@@ -1,4 +1,4 @@
-use rsbt_service::types::Config;
+use rsbt_service::RsbtConfig;
 use structopt::StructOpt;
 
 /// RSBT Web UI.
@@ -8,7 +8,7 @@ pub(crate) struct Cli {
     #[structopt(long)]
     pub(crate) config_path: Option<String>,
     #[structopt(flatten)]
-    pub(crate) config: Config,
+    pub(crate) config: RsbtConfig,
     /// Do not save session cookie to storage.
     #[structopt(long)]
     pub(crate) no_session_cookie: bool,

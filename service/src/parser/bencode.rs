@@ -1,5 +1,7 @@
-use super::*;
-use crate::types::{BencodeBlob, BencodeValue};
+use crate::{
+    types::{BencodeBlob, BencodeValue},
+    RsbtError,
+};
 use nom::character::complete::digit1;
 use nom::*;
 

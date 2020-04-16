@@ -1,6 +1,5 @@
-use super::*;
-use crate::parser::parse_bencode;
-use std::convert::TryInto;
+use crate::{errors::TryFromBencode, parser::parse_bencode, RsbtError};
+use std::convert::{TryFrom, TryInto};
 use std::net::IpAddr;
 
 #[derive(Debug, PartialEq, Clone)]

@@ -1,50 +1,43 @@
-use futures::{
-    future::{join, try_join, AbortHandle, Abortable},
-    prelude::*,
-    stream::SplitSink,
-};
-use http_body::Body;
-use hyper::Client;
-use log::{debug, error};
-use percent_encoding::{percent_encode, percent_encode_byte, NON_ALPHANUMERIC};
-use serde::{Deserialize, Serialize};
-use sha1::{Digest, Sha1};
-use std::{
-    collections::HashMap,
-    convert::TryInto,
-    fmt::{Display, Formatter},
-    net::SocketAddr,
-    ops::Deref,
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::{Duration, Instant},
-};
-use tokio::{
-    fs,
-    net::{TcpListener, TcpStream, UdpSocket},
-    prelude::*,
-    sync::{
-        mpsc::{self, Receiver, Sender},
-        oneshot, watch,
-    },
-    task::JoinHandle,
-    time::delay_for,
-};
-use tokio_util::{codec::Framed, udp::UdpFramed};
-use uuid::Uuid;
+use std::path::PathBuf;
 
-pub mod announce;
-pub mod app;
+mod announce;
+mod app;
+mod command;
 mod errors;
-mod messages;
+mod event;
+mod file_download;
 mod parser;
+mod peer;
+mod piece;
+mod process;
+mod request_response;
+mod spawn_and_log_error;
 mod storage;
-pub mod types;
+mod types;
 
+pub use app::App as RsbtApp;
+pub use command::Command as RsbtCommand;
+pub use command::CommandAddTorrent as RsbtCommandAddTorrent;
+pub use command::CommandDeleteTorrent as RsbtCommandDeleteTorrent;
+pub use command::CommandTorrentAction as RsbtCommandTorrentAction;
+pub use command::CommandTorrentAnnounce as RsbtCommandTorrentAnnounce;
+pub use command::CommandTorrentDetail as RsbtCommandTorrentDetail;
+pub use command::CommandTorrentFileDownload as RsbtCommandTorrentFileDownload;
+pub use command::CommandTorrentFiles as RsbtCommandTorrentFiles;
+pub use command::CommandTorrentPeers as RsbtCommandTorrentPeers;
+pub use command::CommandTorrentPieces as RsbtCommandTorrentPieces;
 pub use errors::RsbtError;
-pub use storage::{TorrentPiece, TorrentStorage};
-
-pub(crate) use flat_storage::{bit_by_index, index_in_bitarray};
+pub use process::TorrentProcess as RsbtTorrentProcess;
+pub use process::TorrentProcessStatus as RsbtTorrentProcessStatus;
+pub use request_response::RequestResponse as RsbtRequestResponse;
+pub(crate) use spawn_and_log_error::spawn_and_log_error;
+pub use types::public::TorrentAction as RsbtTorrentAction;
+pub use types::public::TorrentDownloadView as RsbtTorrentDownloadView;
+pub use types::public::TorrentStatisticsEvent as RsbtTorrentStatisticsEvent;
+pub use types::Config as RsbtConfig;
+pub use types::Properties as RsbtProperties;
+pub use types::Settings as RsbtSettings;
+pub use types::Torrent as RsbtTorrent;
 
 pub(crate) const SHA1_SIZE: usize = 20;
 
@@ -53,6 +46,7 @@ pub(crate) const BLOCK_SIZE: usize = 1 << 14;
 pub(crate) const PEER_ID: [u8; 20] = *b"-rs0001-zzzzxxxxyyyy";
 
 //FIXME: pub(crate) const PEER_MAX_CONNECTIONS: usize = 50;
+pub const TORRENTS_TOML: &str = "torrents.toml";
 
 pub const DEFAULT_CHANNEL_BUFFER: usize = 256;
 
