@@ -1,5 +1,16 @@
-use super::*;
-use std::ops::Range;
+use crate::{login::User, torrents::torrent_command_result, Failure};
+use actix_web::{
+    body::{Body, BodySize, MessageBody},
+    http, web, Error, HttpRequest, HttpResponse, Responder,
+};
+use bytes::Bytes;
+use futures::stream::TryStreamExt;
+use rsbt_service::{RsbtCommand, RsbtCommandTorrentFileDownload, RsbtError};
+use std::{
+    ops::Range,
+    task::{Context, Poll},
+};
+use tokio::sync::mpsc::Sender;
 
 struct SizedBody(usize);
 

@@ -1,4 +1,21 @@
-use super::*;
+use crate::{
+    host,
+    session::{SessionUser, Sessions},
+    RSBT_ALLOW, RSBT_OPENID_CLIENT_ID, RSBT_OPENID_CLIENT_SECRET, RSBT_OPENID_ISSUER,
+};
+use actix::prelude::*;
+use actix_identity::Identity;
+use actix_web::{
+    dev::Payload, error::ErrorUnauthorized, http, web, Error, FromRequest, HttpRequest,
+    HttpResponse, Responder,
+};
+use exitfailure::ExitFailure;
+use log::{debug, error};
+use openid::{DiscoveredClient, Options, Token, Userinfo};
+use reqwest;
+use serde::{Deserialize, Serialize};
+use std::pin::Pin;
+use url::Url;
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 #[serde(rename_all = "camelCase")]

@@ -5,52 +5,27 @@ extern crate actix_web;
 use rsbt_frontend::*;
 
 use actix::prelude::*;
-use actix_identity::{CookieIdentityPolicy, Identity, IdentityService};
-use actix_multipart::Multipart;
-use actix_web::{
-    body::{Body, BodySize, MessageBody},
-    dev::Payload,
-    error::ErrorUnauthorized,
-    http, middleware, web, App, Error, FromRequest, HttpRequest, HttpResponse, HttpServer,
-    Responder,
-};
-use bytes::Bytes;
+use actix_identity::{CookieIdentityPolicy, IdentityService};
+use actix_web::{middleware, web, App, HttpServer};
 use dotenv::dotenv;
 use exitfailure::ExitFailure;
-use futures::{
-    future::abortable,
-    stream::{select_all, TryStreamExt},
-    StreamExt,
-};
-use log::{debug, error, info, trace};
-use openid::{DiscoveredClient, Options, Token, Userinfo};
-use reqwest;
+use futures::{future::abortable, stream::select_all, StreamExt};
+use log::{debug, error};
 use rsbt_service::{
-    RsbtApp, RsbtCommand, RsbtCommandAddTorrent, RsbtCommandDeleteTorrent,
-    RsbtCommandTorrentAction, RsbtCommandTorrentAnnounce, RsbtCommandTorrentDetail,
-    RsbtCommandTorrentFileDownload, RsbtCommandTorrentFiles, RsbtCommandTorrentPeers,
-    RsbtCommandTorrentPieces, RsbtError, RsbtProperties, RsbtRequestResponse, RsbtSettings,
-    RsbtTorrentAction, RsbtTorrentDownloadView, RsbtTorrentProcess, RsbtTorrentProcessStatus,
-    RsbtTorrentStatisticsEvent,
+    RsbtApp, RsbtCommand, RsbtCommandAddTorrent, RsbtError, RsbtRequestResponse, RsbtSettings,
+    RsbtTorrentProcess, RsbtTorrentStatisticsEvent,
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    cmp::Ordering,
     collections::HashMap,
     path::{Path, PathBuf},
-    pin::Pin,
-    task::{Context, Poll},
 };
 use structopt::StructOpt;
 use tokio::{
     fs,
-    sync::{
-        mpsc::{self, Receiver, Sender},
-        RwLock,
-    },
+    sync::mpsc::{self, Sender},
     time::{delay_for, Duration},
 };
-use url::Url;
 
 mod cli;
 mod event_stream;
@@ -78,7 +53,7 @@ static ref RSBT_BIND: String = std::env::var("RSBT_BIND").unwrap_or_else(|_| "0.
 static ref RSBT_OPENID_CLIENT_ID: String = std::env::var("RSBT_OPENID_CLIENT_ID").unwrap_or_else(|_| "web_app".to_string());
 static ref RSBT_OPENID_CLIENT_SECRET: String = std::env::var("RSBT_OPENID_CLIENT_SECRET").unwrap_or_else(|_| "web_app".to_string());
 static ref RSBT_OPENID_ISSUER: String = std::env::var("RSBT_OPENID_ISSUER").unwrap_or_else(|_| "http://keycloak:9080/auth/realms/jhipster".to_string());
-static ref RSBT_ALLOW: String = std::env::var("RSBT_ALLOW").unwrap_or_else(|_| "user@localhost".to_string());
+pub(crate) static ref RSBT_ALLOW: String = std::env::var("RSBT_ALLOW").unwrap_or_else(|_| "user@localhost".to_string());
 }
 
 #[derive(Serialize, Deserialize, Debug)]
