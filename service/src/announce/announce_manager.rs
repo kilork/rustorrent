@@ -1,8 +1,8 @@
-use crate::{event_loop_runner::EventLoopRunner, RsbtError};
+use crate::{announce::AnnounceManagerMessage, event_loop::EventLoopRunner, RsbtError};
 
 pub(crate) struct AnnounceManager {}
 
-impl EventLoopRunner for AnnounceManager {}
+impl EventLoopRunner<AnnounceManagerMessage> for AnnounceManager {}
 
 #[cfg(test)]
 mod tests {}

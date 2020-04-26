@@ -500,4 +500,12 @@ impl PeerManager {
 
         Ok(())
     }
+
+    pub(crate) async fn quit(&mut self) -> Result<(), RsbtError> {
+        if let Some(_announce_manager) = self.announce_manager.quit().await? {
+            debug!("successfully exited announce manager");
+        }
+
+        Ok(())
+    }
 }

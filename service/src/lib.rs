@@ -6,8 +6,6 @@ mod command;
 mod errors;
 mod event;
 mod event_loop;
-mod event_loop_message;
-mod event_loop_runner;
 mod file_download;
 mod parser;
 mod peer;

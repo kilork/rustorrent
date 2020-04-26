@@ -363,6 +363,9 @@ pub(crate) async fn torrent_event_loop(
                 awaiters.push(request_response);
             }
         }
+        if let Err(err) = peer_manager.quit().await {
+            debug!("error during peer manager quit: {}", err);
+        }
     }
 
     if let Err(err) = peer_manager

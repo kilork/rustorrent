@@ -1,8 +1,9 @@
 use crate::{
-    event_loop_message::EventLoopMessage, event_loop_runner::EventLoopRunner, RsbtError,
-    DEFAULT_CHANNEL_BUFFER,
+    event_loop::{EventLoopMessage, EventLoopRunner, EventLoopSender},
+    RsbtError, DEFAULT_CHANNEL_BUFFER,
 };
 use log::{debug, error};
+use std::clone::Clone;
 use tokio::{
     stream::StreamExt,
     sync::{mpsc, oneshot},
@@ -17,10 +18,11 @@ pub(crate) struct EventLoop<M, T> {
 impl<M: Send + 'static, T> EventLoop<M, T> {
     pub(crate) fn spawn(mut runner: T) -> Result<EventLoop<M, T>, RsbtError>
     where
-        T: Send + EventLoopRunner + 'static,
+        T: Send + EventLoopRunner<M> + 'static,
     {
         let (sender, mut receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
+        let event_loop_sender: EventLoopSender<M> = sender.clone().into();
         let join_handle = Some(tokio::spawn(async move {
             while let Some(event) = receiver.next().await {
                 match event {
@@ -44,7 +46,11 @@ impl<M: Send + 'static, T> EventLoop<M, T> {
                             break;
                         }
                     }
-                    EventLoopMessage::Loop(_) => {}
+                    EventLoopMessage::Loop(message) => {
+                        if let Err(err) = runner.handle(message, event_loop_sender.clone()).await {
+                            error!("runner cannot handle message: {}", err);
+                        }
+                    }
                 }
             }
             debug!("loop done");
@@ -104,12 +110,13 @@ mod tests {
 
     struct TestLoop {}
 
-    impl EventLoopRunner for TestLoop {}
+    impl EventLoopRunner<TestMessage> for TestLoop {}
 
     #[tokio::test]
     async fn test_loop() {
         let mut handler: EventLoop<TestMessage, _> =
             EventLoop::spawn(TestLoop {}).expect("cannot spawn test loop");
-        handler.quit().await.expect("cannot quit test loop");
+        let test_loop = handler.quit().await.expect("cannot quit test loop");
+        assert!(test_loop.is_some());
     }
 }
