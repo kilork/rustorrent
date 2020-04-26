@@ -4,7 +4,7 @@ use tokio::sync::oneshot::Sender;
 pub(crate) enum EventLoopMessage<M> {
     Start(Sender<Result<(), RsbtError>>),
     Stop(Sender<Result<(), RsbtError>>),
-    Quit(Sender<Result<(), RsbtError>>),
+    Quit(Option<Sender<Result<(), RsbtError>>>),
     Loop(M),
 }
 

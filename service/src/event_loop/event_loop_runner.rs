@@ -18,7 +18,7 @@ pub(crate) trait EventLoopRunner<M: Send + 'static> {
     async fn handle(
         &mut self,
         _message: M,
-        _event_loop_sender: EventLoopSender<M>,
+        _event_loop_sender: &mut EventLoopSender<M>,
     ) -> Result<(), RsbtError> {
         Ok(())
     }

@@ -1,24 +1,23 @@
-use crate::event_loop::EventLoopMessage;
-use std::sync::Arc;
+use crate::{event_loop::EventLoopMessage, RsbtError};
 use tokio::sync::mpsc::Sender;
 
+#[derive(Clone)]
 pub(crate) struct EventLoopSender<M> {
-    inner: Arc<Sender<EventLoopMessage<M>>>,
-}
-
-impl<M> Clone for EventLoopSender<M> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-        }
-    }
+    sender: Sender<EventLoopMessage<M>>,
 }
 
 impl<M> EventLoopSender<M> {
     fn new(sender: Sender<EventLoopMessage<M>>) -> Self {
-        Self {
-            inner: Arc::new(sender),
-        }
+        Self { sender }
+    }
+
+    pub(crate) async fn send<T: Into<EventLoopMessage<M>>>(
+        &mut self,
+        m: T,
+    ) -> Result<(), RsbtError> {
+        self.sender.send(m.into()).await?;
+
+        Ok(())
     }
 }
 

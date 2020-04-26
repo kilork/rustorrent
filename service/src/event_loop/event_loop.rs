@@ -1,5 +1,5 @@
 use crate::{
-    event_loop::{EventLoopMessage, EventLoopRunner, EventLoopSender},
+    event_loop::{EventLoopMessage, EventLoopRunner},
     RsbtError, DEFAULT_CHANNEL_BUFFER,
 };
 use log::{debug, error};
@@ -22,7 +22,8 @@ impl<M: Send + 'static, T> EventLoop<M, T> {
     {
         let (sender, mut receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
-        let event_loop_sender: EventLoopSender<M> = sender.clone().into();
+        let mut event_loop_sender = sender.clone().into();
+
         let join_handle = Some(tokio::spawn(async move {
             while let Some(event) = receiver.next().await {
                 match event {
@@ -39,15 +40,17 @@ impl<M: Send + 'static, T> EventLoop<M, T> {
                     EventLoopMessage::Quit(sender) => {
                         let quit_result = runner.quit().await;
                         let we_done = quit_result.is_ok();
-                        if let Err(_) = sender.send(quit_result) {
-                            error!("cannot respond after quit runner");
+                        if let Some(sender) = sender {
+                            if let Err(_) = sender.send(quit_result) {
+                                error!("cannot respond after quit runner");
+                            }
                         }
                         if we_done {
                             break;
                         }
                     }
                     EventLoopMessage::Loop(message) => {
-                        if let Err(err) = runner.handle(message, event_loop_sender.clone()).await {
+                        if let Err(err) = runner.handle(message, &mut event_loop_sender).await {
                             error!("runner cannot handle message: {}", err);
                         }
                     }
@@ -63,7 +66,10 @@ impl<M: Send + 'static, T> EventLoop<M, T> {
         })
     }
 
-    pub(crate) async fn send(&mut self, message: M) -> Result<(), RsbtError> {
+    pub(crate) async fn send<E: Into<EventLoopMessage<M>>>(
+        &mut self,
+        message: E,
+    ) -> Result<(), RsbtError> {
         self.sender.send(message.into()).await?;
 
         Ok(())
@@ -89,8 +95,13 @@ impl<M: Send + 'static, T> EventLoop<M, T> {
     }
 
     pub(crate) async fn quit(&mut self) -> Result<Option<T>, RsbtError> {
-        self.request(EventLoopMessage::Quit).await?;
+        self.request(|sender| EventLoopMessage::Quit(Some(sender)))
+            .await?;
 
+        self.wait().await
+    }
+
+    pub(crate) async fn wait(&mut self) -> Result<Option<T>, RsbtError> {
         Ok(if let Some(join_handle) = self.join_handle.take() {
             Some(join_handle.await?)
         } else {
@@ -103,20 +114,78 @@ impl<M: Send + 'static, T> EventLoop<M, T> {
 mod tests {
 
     use super::{EventLoop, EventLoopRunner, RsbtError};
+    use crate::event_loop::{EventLoopMessage, EventLoopSender};
+    use async_trait::async_trait;
 
     enum TestMessage {
         TestData(Vec<u8>),
+        TestRetransfer(Vec<u8>),
     }
 
-    struct TestLoop {}
+    #[derive(Debug, PartialEq)]
+    struct TestLoop {
+        message_count: usize,
+        retransfer_count: usize,
+    }
 
-    impl EventLoopRunner<TestMessage> for TestLoop {}
+    #[async_trait]
+    impl EventLoopRunner<TestMessage> for TestLoop {
+        async fn handle(
+            &mut self,
+            message: TestMessage,
+            event_loop_sender: &mut EventLoopSender<TestMessage>,
+        ) -> Result<(), RsbtError> {
+            match message {
+                TestMessage::TestData(data) => {
+                    self.message_count += 1;
+                    event_loop_sender
+                        .send(TestMessage::TestRetransfer(data))
+                        .await?;
+                }
+                TestMessage::TestRetransfer(_) => {
+                    self.retransfer_count += 1;
+                    event_loop_sender.send(EventLoopMessage::Quit(None)).await?;
+                }
+            }
+            Ok(())
+        }
+    }
 
     #[tokio::test]
-    async fn test_loop() {
-        let mut handler: EventLoop<TestMessage, _> =
-            EventLoop::spawn(TestLoop {}).expect("cannot spawn test loop");
+    async fn test_loop_quit() {
+        let mut handler: EventLoop<TestMessage, _> = EventLoop::spawn(TestLoop {
+            message_count: 0,
+            retransfer_count: 0,
+        })
+        .expect("cannot spawn test loop");
         let test_loop = handler.quit().await.expect("cannot quit test loop");
-        assert!(test_loop.is_some());
+        assert_eq!(
+            test_loop,
+            Some(TestLoop {
+                message_count: 0,
+                retransfer_count: 0
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn test_loop_retransfer() {
+        let mut handler: EventLoop<TestMessage, _> = EventLoop::spawn(TestLoop {
+            message_count: 0,
+            retransfer_count: 0,
+        })
+        .expect("cannot spawn test loop");
+        handler
+            .send(TestMessage::TestData(vec![1, 2, 3, 4]))
+            .await
+            .expect("cannot send test message");
+        let test_loop = handler.wait().await.expect("cannot quit test loop");
+        assert_eq!(
+            test_loop,
+            Some(TestLoop {
+                message_count: 1,
+                retransfer_count: 1
+            })
+        );
     }
 }
