@@ -40,7 +40,8 @@ pub(crate) async fn torrent_event_loop(
             uploaded: storage_state.bytes_read,
         }
     };
-    let announce_manager: EventLoop<AnnounceManagerMessage> = EventLoop::spawn(AnnounceManager {})
+
+    let announce_manager = EventLoop::spawn(AnnounceManager {})
         .expect("FIXME: need to turn this into non breaking failure");
 
     let mut peer_manager = PeerManager {

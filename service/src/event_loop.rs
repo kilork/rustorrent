@@ -2,20 +2,20 @@ use crate::{
     event_loop_message::EventLoopMessage, event_loop_runner::EventLoopRunner, RsbtError,
     DEFAULT_CHANNEL_BUFFER,
 };
-use log::error;
+use log::{debug, error};
 use tokio::{
     stream::StreamExt,
     sync::{mpsc, oneshot},
     task::JoinHandle,
 };
 
-pub(crate) struct EventLoop<M> {
-    join_handle: Option<JoinHandle<()>>,
+pub(crate) struct EventLoop<M, T> {
+    join_handle: Option<JoinHandle<T>>,
     sender: mpsc::Sender<EventLoopMessage<M>>,
 }
 
-impl<M: Send + 'static> EventLoop<M> {
-    pub(crate) fn spawn<T>(mut runner: T) -> Result<EventLoop<M>, RsbtError>
+impl<M: Send + 'static, T> EventLoop<M, T> {
+    pub(crate) fn spawn(mut runner: T) -> Result<EventLoop<M, T>, RsbtError>
     where
         T: Send + EventLoopRunner + 'static,
     {
@@ -47,6 +47,8 @@ impl<M: Send + 'static> EventLoop<M> {
                     EventLoopMessage::Loop(_) => {}
                 }
             }
+            debug!("loop done");
+            runner
         }));
 
         Ok(EventLoop {
@@ -80,14 +82,14 @@ impl<M: Send + 'static> EventLoop<M> {
         self.request(EventLoopMessage::Stop).await
     }
 
-    pub(crate) async fn quit(&mut self) -> Result<(), RsbtError> {
+    pub(crate) async fn quit(&mut self) -> Result<Option<T>, RsbtError> {
         self.request(EventLoopMessage::Quit).await?;
 
-        if let Some(join_handle) = self.join_handle.take() {
-            join_handle.await?;
-        }
-
-        Ok(())
+        Ok(if let Some(join_handle) = self.join_handle.take() {
+            Some(join_handle.await?)
+        } else {
+            None
+        })
     }
 }
 
@@ -106,7 +108,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_loop() {
-        let mut handler: EventLoop<TestMessage> =
+        let mut handler: EventLoop<TestMessage, _> =
             EventLoop::spawn(TestLoop {}).expect("cannot spawn test loop");
         handler.quit().await.expect("cannot quit test loop");
     }
