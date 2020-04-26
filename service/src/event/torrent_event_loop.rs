@@ -1,6 +1,7 @@
 use crate::{
-    announce::announce_loop,
+    announce::{announce_loop, AnnounceManager, AnnounceManagerMessage},
     event::{TorrentDownloadMode, TorrentEvent, TorrentStatisticMessage},
+    event_loop::EventLoop,
     peer::{PeerManager, PeerMessage, TorrentPeerState},
     process::TorrentToken,
     storage::TorrentStorage,
@@ -30,11 +31,6 @@ pub(crate) async fn torrent_event_loop(
     torrent_process: Arc<TorrentToken>,
     mut broker_receiver: Receiver<TorrentEvent>,
 ) {
-    let peer_states = HashMap::new();
-    let mode = TorrentDownloadMode::Normal;
-    let announce_abort_handle = None;
-    let awaiting_for_piece = HashMap::new();
-
     let (statistic_sender, mut statistic_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
     let mut torrent_download_state = {
@@ -44,15 +40,18 @@ pub(crate) async fn torrent_event_loop(
             uploaded: storage_state.bytes_read,
         }
     };
+    let announce_manager: EventLoop<AnnounceManagerMessage> = EventLoop::spawn(AnnounceManager {})
+        .expect("FIXME: need to turn this into non breaking failure");
 
     let mut peer_manager = PeerManager {
+        announce_manager,
         torrent_storage,
         torrent_process,
-        peer_states,
-        mode,
+        peer_states: HashMap::new(),
+        mode: TorrentDownloadMode::Normal,
         active: false,
-        announce_abort_handle,
-        awaiting_for_piece,
+        announce_abort_handle: None,
+        awaiting_for_piece: HashMap::new(),
         statistic_sender,
     };
 
@@ -210,7 +209,10 @@ pub(crate) async fn torrent_event_loop(
                 tokio::spawn(announce_loop);
 
                 peer_manager.announce_abort_handle = Some(abort_handle);
-                if let Err(err) = request_response.response(Ok(())) {
+
+                let result = peer_manager.enable().await;
+
+                if let Err(err) = request_response.response(result) {
                     error!("cannot send response for enable torrent: {}", err);
                 }
                 peer_manager.active = true;
@@ -244,7 +246,9 @@ pub(crate) async fn torrent_event_loop(
                 }
                 peer_manager.peer_states = HashMap::new();
 
-                if let Err(err) = request_response.response(Ok(())) {
+                let result = peer_manager.disable().await;
+
+                if let Err(err) = request_response.response(result) {
                     error!("cannot send response for disable torrent: {}", err);
                 }
                 peer_manager.active = false;
