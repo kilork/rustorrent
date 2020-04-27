@@ -28,16 +28,19 @@ impl<M: Send + 'static, T> EventLoop<M, T> {
             while let Some(event) = receiver.next().await {
                 match event {
                     EventLoopMessage::Start(sender) => {
+                        debug!("start");
                         if let Err(_) = sender.send(runner.start().await) {
                             error!("cannot respond after start runner");
                         }
                     }
                     EventLoopMessage::Stop(sender) => {
+                        debug!("stop");
                         if let Err(_) = sender.send(runner.stop().await) {
                             error!("cannot respond after stop runner");
                         }
                     }
                     EventLoopMessage::Quit(sender) => {
+                        debug!("quit");
                         let quit_result = runner.quit().await;
                         let we_done = quit_result.is_ok();
                         if let Some(sender) = sender {
