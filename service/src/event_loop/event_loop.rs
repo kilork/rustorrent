@@ -10,13 +10,17 @@ use tokio::{
     task::JoinHandle,
 };
 
-pub(crate) struct EventLoop<M, T> {
+pub(crate) struct EventLoop<M, T, F> {
     join_handle: Option<JoinHandle<T>>,
     sender: mpsc::Sender<EventLoopMessage<M>>,
+    feedback: mpsc::Sender<F>,
 }
 
-impl<M: Send + 'static, T> EventLoop<M, T> {
-    pub(crate) fn spawn(mut runner: T) -> Result<EventLoop<M, T>, RsbtError>
+impl<M: Send + 'static, T, F: Send + 'static> EventLoop<M, T, F> {
+    pub(crate) fn spawn(
+        mut runner: T,
+        feedback: mpsc::Sender<F>,
+    ) -> Result<EventLoop<M, T, F>, RsbtError>
     where
         T: Send + EventLoopRunner<M> + 'static,
     {
@@ -66,6 +70,7 @@ impl<M: Send + 'static, T> EventLoop<M, T> {
         Ok(EventLoop {
             join_handle,
             sender,
+            feedback,
         })
     }
 
@@ -78,9 +83,9 @@ impl<M: Send + 'static, T> EventLoop<M, T> {
         Ok(())
     }
 
-    async fn request<R, F>(&mut self, message_fn: F) -> Result<R, RsbtError>
+    async fn request<R, FN>(&mut self, message_fn: FN) -> Result<R, RsbtError>
     where
-        F: Fn(oneshot::Sender<Result<R, RsbtError>>) -> EventLoopMessage<M>,
+        FN: Fn(oneshot::Sender<Result<R, RsbtError>>) -> EventLoopMessage<M>,
     {
         let (sender, receiver) = oneshot::channel();
 
@@ -116,9 +121,11 @@ impl<M: Send + 'static, T> EventLoop<M, T> {
 #[cfg(test)]
 mod tests {
 
-    use super::{EventLoop, EventLoopRunner, RsbtError};
+    use super::{mpsc, EventLoop, EventLoopRunner, RsbtError};
     use crate::event_loop::{EventLoopMessage, EventLoopSender};
     use async_trait::async_trait;
+
+    enum TestFeedbackMessage {}
 
     enum TestMessage {
         TestData(Vec<u8>),
@@ -156,10 +163,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_loop_quit() {
-        let mut handler: EventLoop<TestMessage, _> = EventLoop::spawn(TestLoop {
-            message_count: 0,
-            retransfer_count: 0,
-        })
+        let (feedback_sender, receiver) = mpsc::channel(1);
+        let mut handler: EventLoop<TestMessage, _, TestFeedbackMessage> = EventLoop::spawn(
+            TestLoop {
+                message_count: 0,
+                retransfer_count: 0,
+            },
+            feedback_sender,
+        )
         .expect("cannot spawn test loop");
         let test_loop = handler.quit().await.expect("cannot quit test loop");
         assert_eq!(
@@ -173,10 +184,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_loop_retransfer() {
-        let mut handler: EventLoop<TestMessage, _> = EventLoop::spawn(TestLoop {
-            message_count: 0,
-            retransfer_count: 0,
-        })
+        let (feedback_sender, receiver) = mpsc::channel(1);
+        let mut handler: EventLoop<TestMessage, _, TestFeedbackMessage> = EventLoop::spawn(
+            TestLoop {
+                message_count: 0,
+                retransfer_count: 0,
+            },
+            feedback_sender,
+        )
         .expect("cannot spawn test loop");
         handler
             .send(TestMessage::TestData(vec![1, 2, 3, 4]))
