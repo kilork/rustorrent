@@ -2,16 +2,16 @@ use crate::{event_loop::EventLoopMessage, RsbtError};
 use tokio::sync::mpsc::Sender;
 
 #[derive(Clone)]
-pub(crate) struct EventLoopSender<M> {
-    sender: Sender<EventLoopMessage<M>>,
+pub(crate) struct EventLoopSender<F, M> {
+    sender: Sender<EventLoopMessage<F, M>>,
 }
 
-impl<M> EventLoopSender<M> {
-    fn new(sender: Sender<EventLoopMessage<M>>) -> Self {
+impl<F, M> EventLoopSender<F, M> {
+    fn new(sender: Sender<EventLoopMessage<F, M>>) -> Self {
         Self { sender }
     }
 
-    pub(crate) async fn send<T: Into<EventLoopMessage<M>>>(
+    pub(crate) async fn send<T: Into<EventLoopMessage<F, M>>>(
         &mut self,
         m: T,
     ) -> Result<(), RsbtError> {
@@ -21,8 +21,8 @@ impl<M> EventLoopSender<M> {
     }
 }
 
-impl<M> From<Sender<EventLoopMessage<M>>> for EventLoopSender<M> {
-    fn from(sender: Sender<EventLoopMessage<M>>) -> Self {
+impl<F, M> From<Sender<EventLoopMessage<F, M>>> for EventLoopSender<F, M> {
+    fn from(sender: Sender<EventLoopMessage<F, M>>) -> Self {
         Self::new(sender)
     }
 }

@@ -12,7 +12,7 @@ use tokio::{
 
 pub(crate) struct EventLoop<M, T, F> {
     join_handle: Option<JoinHandle<T>>,
-    sender: mpsc::Sender<EventLoopMessage<M>>,
+    sender: mpsc::Sender<EventLoopMessage<M, F>>,
     feedback: mpsc::Sender<F>,
 }
 
@@ -22,11 +22,12 @@ impl<M: Send + 'static, T, F: Send + 'static> EventLoop<M, T, F> {
         feedback: mpsc::Sender<F>,
     ) -> Result<EventLoop<M, T, F>, RsbtError>
     where
-        T: Send + EventLoopRunner<M> + 'static,
+        T: Send + EventLoopRunner<M, F> + 'static,
     {
         let (sender, mut receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
         let mut event_loop_sender = sender.clone().into();
+        let mut feedback_loop_sender = feedback.clone();
 
         let join_handle = Some(tokio::spawn(async move {
             while let Some(event) = receiver.next().await {
@@ -57,8 +58,15 @@ impl<M: Send + 'static, T, F: Send + 'static> EventLoop<M, T, F> {
                         }
                     }
                     EventLoopMessage::Loop(message) => {
+                        debug!("loop");
                         if let Err(err) = runner.handle(message, &mut event_loop_sender).await {
                             error!("runner cannot handle message: {}", err);
+                        }
+                    }
+                    EventLoopMessage::Feedback(message) => {
+                        debug!("feedback");
+                        if let Err(err) = feedback_loop_sender.send(message).await {
+                            error!("cannot forward feedback message: {}", err);
                         }
                     }
                 }
@@ -74,7 +82,7 @@ impl<M: Send + 'static, T, F: Send + 'static> EventLoop<M, T, F> {
         })
     }
 
-    pub(crate) async fn send<E: Into<EventLoopMessage<M>>>(
+    pub(crate) async fn send<E: Into<EventLoopMessage<M, F>>>(
         &mut self,
         message: E,
     ) -> Result<(), RsbtError> {
@@ -85,7 +93,7 @@ impl<M: Send + 'static, T, F: Send + 'static> EventLoop<M, T, F> {
 
     async fn request<R, FN>(&mut self, message_fn: FN) -> Result<R, RsbtError>
     where
-        FN: Fn(oneshot::Sender<Result<R, RsbtError>>) -> EventLoopMessage<M>,
+        FN: Fn(oneshot::Sender<Result<R, RsbtError>>) -> EventLoopMessage<M, F>,
     {
         let (sender, receiver) = oneshot::channel();
 
@@ -139,11 +147,11 @@ mod tests {
     }
 
     #[async_trait]
-    impl EventLoopRunner<TestMessage> for TestLoop {
+    impl EventLoopRunner<TestMessage, TestFeedbackMessage> for TestLoop {
         async fn handle(
             &mut self,
             message: TestMessage,
-            event_loop_sender: &mut EventLoopSender<TestMessage>,
+            event_loop_sender: &mut EventLoopSender<TestMessage, TestFeedbackMessage>,
         ) -> Result<(), RsbtError> {
             match message {
                 TestMessage::TestData(data) => {

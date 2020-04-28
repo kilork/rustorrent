@@ -2,7 +2,7 @@ use crate::{event_loop::EventLoopSender, RsbtError};
 use async_trait::async_trait;
 
 #[async_trait]
-pub(crate) trait EventLoopRunner<M: Send + 'static> {
+pub(crate) trait EventLoopRunner<M: Send + 'static, F: Send + 'static> {
     async fn start(&mut self) -> Result<(), RsbtError> {
         Ok(())
     }
@@ -18,7 +18,7 @@ pub(crate) trait EventLoopRunner<M: Send + 'static> {
     async fn handle(
         &mut self,
         _message: M,
-        _event_loop_sender: &mut EventLoopSender<M>,
+        _event_loop_sender: &mut EventLoopSender<M, F>,
     ) -> Result<(), RsbtError> {
         Ok(())
     }

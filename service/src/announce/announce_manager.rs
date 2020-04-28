@@ -1,8 +1,13 @@
-use crate::{announce::AnnounceManagerMessage, event_loop::EventLoopRunner, RsbtError};
+use crate::{
+    announce::AnnounceManagerMessage, event::TorrentEvent, event_loop::EventLoopRunner, RsbtError,
+};
 
 pub(crate) struct AnnounceManager {}
 
-impl EventLoopRunner<AnnounceManagerMessage> for AnnounceManager {}
+impl EventLoopRunner<AnnounceManagerMessage, TorrentEvent> for AnnounceManager {}
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+
+    //
+}
