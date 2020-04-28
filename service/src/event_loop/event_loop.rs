@@ -1,5 +1,5 @@
 use crate::{
-    event_loop::{EventLoopMessage, EventLoopRunner},
+    event_loop::{EventLoopMessage, EventLoopRunner, EventLoopSender},
     RsbtError, DEFAULT_CHANNEL_BUFFER,
 };
 use log::{debug, error};
@@ -12,7 +12,7 @@ use tokio::{
 
 pub(crate) struct EventLoop<M, T, F> {
     join_handle: Option<JoinHandle<T>>,
-    sender: mpsc::Sender<EventLoopMessage<M, F>>,
+    sender: mpsc::Sender<EventLoopMessage<M>>,
     feedback: mpsc::Sender<F>,
 }
 
@@ -26,8 +26,7 @@ impl<M: Send + 'static, T, F: Send + 'static> EventLoop<M, T, F> {
     {
         let (sender, mut receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
-        let mut event_loop_sender = sender.clone().into();
-        let mut feedback_loop_sender = feedback.clone();
+        runner.set_sender(EventLoopSender::new(sender.clone(), feedback.clone()));
 
         let join_handle = Some(tokio::spawn(async move {
             while let Some(event) = receiver.next().await {
@@ -59,14 +58,8 @@ impl<M: Send + 'static, T, F: Send + 'static> EventLoop<M, T, F> {
                     }
                     EventLoopMessage::Loop(message) => {
                         debug!("loop");
-                        if let Err(err) = runner.handle(message, &mut event_loop_sender).await {
+                        if let Err(err) = runner.handle(message).await {
                             error!("runner cannot handle message: {}", err);
-                        }
-                    }
-                    EventLoopMessage::Feedback(message) => {
-                        debug!("feedback");
-                        if let Err(err) = feedback_loop_sender.send(message).await {
-                            error!("cannot forward feedback message: {}", err);
                         }
                     }
                 }
@@ -82,7 +75,7 @@ impl<M: Send + 'static, T, F: Send + 'static> EventLoop<M, T, F> {
         })
     }
 
-    pub(crate) async fn send<E: Into<EventLoopMessage<M, F>>>(
+    pub(crate) async fn send<E: Into<EventLoopMessage<M>>>(
         &mut self,
         message: E,
     ) -> Result<(), RsbtError> {
@@ -93,7 +86,7 @@ impl<M: Send + 'static, T, F: Send + 'static> EventLoop<M, T, F> {
 
     async fn request<R, FN>(&mut self, message_fn: FN) -> Result<R, RsbtError>
     where
-        FN: Fn(oneshot::Sender<Result<R, RsbtError>>) -> EventLoopMessage<M, F>,
+        FN: Fn(oneshot::Sender<Result<R, RsbtError>>) -> EventLoopMessage<M>,
     {
         let (sender, receiver) = oneshot::channel();
 
@@ -145,49 +138,57 @@ mod tests {
         TestFeedBack(usize),
     }
 
-    #[derive(Debug, PartialEq, Default)]
+    #[derive(Default)]
     struct TestLoop {
         message_count: usize,
         retransfer_count: usize,
         feedback_count: usize,
+        sender: Option<EventLoopSender<TestMessage, TestFeedbackMessage>>,
     }
 
     #[async_trait]
     impl EventLoopRunner<TestMessage, TestFeedbackMessage> for TestLoop {
-        async fn handle(
-            &mut self,
-            message: TestMessage,
-            event_loop_sender: &mut EventLoopSender<TestMessage, TestFeedbackMessage>,
-        ) -> Result<(), RsbtError> {
+        async fn handle(&mut self, message: TestMessage) -> Result<(), RsbtError> {
             match message {
                 TestMessage::TestData(data) => {
                     self.message_count += 1;
-                    event_loop_sender
-                        .send(TestMessage::TestRetransfer(data))
-                        .await?;
+                    self.send(TestMessage::TestRetransfer(data)).await?;
                 }
                 TestMessage::TestRetransfer(_) => {
                     self.retransfer_count += 1;
-                    event_loop_sender.send(EventLoopMessage::Quit(None)).await?;
+                    self.send(EventLoopMessage::Quit(None)).await?;
                 }
                 TestMessage::TestFeedBack(test_data) => {
                     self.feedback_count += 1;
-                    event_loop_sender
-                        .feedback(TestFeedbackMessage::Feedback(test_data))
+                    self.feedback(TestFeedbackMessage::Feedback(test_data))
                         .await?;
                 }
             }
             Ok(())
         }
+        fn set_sender(&mut self, sender: EventLoopSender<TestMessage, TestFeedbackMessage>) {
+            self.sender = Some(sender);
+        }
+        fn sender(&mut self) -> Option<&mut EventLoopSender<TestMessage, TestFeedbackMessage>> {
+            self.sender.as_mut()
+        }
     }
 
     #[tokio::test]
     async fn test_loop_quit() {
-        let (feedback_sender, receiver) = mpsc::channel(1);
+        let (feedback_sender, _receiver) = mpsc::channel(1);
         let mut handler: EventLoop<TestMessage, TestLoop, TestFeedbackMessage> =
             EventLoop::spawn(Default::default(), feedback_sender).expect("cannot spawn test loop");
         let test_loop = handler.quit().await.expect("cannot quit test loop");
-        assert_eq!(test_loop, Some(Default::default()));
+        assert!(matches!(
+            test_loop,
+            Some(TestLoop {
+                message_count: 0,
+                retransfer_count: 0,
+                feedback_count: 0,
+                sender: _,
+            })
+        ));
     }
 
     #[tokio::test]
@@ -200,14 +201,15 @@ mod tests {
             .await
             .expect("cannot send test message");
         let test_loop = handler.wait().await.expect("cannot quit test loop");
-        assert_eq!(
+        assert!(matches!(
             test_loop,
             Some(TestLoop {
                 message_count: 1,
                 retransfer_count: 1,
                 feedback_count: 0,
+                sender: _,
             })
-        );
+        ));
     }
     #[tokio::test]
     async fn test_loop_feedback() {
@@ -221,13 +223,14 @@ mod tests {
         let feedback_message = receiver.next().await;
         assert_eq!(feedback_message, Some(TestFeedbackMessage::Feedback(100)));
         let test_loop = handler.quit().await.expect("cannot quit test loop");
-        assert_eq!(
+        assert!(matches!(
             test_loop,
             Some(TestLoop {
                 message_count: 0,
                 retransfer_count: 0,
                 feedback_count: 1,
+                sender: _,
             })
-        );
+        ));
     }
 }

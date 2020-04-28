@@ -42,7 +42,7 @@ pub(crate) async fn torrent_event_loop(
     };
 
     let announce_manager =
-        EventLoop::spawn(AnnounceManager {}, torrent_process.broker_sender.clone())
+        EventLoop::spawn(Default::default(), torrent_process.broker_sender.clone())
             .expect("FIXME: need to turn this into non breaking failure");
 
     let mut peer_manager = PeerManager {

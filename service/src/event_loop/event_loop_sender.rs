@@ -3,15 +3,19 @@ use tokio::sync::mpsc::Sender;
 
 #[derive(Clone)]
 pub(crate) struct EventLoopSender<M, F> {
-    sender: Sender<EventLoopMessage<M, F>>,
+    sender: Sender<EventLoopMessage<M>>,
+    feedback_sender: Sender<F>,
 }
 
 impl<M, F> EventLoopSender<M, F> {
-    fn new(sender: Sender<EventLoopMessage<M, F>>) -> Self {
-        Self { sender }
+    pub(crate) fn new(sender: Sender<EventLoopMessage<M>>, feedback_sender: Sender<F>) -> Self {
+        Self {
+            sender,
+            feedback_sender,
+        }
     }
 
-    pub(crate) async fn send<T: Into<EventLoopMessage<M, F>>>(
+    pub(crate) async fn send<T: Into<EventLoopMessage<M>>>(
         &mut self,
         m: T,
     ) -> Result<(), RsbtError> {
@@ -21,14 +25,8 @@ impl<M, F> EventLoopSender<M, F> {
     }
 
     pub(crate) async fn feedback(&mut self, f: F) -> Result<(), RsbtError> {
-        self.sender.send(EventLoopMessage::Feedback(f)).await?;
+        self.feedback_sender.send(f).await?;
 
         Ok(())
-    }
-}
-
-impl<M, F> From<Sender<EventLoopMessage<M, F>>> for EventLoopSender<M, F> {
-    fn from(sender: Sender<EventLoopMessage<M, F>>) -> Self {
-        Self::new(sender)
     }
 }
