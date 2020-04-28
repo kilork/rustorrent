@@ -132,18 +132,24 @@ mod tests {
     use super::{mpsc, EventLoop, EventLoopRunner, RsbtError};
     use crate::event_loop::{EventLoopMessage, EventLoopSender};
     use async_trait::async_trait;
+    use tokio::stream::StreamExt;
 
-    enum TestFeedbackMessage {}
+    #[derive(Debug, PartialEq)]
+    enum TestFeedbackMessage {
+        Feedback(usize),
+    }
 
     enum TestMessage {
         TestData(Vec<u8>),
         TestRetransfer(Vec<u8>),
+        TestFeedBack(usize),
     }
 
-    #[derive(Debug, PartialEq)]
+    #[derive(Debug, PartialEq, Default)]
     struct TestLoop {
         message_count: usize,
         retransfer_count: usize,
+        feedback_count: usize,
     }
 
     #[async_trait]
@@ -164,6 +170,12 @@ mod tests {
                     self.retransfer_count += 1;
                     event_loop_sender.send(EventLoopMessage::Quit(None)).await?;
                 }
+                TestMessage::TestFeedBack(test_data) => {
+                    self.feedback_count += 1;
+                    event_loop_sender
+                        .feedback(TestFeedbackMessage::Feedback(test_data))
+                        .await?;
+                }
             }
             Ok(())
         }
@@ -172,35 +184,17 @@ mod tests {
     #[tokio::test]
     async fn test_loop_quit() {
         let (feedback_sender, receiver) = mpsc::channel(1);
-        let mut handler: EventLoop<TestMessage, _, TestFeedbackMessage> = EventLoop::spawn(
-            TestLoop {
-                message_count: 0,
-                retransfer_count: 0,
-            },
-            feedback_sender,
-        )
-        .expect("cannot spawn test loop");
+        let mut handler: EventLoop<TestMessage, TestLoop, TestFeedbackMessage> =
+            EventLoop::spawn(Default::default(), feedback_sender).expect("cannot spawn test loop");
         let test_loop = handler.quit().await.expect("cannot quit test loop");
-        assert_eq!(
-            test_loop,
-            Some(TestLoop {
-                message_count: 0,
-                retransfer_count: 0
-            })
-        );
+        assert_eq!(test_loop, Some(Default::default()));
     }
 
     #[tokio::test]
     async fn test_loop_retransfer() {
         let (feedback_sender, receiver) = mpsc::channel(1);
-        let mut handler: EventLoop<TestMessage, _, TestFeedbackMessage> = EventLoop::spawn(
-            TestLoop {
-                message_count: 0,
-                retransfer_count: 0,
-            },
-            feedback_sender,
-        )
-        .expect("cannot spawn test loop");
+        let mut handler: EventLoop<TestMessage, TestLoop, TestFeedbackMessage> =
+            EventLoop::spawn(Default::default(), feedback_sender).expect("cannot spawn test loop");
         handler
             .send(TestMessage::TestData(vec![1, 2, 3, 4]))
             .await
@@ -210,7 +204,29 @@ mod tests {
             test_loop,
             Some(TestLoop {
                 message_count: 1,
-                retransfer_count: 1
+                retransfer_count: 1,
+                feedback_count: 0,
+            })
+        );
+    }
+    #[tokio::test]
+    async fn test_loop_feedback() {
+        let (feedback_sender, mut receiver) = mpsc::channel(1);
+        let mut handler: EventLoop<TestMessage, TestLoop, TestFeedbackMessage> =
+            EventLoop::spawn(Default::default(), feedback_sender).expect("cannot spawn test loop");
+        handler
+            .send(TestMessage::TestFeedBack(100))
+            .await
+            .expect("cannot send test message");
+        let feedback_message = receiver.next().await;
+        assert_eq!(feedback_message, Some(TestFeedbackMessage::Feedback(100)));
+        let test_loop = handler.quit().await.expect("cannot quit test loop");
+        assert_eq!(
+            test_loop,
+            Some(TestLoop {
+                message_count: 0,
+                retransfer_count: 0,
+                feedback_count: 1,
             })
         );
     }
