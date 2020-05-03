@@ -13,6 +13,7 @@ mod piece;
 mod process;
 mod request_response;
 mod spawn_and_log_error;
+mod statistics;
 mod storage;
 mod types;
 

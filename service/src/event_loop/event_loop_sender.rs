@@ -1,4 +1,8 @@
-use crate::{event_loop::EventLoopMessage, RsbtError};
+use crate::{
+    event_loop::{EventLoopCommand, EventLoopMessage},
+    RsbtError,
+};
+use futures::Future;
 use tokio::sync::mpsc::Sender;
 
 #[derive(Clone)]
@@ -7,7 +11,7 @@ pub(crate) struct EventLoopSender<M, F> {
     feedback_sender: Sender<F>,
 }
 
-impl<M, F> EventLoopSender<M, F> {
+impl<M: Send + 'static, F> EventLoopSender<M, F> {
     pub(crate) fn new(sender: Sender<EventLoopMessage<M>>, feedback_sender: Sender<F>) -> Self {
         Self {
             sender,
@@ -28,5 +32,14 @@ impl<M, F> EventLoopSender<M, F> {
         self.feedback_sender.send(f).await?;
 
         Ok(())
+    }
+
+    pub(crate) fn command<FF, R, MF>(&self, f: FF, mf: MF) -> EventLoopCommand
+    where
+        FF: Future<Output = Result<R, RsbtError>> + Send + 'static,
+        MF: FnOnce(Result<R, RsbtError>) -> EventLoopMessage<M> + Send + 'static,
+        R: Send + 'static,
+    {
+        EventLoopCommand::command(f, self.sender.clone(), mf)
     }
 }

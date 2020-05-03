@@ -41,9 +41,11 @@ pub(crate) async fn torrent_event_loop(
         }
     };
 
-    let announce_manager =
-        EventLoop::spawn(Default::default(), torrent_process.broker_sender.clone())
-            .expect("FIXME: need to turn this into non breaking failure");
+    let announce_manager = EventLoop::spawn(
+        AnnounceManager::new(properties.clone(), torrent_process.clone()),
+        torrent_process.broker_sender.clone(),
+    )
+    .expect("FIXME: need to turn this into non breaking failure");
 
     let mut peer_manager = PeerManager {
         announce_manager,
@@ -212,7 +214,7 @@ pub(crate) async fn torrent_event_loop(
 
                 peer_manager.announce_abort_handle = Some(abort_handle);
 
-                let result = peer_manager.enable().await;
+                let result = peer_manager.start().await;
 
                 if let Err(err) = request_response.response(result) {
                     error!("cannot send response for enable torrent: {}", err);
@@ -248,7 +250,7 @@ pub(crate) async fn torrent_event_loop(
                 }
                 peer_manager.peer_states = HashMap::new();
 
-                let result = peer_manager.disable().await;
+                let result = peer_manager.stop().await;
 
                 if let Err(err) = request_response.response(result) {
                     error!("cannot send response for disable torrent: {}", err);

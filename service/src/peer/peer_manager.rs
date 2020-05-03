@@ -489,13 +489,13 @@ impl PeerManager {
         };
     }
 
-    pub(crate) async fn enable(&mut self) -> Result<(), RsbtError> {
+    pub(crate) async fn start(&mut self) -> Result<(), RsbtError> {
         self.announce_manager.start().await?;
 
         Ok(())
     }
 
-    pub(crate) async fn disable(&mut self) -> Result<(), RsbtError> {
+    pub(crate) async fn stop(&mut self) -> Result<(), RsbtError> {
         self.announce_manager.stop().await?;
 
         Ok(())

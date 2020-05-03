@@ -1,1 +1,4 @@
-pub(crate) enum AnnounceManagerMessage {}
+pub(crate) enum AnnounceManagerMessage {
+    QueryAnnounce { tier: usize, tracker: usize },
+    ProcessAnnounce,
+}
