@@ -1,6 +1,5 @@
 use crate::{
     announce::Announcement,
-    event::TorrentEvent,
     process::TorrentToken,
     types::udp_tracker::{
         UdpTrackerCodec, UdpTrackerRequest, UdpTrackerResponse, UdpTrackerResponseData,
@@ -17,7 +16,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::net::UdpSocket;
-use tokio::{net::lookup_host, pin, time::timeout};
+use tokio::{net::lookup_host, time::timeout};
 use tokio_util::udp::UdpFramed;
 
 const UDP_PREFIX: &str = "udp://";
@@ -35,8 +34,10 @@ pub(crate) async fn udp_announce(
 
     let mut addrs = lookup_host(announce_url).await?;
     if let Some(addr) = addrs.next() {
+        debug!("resolved addr: {}", addr);
         let mut udp_tracker_client = UdpTrackerClient::new(udp_socket, addr);
-        Pin::new(&mut udp_tracker_client)
+
+        udp_tracker_client
             .announce(properties, torrent_process)
             .await
     } else {
@@ -60,10 +61,11 @@ impl UdpTrackerClient {
     }
 
     async fn connection_id(
-        mut self: Pin<&mut Self>,
+        &mut self,
         properties: Arc<Properties>,
         torrent_token: Arc<TorrentToken>,
     ) -> Result<i64, RsbtError> {
+        debug!("connect");
         let connection_id = self
             .connection_id
             .filter(|(received, _)| received.elapsed() < Duration::from_secs(60))
@@ -73,32 +75,24 @@ impl UdpTrackerClient {
             return Ok(connection_id);
         }
 
-        let result = {
-            let f = self.as_mut().send(properties, torrent_token, false);
-            pin!(f);
-            if let UdpTrackerResponse {
-                data: UdpTrackerResponseData::Connect { connection_id },
-                ..
-            } = f.as_mut().await?
-            {
-                Some((Instant::now(), connection_id))
-            } else {
-                None
-            }
-        };
-        if let Some((_, connection_id)) = result.as_ref() {
-            self.as_mut().connection_id = result;
-            Ok(*connection_id)
+        if let UdpTrackerResponse {
+            data: UdpTrackerResponseData::Connect { connection_id },
+            ..
+        } = self.send(properties, torrent_token, false).await?
+        {
+            self.connection_id = Some((Instant::now(), connection_id));
+            Ok(connection_id)
         } else {
             Err(RsbtError::UdpTrackerImplementation)
         }
     }
 
     async fn announce(
-        self: Pin<&mut Self>,
+        &mut self,
         properties: Arc<Properties>,
         torrent_token: Arc<TorrentToken>,
     ) -> Result<Announcement, RsbtError> {
+        debug!("announce");
         if let UdpTrackerResponse {
             data:
                 UdpTrackerResponseData::Announce {
@@ -116,17 +110,17 @@ impl UdpTrackerClient {
         }
     }
 
-    async fn connect_request(self: Pin<&mut Self>) -> Result<UdpTrackerRequest, RsbtError> {
+    async fn connect_request(&mut self) -> Result<UdpTrackerRequest, RsbtError> {
         Ok(UdpTrackerRequest::connect())
     }
 
     fn announce_request(
-        self: Pin<&mut Self>,
+        &mut self,
         properties: Arc<Properties>,
         torrent_token: Arc<TorrentToken>,
     ) -> BoxFuture<'_, Result<UdpTrackerRequest, RsbtError>> {
         Box::pin(async {
-            let connection_id = self
+            let connection_id = Pin::new(self)
                 .connection_id(properties.clone(), torrent_token.clone())
                 .await?;
             Ok(UdpTrackerRequest::announce(
@@ -138,24 +132,25 @@ impl UdpTrackerClient {
     }
 
     async fn send(
-        mut self: Pin<&mut Self>,
+        &mut self,
         properties: Arc<Properties>,
         torrent_token: Arc<TorrentToken>,
         announce: bool,
     ) -> Result<UdpTrackerResponse, RsbtError> {
-        let addr = self.as_mut().addr;
+        let addr = self.addr;
         for n in 0..=8 {
             let request = if announce {
-                self.as_mut()
-                    .announce_request(properties.clone(), torrent_token.clone())
+                self.announce_request(properties.clone(), torrent_token.clone())
                     .await
             } else {
-                self.as_mut().connect_request().await
+                self.connect_request().await
             };
-            let request = if let Ok(request) = request {
-                request
-            } else {
-                continue;
+            let request = match request {
+                Ok(request) => request,
+                Err(err) => {
+                    error!("request error: {}", err);
+                    continue;
+                }
             };
             self.framed.send((request.clone(), addr)).await?;
             let loss_threshold = Duration::from_secs(2u64.pow(n) * 15);
@@ -165,6 +160,7 @@ impl UdpTrackerClient {
                         debug!("udp connection request does not match response");
                         continue;
                     }
+                    return Ok(response);
                 }
                 Ok(Some(Err(err))) => {
                     error!("udp connection error: {}", err);
@@ -172,8 +168,8 @@ impl UdpTrackerClient {
                 Ok(None) => {
                     debug!("udp connection dropped");
                 }
-                Err(_) => {
-                    debug!("udp connection timeout: {:?}", loss_threshold);
+                Err(res) => {
+                    debug!("udp connection timeout: {:?} {:?}", loss_threshold, res);
                 }
             }
         }
