@@ -1,5 +1,7 @@
 use crate::{
+    announce::{AnnounceManager, AnnounceManagerMessage},
     event::{TorrentDownloadMode, TorrentEvent, TorrentEventQueryPiece, TorrentStatisticMessage},
+    event_loop::EventLoop,
     peer::{connect_to_peer, peer_loop, PeerMessage, PeerState, TorrentPeerState},
     piece::{collect_pieces_and_update, match_pieces},
     process::TorrentToken,
@@ -20,6 +22,7 @@ use tokio::{
 use uuid::Uuid;
 
 pub(crate) struct PeerManager {
+    pub(crate) announce_manager: EventLoop<AnnounceManagerMessage, AnnounceManager, TorrentEvent>,
     pub(crate) torrent_storage: TorrentStorage,
     pub(crate) torrent_process: Arc<TorrentToken>,
     pub(crate) peer_states: HashMap<Uuid, PeerState>,
@@ -484,5 +487,25 @@ impl PeerManager {
             debug!("[{}] select piece in normal mode", peer_id);
             TorrentDownloadMode::Normal
         };
+    }
+
+    pub(crate) async fn start(&mut self) -> Result<(), RsbtError> {
+        self.announce_manager.start().await?;
+
+        Ok(())
+    }
+
+    pub(crate) async fn stop(&mut self) -> Result<(), RsbtError> {
+        self.announce_manager.stop().await?;
+
+        Ok(())
+    }
+
+    pub(crate) async fn quit(&mut self) -> Result<(), RsbtError> {
+        if let Some(_announce_manager) = self.announce_manager.quit().await? {
+            debug!("successfully exited announce manager");
+        }
+
+        Ok(())
     }
 }

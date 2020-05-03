@@ -46,6 +46,10 @@ pub enum RsbtError {
     MessageCodec(MessageCodecError),
     #[fail(display = "udp tracker codec {}", _0)]
     UdpTrackerCodec(UdpTrackerCodecError),
+    #[fail(display = "udp tracker timeout")]
+    UdpTrackerTimeout,
+    #[fail(display = "udp tracker implementation")]
+    UdpTrackerImplementation,
     #[fail(display = "cannot determine announce protocol")]
     AnnounceProtocolFailure,
     #[fail(display = "unknown announce protocol {}", _0)]
@@ -72,6 +76,10 @@ pub enum RsbtError {
     TorrentActionNotSupported,
     #[fail(display = "elapsed {}", _0)]
     Elapsed(tokio::time::Elapsed),
+    #[fail(display = "bas response from tracker {}", _0)]
+    TorrentHttpAnnounceBadResponse(String),
+    #[fail(display = "announce failure {}", _0)]
+    TorrentHttpAnnounceFailure(hyper::Error),
 }
 
 macro_rules! from_rsbt_error {

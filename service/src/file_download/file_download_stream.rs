@@ -9,7 +9,6 @@ use bytes::Bytes;
 use futures::prelude::*;
 use log::{debug, error};
 use std::{
-    io::Read,
     ops::Range,
     pin::Pin,
     sync::{Arc, Mutex},
