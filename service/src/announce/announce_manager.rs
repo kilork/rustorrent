@@ -257,11 +257,70 @@ impl<T: AnnounceTransport> EventLoopRunner<AnnounceManagerMessage, TorrentEvent>
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        AnnounceManager, AnnounceManagerMessage, AnnounceManagerState, AnnounceTransport,
+        Announcement, Arc, Properties, RsbtError, TorrentEvent, TorrentToken,
+    };
+    use crate::{event_loop::EventLoop, types::Peer};
+    use async_trait::async_trait;
+    use std::net::{IpAddr, Ipv4Addr};
+    use tokio::{stream::StreamExt, sync::mpsc, time::Duration};
 
     #[derive(Clone, Default)]
     struct TestAnnounceTransport;
 
+    #[async_trait]
+    impl AnnounceTransport for TestAnnounceTransport {
+        fn new(properties: Arc<Properties>, torrent_token: Arc<TorrentToken>) -> Self {
+            todo!()
+        }
+        async fn request_announce(&self, url: String) -> Result<Announcement, RsbtError> {
+            Ok(Announcement {
+                requery_interval: Duration::from_secs(5),
+                peers: vec![Peer {
+                    ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                    port: 6970,
+                    peer_id: Some("rsbt                ".into()),
+                }],
+            })
+        }
+    }
+
     #[tokio::test]
-    async fn test() {}
+    async fn test() {
+        let (feedback_sender, mut receiver) = mpsc::channel(1);
+        let mut announce_manager: EventLoop<
+            AnnounceManagerMessage,
+            AnnounceManager<TestAnnounceTransport>,
+            TorrentEvent,
+        > = EventLoop::spawn(
+            AnnounceManager {
+                announce_urls: vec![vec!["test".into()]],
+                sender: None,
+                state: AnnounceManagerState::Idle,
+                transport: TestAnnounceTransport,
+            },
+            feedback_sender,
+        )
+        .unwrap();
+
+        announce_manager.start().await.unwrap();
+
+        let feedback_message = receiver.next().await;
+
+        assert!(matches!(feedback_message, Some(TorrentEvent::Announce(arr)) if arr.len() == 1));
+
+        let test_loop = announce_manager
+            .quit()
+            .await
+            .expect("cannot quit test loop");
+
+        assert!(matches!(
+            test_loop,
+            Some(AnnounceManager {
+                state: AnnounceManagerState::Idle,
+                ..
+            })
+        ));
+    }
 }
