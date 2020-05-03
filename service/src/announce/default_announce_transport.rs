@@ -1,5 +1,5 @@
 use crate::{
-    announce::{AnnounceTransport, Announcement},
+    announce::{http, udp, Announce, AnnounceTransport, Announcement},
     process::TorrentToken,
     types::Properties,
     RsbtError,
@@ -24,6 +24,20 @@ impl AnnounceTransport for DefaultAnnounceTransport {
         }
     }
     async fn request_announce(&self, url: String) -> Result<Announcement, RsbtError> {
-        todo!()
+        if let Some(proto) = url.split("://").next().map(|x| x.to_lowercase()) {
+            match proto.as_str() {
+                "http" | "https" => {
+                    http::http_announce(self.properties.clone(), self.torrent_token.clone(), &url)
+                        .await
+                }
+                "udp" => {
+                    udp::udp_announce(self.properties.clone(), self.torrent_token.clone(), &url)
+                        .await
+                }
+                "wss" | _ => Err(RsbtError::AnnounceProtocolUnknown(proto)),
+            }
+        } else {
+            Err(RsbtError::AnnounceProtocolFailure)
+        }
     }
 }

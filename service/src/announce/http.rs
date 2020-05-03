@@ -1,6 +1,6 @@
 use crate::{
+    announce::Announcement,
     errors::RsbtError,
-    event::TorrentEvent,
     process::TorrentToken,
     types::{Properties, TrackerAnnounce},
     PEER_ID,
@@ -21,7 +21,7 @@ pub(crate) async fn http_announce(
     properties: Arc<Properties>,
     torrent_process: Arc<TorrentToken>,
     announce_url: &str,
-) -> Result<Duration, RsbtError> {
+) -> Result<Announcement, RsbtError> {
     let client: Client<_> = Client::new();
 
     let left = torrent_process.info.len();
@@ -52,11 +52,14 @@ pub(crate) async fn http_announce(
                 "Bad response from tracker: {:?}, retry in 5 seconds...",
                 bad_result
             );
-            return Ok(Duration::from_secs(5));
+            return Err(RsbtError::TorrentHttpAnnounceBadResponse(format!(
+                "{:?}",
+                bad_result
+            )));
         }
         Err(err) => {
             error!("Failure {}, retry in 5 seconds", err);
-            return Ok(Duration::from_secs(5));
+            return Err(RsbtError::TorrentHttpAnnounceFailure(err));
         }
     };
 
@@ -68,27 +71,13 @@ pub(crate) async fn http_announce(
         announce_bytes.append(&mut chunk?.to_vec());
     }
 
-    let tracker_announce: Result<TrackerAnnounce, _> = announce_bytes.try_into();
+    let tracker_announce: TrackerAnnounce = announce_bytes.try_into()?;
+    let requery_interval = Duration::from_secs(tracker_announce.interval as u64);
 
-    let interval_to_query_tracker = match tracker_announce {
-        Ok(tracker_announce) => {
-            let interval_to_reannounce = tracker_announce.interval.try_into()?;
+    debug!("Tracker announce: {:?}", tracker_announce);
 
-            debug!("Tracker announce: {:?}", tracker_announce);
-
-            torrent_process
-                .broker_sender
-                .clone()
-                .send(TorrentEvent::Announce(tracker_announce.peers))
-                .await?;
-            Duration::from_secs(interval_to_reannounce)
-        }
-
-        Err(err) => {
-            error!("Failure {}, retry in 5 seconds", err);
-            Duration::from_secs(5)
-        }
-    };
-
-    Ok(interval_to_query_tracker)
+    Ok(Announcement {
+        requery_interval,
+        peers: tracker_announce.peers,
+    })
 }
