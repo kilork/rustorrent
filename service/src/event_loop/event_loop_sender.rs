@@ -2,7 +2,7 @@ use crate::{
     event_loop::{EventLoopCommand, EventLoopMessage},
     RsbtError,
 };
-use futures::Future;
+use std::future::Future;
 use tokio::sync::mpsc::Sender;
 
 #[derive(Clone)]
@@ -37,7 +37,7 @@ impl<M: Send + 'static, F> EventLoopSender<M, F> {
     pub(crate) fn command<FF, R, MF>(&self, f: FF, mf: MF) -> EventLoopCommand
     where
         FF: Future<Output = Result<R, RsbtError>> + Send + 'static,
-        MF: FnOnce(Result<R, RsbtError>) -> EventLoopMessage<M> + Send + 'static,
+        MF: FnOnce(Result<R, RsbtError>) -> M + Send + 'static,
         R: Send + 'static,
     {
         EventLoopCommand::command(f, self.sender.clone(), mf)

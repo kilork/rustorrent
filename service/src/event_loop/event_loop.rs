@@ -1,9 +1,9 @@
 use crate::{
-    event_loop::{EventLoopMessage, EventLoopRunner, EventLoopSender},
+    event_loop::{EventLoopCommand, EventLoopMessage, EventLoopRunner, EventLoopSender},
     RsbtError, DEFAULT_CHANNEL_BUFFER,
 };
 use log::{debug, error};
-use std::clone::Clone;
+use std::{clone::Clone, future::Future};
 use tokio::{
     stream::StreamExt,
     sync::{mpsc, oneshot},

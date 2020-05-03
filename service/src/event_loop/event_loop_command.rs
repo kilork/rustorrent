@@ -18,18 +18,23 @@ impl EventLoopCommand {
         Self { abort_handle }
     }
 
-    pub(crate) fn command<F, R, MF, C>(f: F, mut sender: Sender<C>, mf: MF) -> Self
+    pub(crate) fn command<F, R, MF, C, K>(f: F, mut sender: Sender<C>, mf: MF) -> Self
     where
         F: Future<Output = Result<R, RsbtError>> + Send + 'static,
-        MF: FnOnce(Result<R, RsbtError>) -> C + Send + 'static,
+        MF: FnOnce(Result<R, RsbtError>) -> K + Send + 'static,
+        K: Into<C> + Send + 'static,
         C: Send + 'static,
         R: Send + 'static,
     {
         Self::spawn(async move {
             let result = f.await;
-            if let Err(err) = sender.send(mf(result)).await {
+            if let Err(err) = sender.send(mf(result).into()).await {
                 error!("cannot send event loop command: {}", err);
             }
         })
+    }
+
+    pub(crate) fn abort(&self) {
+        self.abort_handle.abort();
     }
 }

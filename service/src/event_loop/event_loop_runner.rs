@@ -1,8 +1,9 @@
 use crate::{
-    event_loop::{EventLoopMessage, EventLoopSender},
+    event_loop::{EventLoopCommand, EventLoopMessage, EventLoopSender},
     RsbtError,
 };
 use async_trait::async_trait;
+use std::future::Future;
 
 #[async_trait]
 pub(crate) trait EventLoopRunner<M: Send + 'static, F: Send + 'static> {
@@ -43,5 +44,14 @@ pub(crate) trait EventLoopRunner<M: Send + 'static, F: Send + 'static> {
         }
 
         Ok(())
+    }
+
+    fn command<FF, R, MF>(&mut self, f: FF, mf: MF) -> Option<EventLoopCommand>
+    where
+        FF: Future<Output = Result<R, RsbtError>> + Send + 'static,
+        MF: FnOnce(Result<R, RsbtError>) -> M + Send + 'static,
+        R: Send + 'static,
+    {
+        self.sender().map(|sender| sender.command(f, mf))
     }
 }
