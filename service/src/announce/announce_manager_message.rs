@@ -1,7 +1,11 @@
-use crate::RsbtError;
+use crate::{announce::Announcement, RsbtError};
 use tokio::time::Duration;
 
 pub(crate) enum AnnounceManagerMessage {
-    QueryAnnounce { tier: usize, tracker: usize, delay: Option<Duration> },
-    QueryAnnounceResult(Result<(), RsbtError>),
+    QueryAnnounce {
+        tier: usize,
+        tracker: usize,
+        delay: Option<Duration>,
+    },
+    QueryAnnounceResult(Result<Announcement, RsbtError>),
 }

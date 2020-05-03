@@ -1,7 +1,7 @@
 use crate::{
     announce::{
         AnnounceManagerCommand, AnnounceManagerMessage, AnnounceManagerState, AnnounceTransport,
-        DefaultAnnounceTransport,
+        Announcement, DefaultAnnounceTransport,
     },
     event::TorrentEvent,
     event_loop::{EventLoopCommand, EventLoopRunner, EventLoopSender},
@@ -19,8 +19,6 @@ use Clone;
 pub(crate) struct AnnounceManager<T: AnnounceTransport = DefaultAnnounceTransport> {
     announce_urls: Vec<Vec<String>>,
     sender: Option<EventLoopSender<AnnounceManagerMessage, TorrentEvent>>,
-    properties: Arc<Properties>,
-    torrent_token: Arc<TorrentToken>,
     state: AnnounceManagerState,
     transport: T,
 }
@@ -31,10 +29,8 @@ impl<T: AnnounceTransport> AnnounceManager<T> {
         Self {
             announce_urls,
             sender: None,
-            properties,
-            torrent_token,
             state: AnnounceManagerState::Idle,
-            transport: Default::default(),
+            transport: T::new(properties, torrent_token),
         }
     }
 
@@ -57,7 +53,13 @@ impl<T: AnnounceTransport> AnnounceManager<T> {
         delay: Option<Duration>,
     ) -> Result<(), RsbtError> {
         let command = self.command(
-            Self::query_announce_command(self.transport.clone(), tier, tracker, delay),
+            Self::query_announce_command(
+                self.announce_urls[tier][tracker].clone(),
+                self.transport.clone(),
+                tier,
+                tracker,
+                delay,
+            ),
             AnnounceManagerMessage::QueryAnnounceResult,
         );
         self.set_running_state(AnnounceManagerCommand::Query { tier, tracker }, command);
@@ -78,25 +80,24 @@ impl<T: AnnounceTransport> AnnounceManager<T> {
     }
 
     async fn query_announce_command(
+        url: String,
         transport: T,
         tier: usize,
         tracker: usize,
         delay: Option<Duration>,
-    ) -> Result<(), RsbtError> {
+    ) -> Result<Announcement, RsbtError> {
         if let Some(delay) = delay {
             debug!("await {:?} to requery announce...", delay);
             delay_for(delay).await;
         }
         debug!("query announce for tier {} tracker {}", tier, tracker);
 
-        transport.request_announce("".into()).await?;
-
-        Ok(())
+        transport.request_announce(url).await
     }
 
     async fn query_announce_result(
         &mut self,
-        result: Result<(), RsbtError>,
+        result: Result<Announcement, RsbtError>,
     ) -> Result<(), RsbtError> {
         match &self.state {
             &AnnounceManagerState::Running {
@@ -114,7 +115,7 @@ impl<T: AnnounceTransport> AnnounceManager<T> {
         &mut self,
         tier: usize,
         tracker: usize,
-        result: Result<(), RsbtError>,
+        result: Result<Announcement, RsbtError>,
     ) -> Result<(), RsbtError> {
         debug!("process announce for tier {} tracker {}", tier, tracker);
 
@@ -134,7 +135,7 @@ impl<T: AnnounceTransport> AnnounceManager<T> {
         &mut self,
         tier: usize,
         tracker: usize,
-        announce: (),
+        announce: Announcement,
     ) -> Result<(), RsbtError> {
         if tracker != 0 {
             let tier = &mut self.announce_urls[tier];
@@ -142,16 +143,18 @@ impl<T: AnnounceTransport> AnnounceManager<T> {
             tier.insert(0, tracker);
         }
 
-        self.feedback(TorrentEvent::Announce(vec![])).await?;
+        self.feedback(TorrentEvent::Announce(announce.peers))
+            .await?;
 
-        self.default_query_announce().await?;
-
-        Ok(())
+        self.delayed_query_announce(announce.requery_interval).await
     }
 
     async fn default_query_announce(&mut self) -> Result<(), RsbtError> {
-        self.send_query_announce(0, 0, Some(Duration::from_secs(60)))
-            .await
+        self.delayed_query_announce(Duration::from_secs(60)).await
+    }
+
+    async fn delayed_query_announce(&mut self, delay: Duration) -> Result<(), RsbtError> {
+        self.send_query_announce(0, 0, Some(delay)).await
     }
 
     async fn process_announce_err(
@@ -253,4 +256,12 @@ impl<T: AnnounceTransport> EventLoopRunner<AnnounceManagerMessage, TorrentEvent>
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+
+    #[derive(Clone, Default)]
+    struct TestAnnounceTransport;
+
+    #[tokio::test]
+    async fn test() {}
+}

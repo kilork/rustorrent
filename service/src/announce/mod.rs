@@ -8,6 +8,7 @@ mod http;
 mod udp;
 mod announce_transport;
 mod default_announce_transport;
+mod announcement;
 
 pub(crate) use announce::Announce;
 pub(crate) use announce_loop::announce_loop;
@@ -17,3 +18,4 @@ pub(crate) use announce_manager_state::AnnounceManagerState;
 pub(crate) use announce_manager_command::AnnounceManagerCommand;
 pub(crate) use announce_transport::AnnounceTransport;
 pub(crate) use default_announce_transport::DefaultAnnounceTransport;
+pub(crate) use announcement::Announcement;
