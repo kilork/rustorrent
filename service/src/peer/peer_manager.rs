@@ -12,7 +12,6 @@ use crate::{
     RsbtError, DEFAULT_CHANNEL_BUFFER,
 };
 use flat_storage::{bit_by_index, index_in_bitarray};
-use futures::future::AbortHandle;
 use log::{debug, error};
 use std::{collections::HashMap, sync::Arc, time::Instant};
 use tokio::{
@@ -28,7 +27,6 @@ pub(crate) struct PeerManager {
     pub(crate) peer_states: HashMap<Uuid, PeerState>,
     pub(crate) mode: TorrentDownloadMode,
     pub(crate) active: bool,
-    pub(crate) announce_abort_handle: Option<AbortHandle>,
     pub(crate) awaiting_for_piece:
         HashMap<usize, Vec<RequestResponse<TorrentEventQueryPiece, Result<Vec<u8>, RsbtError>>>>,
     pub(crate) statistic_sender: Sender<TorrentStatisticMessage>,

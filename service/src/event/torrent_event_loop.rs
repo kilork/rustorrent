@@ -1,5 +1,5 @@
 use crate::{
-    announce::{announce_loop, AnnounceManager, AnnounceManagerMessage},
+    announce::AnnounceManager,
     event::{TorrentDownloadMode, TorrentEvent, TorrentStatisticMessage},
     event_loop::EventLoop,
     peer::{PeerManager, PeerMessage, TorrentPeerState},
@@ -12,11 +12,7 @@ use crate::{
     DEFAULT_CHANNEL_BUFFER,
 };
 use flat_storage::bit_by_index;
-use futures::{
-    future::{AbortHandle, Abortable},
-    prelude::*,
-    StreamExt,
-};
+use futures::{prelude::*, StreamExt};
 use log::{debug, error};
 use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
 use std::{collections::HashMap, sync::Arc};
@@ -54,7 +50,6 @@ pub(crate) async fn torrent_event_loop(
         peer_states: HashMap::new(),
         mode: TorrentDownloadMode::Normal,
         active: false,
-        announce_abort_handle: None,
         awaiting_for_piece: HashMap::new(),
         statistic_sender,
     };
@@ -199,21 +194,6 @@ pub(crate) async fn torrent_event_loop(
                     continue;
                 }
 
-                let (abort_handle, abort_registration) = AbortHandle::new_pair();
-
-                let announce_loop = Abortable::new(
-                    announce_loop(properties.clone(), peer_manager.torrent_process.clone())
-                        .map_err(|e| {
-                            error!("announce loop error: {}", e);
-                            e
-                        }),
-                    abort_registration,
-                );
-
-                tokio::spawn(announce_loop);
-
-                peer_manager.announce_abort_handle = Some(abort_handle);
-
                 let result = peer_manager.start().await;
 
                 if let Err(err) = request_response.response(result) {
@@ -227,9 +207,6 @@ pub(crate) async fn torrent_event_loop(
                         error!("cannot send response for disable torrent: {}", err);
                     }
                     continue;
-                }
-                if let Some(abort_handle) = peer_manager.announce_abort_handle.take() {
-                    abort_handle.abort();
                 }
 
                 for (peer_id, ref mut peer_state) in &mut peer_manager.peer_states {
