@@ -1,7 +1,6 @@
 use crate::{
     announce::Announcement,
-    process::{TorrentToken, TorrentTokenProvider},
-    types::Properties,
+    process::TorrentTokenProvider,
     types::{
         udp_tracker::{
             UdpTrackerCodec, UdpTrackerRequest, UdpTrackerResponse, UdpTrackerResponseData,
@@ -182,19 +181,89 @@ where
 mod tests {
 
     use super::UdpTrackerClient;
-    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    use crate::{
+        process::TorrentTokenProvider,
+        types::{
+            udp_tracker::UdpTrackerRequest, PropertiesProvider, UdpTrackerCodecError,
+            UdpTrackerResponse,
+        },
+    };
+    use futures::{Sink, Stream};
+    use std::{
+        net::{IpAddr, Ipv4Addr, SocketAddr},
+        sync::Arc,
+    };
 
-    struct TestUdpFramed {}
+    struct TestUdpFramed;
+
+    impl Stream for TestUdpFramed {
+        type Item = Result<(UdpTrackerResponse, SocketAddr), UdpTrackerCodecError>;
+        fn poll_next(
+            self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Option<Self::Item>> {
+            todo!()
+        }
+    }
+
+    impl Sink<(UdpTrackerRequest, SocketAddr)> for TestUdpFramed {
+        type Error = UdpTrackerCodecError;
+        fn poll_ready(
+            self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Result<(), Self::Error>> {
+            todo!()
+        }
+        fn start_send(
+            self: std::pin::Pin<&mut Self>,
+            item: (UdpTrackerRequest, SocketAddr),
+        ) -> Result<(), Self::Error> {
+            todo!()
+        }
+        fn poll_flush(
+            self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Result<(), Self::Error>> {
+            todo!()
+        }
+        fn poll_close(
+            self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Result<(), Self::Error>> {
+            todo!()
+        }
+    }
+
+    struct TestProperties;
+
+    impl PropertiesProvider for TestProperties {
+        fn port(&self) -> u16 {
+            todo!()
+        }
+    }
+
+    struct TestTorrentToken;
+
+    impl TorrentTokenProvider for TestTorrentToken {
+        fn info(&self) -> &crate::types::info::TorrentInfo {
+            todo!()
+        }
+        fn hash_id(&self) -> &[u8; crate::SHA1_SIZE] {
+            todo!()
+        }
+    }
 
     #[tokio::test]
-    async fn udp_tracker_client() {
-        /*
+    async fn udp_tracker_client_announce() {
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
-        let udp_tracker_client = UdpTrackerClient {
+        let mut udp_tracker_client = UdpTrackerClient {
             connection_id: None,
-            framed: TestUdpFramed {},
+            framed: TestUdpFramed,
             addr,
         };
-        */
+        let properties = Arc::new(TestProperties);
+        let torrent_token = Arc::new(TestTorrentToken);
+
+        udp_tracker_client.announce(properties, torrent_token).await;
     }
 }
