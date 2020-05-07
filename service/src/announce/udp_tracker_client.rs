@@ -1,12 +1,12 @@
 use crate::{
     announce::Announcement,
-    process::TorrentToken,
+    process::{TorrentToken, TorrentTokenProvider},
     types::Properties,
     types::{
         udp_tracker::{
             UdpTrackerCodec, UdpTrackerRequest, UdpTrackerResponse, UdpTrackerResponseData,
         },
-        UdpTrackerCodecError,
+        PropertiesProvider, UdpTrackerCodecError,
     },
     RsbtError,
 };
@@ -44,11 +44,15 @@ where
         + Unpin
         + Send,
 {
-    async fn connection_id(
+    async fn connection_id<P, TT>(
         &mut self,
-        properties: Arc<Properties>,
-        torrent_token: Arc<TorrentToken>,
-    ) -> Result<i64, RsbtError> {
+        properties: Arc<P>,
+        torrent_token: Arc<TT>,
+    ) -> Result<i64, RsbtError>
+    where
+        P: PropertiesProvider + Send + Sync + 'static,
+        TT: TorrentTokenProvider + Send + Sync + 'static,
+    {
         debug!("connect");
         let connection_id = self
             .connection_id
@@ -71,11 +75,15 @@ where
         }
     }
 
-    pub(crate) async fn announce(
+    pub(crate) async fn announce<P, TT>(
         &mut self,
-        properties: Arc<Properties>,
-        torrent_token: Arc<TorrentToken>,
-    ) -> Result<Announcement, RsbtError> {
+        properties: Arc<P>,
+        torrent_token: Arc<TT>,
+    ) -> Result<Announcement, RsbtError>
+    where
+        P: PropertiesProvider + Send + Sync + 'static,
+        TT: TorrentTokenProvider + Send + Sync + 'static,
+    {
         debug!("announce");
         if let UdpTrackerResponse {
             data:
@@ -98,11 +106,15 @@ where
         Ok(UdpTrackerRequest::connect())
     }
 
-    fn announce_request(
+    fn announce_request<P, TT>(
         &mut self,
-        properties: Arc<Properties>,
-        torrent_token: Arc<TorrentToken>,
-    ) -> BoxFuture<'_, Result<UdpTrackerRequest, RsbtError>> {
+        properties: Arc<P>,
+        torrent_token: Arc<TT>,
+    ) -> BoxFuture<'_, Result<UdpTrackerRequest, RsbtError>>
+    where
+        P: PropertiesProvider + Send + Sync + 'static,
+        TT: TorrentTokenProvider + Send + Sync + 'static,
+    {
         Box::pin(async {
             let connection_id = Pin::new(self)
                 .connection_id(properties.clone(), torrent_token.clone())
@@ -115,12 +127,16 @@ where
         })
     }
 
-    async fn send(
+    async fn send<P, TT>(
         &mut self,
-        properties: Arc<Properties>,
-        torrent_token: Arc<TorrentToken>,
+        properties: Arc<P>,
+        torrent_token: Arc<TT>,
         announce: bool,
-    ) -> Result<UdpTrackerResponse, RsbtError> {
+    ) -> Result<UdpTrackerResponse, RsbtError>
+    where
+        P: PropertiesProvider + Send + Sync + 'static,
+        TT: TorrentTokenProvider + Send + Sync + 'static,
+    {
         let addr = self.addr;
         for n in 0..=8 {
             let request = if announce {
@@ -159,5 +175,26 @@ where
         }
         error!("udp connection timeout");
         Err(RsbtError::UdpTrackerTimeout)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::UdpTrackerClient;
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+    struct TestUdpFramed {}
+
+    #[tokio::test]
+    async fn udp_tracker_client() {
+        /*
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+        let udp_tracker_client = UdpTrackerClient {
+            connection_id: None,
+            framed: TestUdpFramed {},
+            addr,
+        };
+        */
     }
 }

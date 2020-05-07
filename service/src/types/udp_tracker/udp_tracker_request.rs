@@ -1,7 +1,7 @@
 use crate::types::udp_tracker::{
     UdpTrackerAuthentication, UdpTrackerRequestData, UdpTrackerResponse, UdpTrackerResponseData,
 };
-use crate::{process::TorrentToken, types::Properties};
+use crate::{process::TorrentTokenProvider, types::configuration::PropertiesProvider};
 use rand::prelude::*;
 use std::sync::Arc;
 
@@ -18,7 +18,7 @@ pub(crate) struct UdpTrackerRequest {
 
 impl UdpTrackerRequest {
     pub(crate) fn connect() -> Self {
-        Self {
+        UdpTrackerRequest {
             connection_id: 0x0417_2710_1980,
             transaction_id: random(),
             data: UdpTrackerRequestData::Connect,
@@ -27,18 +27,18 @@ impl UdpTrackerRequest {
         }
     }
 
-    pub(crate) fn announce(
+    pub(crate) fn announce<P: PropertiesProvider, TT: TorrentTokenProvider>(
         connection_id: i64,
-        properties: Arc<Properties>,
-        torrent_process: Arc<TorrentToken>,
+        properties: Arc<P>,
+        torrent_process: Arc<TT>,
     ) -> Self {
-        let left = torrent_process.info.len() as i64;
+        let left = torrent_process.info().len() as i64;
 
         Self {
             connection_id,
             transaction_id: random(),
             data: UdpTrackerRequestData::Announce {
-                info_hash: torrent_process.hash_id,
+                info_hash: torrent_process.hash_id().clone(),
                 peer_id: crate::PEER_ID,
                 downloaded: 0,
                 uploaded: 0,
@@ -48,7 +48,7 @@ impl UdpTrackerRequest {
                 extensions: 0,
                 num_want: -1,
                 key: random(),
-                port: properties.port,
+                port: properties.port(),
             },
             authentication: None,
             request_string: None,

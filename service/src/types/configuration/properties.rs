@@ -1,4 +1,4 @@
-use crate::types::Settings;
+use crate::types::{configuration::PropertiesProvider, Settings};
 use std::{
     net::{IpAddr, Ipv4Addr},
     path::PathBuf,
@@ -47,5 +47,11 @@ impl From<(Settings, PathBuf)> for Properties {
             storage,
             config_dir,
         }
+    }
+}
+
+impl PropertiesProvider for Properties {
+    fn port(&self) -> u16 {
+        self.port
     }
 }

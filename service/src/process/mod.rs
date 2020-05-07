@@ -3,9 +3,11 @@ mod torrent_process;
 mod torrent_process_header;
 mod torrent_process_status;
 mod torrent_token;
+mod torrent_token_provider;
 
 pub(crate) use find_process_by_id::find_process_by_id;
 pub use torrent_process::TorrentProcess;
 pub use torrent_process_header::TorrentProcessHeader;
 pub use torrent_process_status::TorrentProcessStatus;
 pub use torrent_token::TorrentToken;
+pub(crate) use torrent_token_provider::TorrentTokenProvider;

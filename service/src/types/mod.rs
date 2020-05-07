@@ -14,6 +14,7 @@ mod tracker_announce;
 pub(crate) mod udp_tracker;
 
 pub use bencode::{BencodeBlob, BencodeValue};
+pub(crate) use configuration::PropertiesProvider;
 pub use configuration::{Config, Properties, Settings};
 pub(crate) use handshake::Handshake;
 pub use message::Message;
