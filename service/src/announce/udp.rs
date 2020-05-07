@@ -4,7 +4,6 @@ use crate::{
     types::Properties,
     RsbtError,
 };
-use futures::StreamExt;
 use log::debug;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::lookup_host;

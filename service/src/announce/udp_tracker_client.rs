@@ -1,13 +1,16 @@
 use crate::{
     announce::Announcement,
     process::TorrentToken,
-    types::udp_tracker::{
-        UdpTrackerCodec, UdpTrackerRequest, UdpTrackerResponse, UdpTrackerResponseData,
-    },
     types::Properties,
+    types::{
+        udp_tracker::{
+            UdpTrackerCodec, UdpTrackerRequest, UdpTrackerResponse, UdpTrackerResponseData,
+        },
+        UdpTrackerCodecError,
+    },
     RsbtError,
 };
-use futures::{future::BoxFuture, SinkExt, StreamExt};
+use futures::{future::BoxFuture, Sink, SinkExt, Stream, StreamExt};
 use log::{debug, error};
 use std::{
     net::SocketAddr,
@@ -18,9 +21,9 @@ use std::{
 use tokio::{net::UdpSocket, time::timeout};
 use tokio_util::udp::UdpFramed;
 
-pub(crate) struct UdpTrackerClient {
+pub(crate) struct UdpTrackerClient<T = UdpFramed<UdpTrackerCodec>> {
     connection_id: Option<(Instant, i64)>,
-    framed: UdpFramed<UdpTrackerCodec>,
+    framed: T,
     addr: SocketAddr,
 }
 
@@ -32,7 +35,15 @@ impl UdpTrackerClient {
             addr,
         }
     }
+}
 
+impl<T> UdpTrackerClient<T>
+where
+    T: Stream<Item = Result<(UdpTrackerResponse, SocketAddr), UdpTrackerCodecError>>
+        + Sink<(UdpTrackerRequest, SocketAddr), Error = UdpTrackerCodecError>
+        + Unpin
+        + Send,
+{
     async fn connection_id(
         &mut self,
         properties: Arc<Properties>,
