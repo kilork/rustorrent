@@ -184,53 +184,65 @@ mod tests {
     use crate::{
         process::TorrentTokenProvider,
         types::{
-            udp_tracker::UdpTrackerRequest, PropertiesProvider, UdpTrackerCodecError,
-            UdpTrackerResponse,
+            info::TorrentInfo, udp_tracker::UdpTrackerRequest, PropertiesProvider,
+            UdpTrackerCodecError, UdpTrackerResponse, UdpTrackerResponseData,
         },
+        RsbtError,
     };
-    use futures::{Sink, Stream};
+    use futures::{Sink, Stream, StreamExt};
     use std::{
         net::{IpAddr, Ipv4Addr, SocketAddr},
+        pin::Pin,
         sync::Arc,
+        task::{Context, Poll},
     };
 
-    struct TestUdpFramed;
+    struct TestUdpFramed {
+        transaction_id: i32,
+        responses: Vec<Result<UdpTrackerResponse, UdpTrackerCodecError>>,
+        addr: SocketAddr,
+    }
 
     impl Stream for TestUdpFramed {
         type Item = Result<(UdpTrackerResponse, SocketAddr), UdpTrackerCodecError>;
-        fn poll_next(
-            self: std::pin::Pin<&mut Self>,
-            cx: &mut std::task::Context<'_>,
-        ) -> std::task::Poll<Option<Self::Item>> {
-            todo!()
+        fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            let pin = self.get_mut();
+            Poll::Ready(pin.responses.pop().map(|x| {
+                x.map(|mut y| {
+                    y.transaction_id = pin.transaction_id;
+                    (y, pin.addr.clone())
+                })
+            }))
         }
     }
 
     impl Sink<(UdpTrackerRequest, SocketAddr)> for TestUdpFramed {
         type Error = UdpTrackerCodecError;
         fn poll_ready(
-            self: std::pin::Pin<&mut Self>,
-            cx: &mut std::task::Context<'_>,
-        ) -> std::task::Poll<Result<(), Self::Error>> {
-            todo!()
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
         }
         fn start_send(
-            self: std::pin::Pin<&mut Self>,
+            self: Pin<&mut Self>,
             item: (UdpTrackerRequest, SocketAddr),
         ) -> Result<(), Self::Error> {
-            todo!()
+            let pin = self.get_mut();
+            pin.transaction_id = item.0.transaction_id;
+            Ok(())
         }
         fn poll_flush(
-            self: std::pin::Pin<&mut Self>,
-            cx: &mut std::task::Context<'_>,
-        ) -> std::task::Poll<Result<(), Self::Error>> {
-            todo!()
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
         }
         fn poll_close(
-            self: std::pin::Pin<&mut Self>,
-            cx: &mut std::task::Context<'_>,
-        ) -> std::task::Poll<Result<(), Self::Error>> {
-            todo!()
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
         }
     }
 
@@ -238,18 +250,19 @@ mod tests {
 
     impl PropertiesProvider for TestProperties {
         fn port(&self) -> u16 {
-            todo!()
+            9999
         }
     }
 
-    struct TestTorrentToken;
+    struct TestTorrentToken(TorrentInfo);
 
     impl TorrentTokenProvider for TestTorrentToken {
-        fn info(&self) -> &crate::types::info::TorrentInfo {
-            todo!()
+        fn info(&self) -> &TorrentInfo {
+            &self.0
         }
+
         fn hash_id(&self) -> &[u8; crate::SHA1_SIZE] {
-            todo!()
+            &[0; crate::SHA1_SIZE]
         }
     }
 
@@ -258,12 +271,61 @@ mod tests {
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
         let mut udp_tracker_client = UdpTrackerClient {
             connection_id: None,
-            framed: TestUdpFramed,
+            framed: test_udp_frame(),
             addr,
         };
         let properties = Arc::new(TestProperties);
-        let torrent_token = Arc::new(TestTorrentToken);
+        let torrent_token = Arc::new(TestTorrentToken(TorrentInfo {
+            piece_length: 0,
+            default_blocks_count: 0,
+            last_piece_length: 0,
+            last_piece_blocks_count: 0,
+            pieces: vec![],
+            length: 100,
+            files: vec![],
+        }));
 
-        udp_tracker_client.announce(properties, torrent_token).await;
+        let announcement = udp_tracker_client
+            .announce(properties, torrent_token)
+            .await
+            .expect("udp tracker announcement");
+
+        assert_eq!(announcement.peers.len(), 1);
+    }
+
+    fn test_udp_frame() -> TestUdpFramed {
+        TestUdpFramed {
+            transaction_id: 0,
+            responses: vec![
+                Ok(UdpTrackerResponse {
+                    transaction_id: 1,
+                    data: UdpTrackerResponseData::Announce {
+                        interval: 600,
+                        leechers: 1,
+                        seeders: 2,
+                        peers: vec![SocketAddr::new(
+                            IpAddr::V4(Ipv4Addr::new(192, 168, 0, 1)),
+                            9999,
+                        )
+                        .into()],
+                    },
+                }),
+                Ok(UdpTrackerResponse {
+                    transaction_id: 1,
+                    data: UdpTrackerResponseData::Connect { connection_id: 0 },
+                }),
+            ],
+            addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
+        }
+    }
+
+    #[tokio::test]
+    async fn check_test_udp_frame() {
+        let mut test_udp_frame = test_udp_frame();
+        let mut count: usize = 0;
+        while let Some(Ok(_message)) = test_udp_frame.next().await {
+            count += 1;
+        }
+        assert_eq!(2, count);
     }
 }
