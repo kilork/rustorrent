@@ -187,6 +187,7 @@ mod tests {
             info::TorrentInfo, udp_tracker::UdpTrackerRequest, PropertiesProvider,
             UdpTrackerCodecError, UdpTrackerResponse, UdpTrackerResponseData,
         },
+        RsbtError,
     };
     use futures::{Sink, Stream, StreamExt};
     use std::{
@@ -198,20 +199,19 @@ mod tests {
 
     struct TestUdpFramed {
         transaction_id: i32,
-        responses: Vec<UdpTrackerResponse>,
+        responses: Vec<Result<UdpTrackerResponse, UdpTrackerCodecError>>,
         addr: SocketAddr,
     }
 
     impl Stream for TestUdpFramed {
         type Item = Result<(UdpTrackerResponse, SocketAddr), UdpTrackerCodecError>;
-        fn poll_next(
-            self: std::pin::Pin<&mut Self>,
-            _cx: &mut std::task::Context<'_>,
-        ) -> std::task::Poll<Option<Self::Item>> {
+        fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
             let pin = self.get_mut();
-            Poll::Ready(pin.responses.pop().map(|mut x| {
-                x.transaction_id = pin.transaction_id;
-                Ok((x, pin.addr.clone()))
+            Poll::Ready(pin.responses.pop().map(|x| {
+                x.map(|mut y| {
+                    y.transaction_id = pin.transaction_id;
+                    (y, pin.addr.clone())
+                })
             }))
         }
     }
@@ -297,7 +297,7 @@ mod tests {
         TestUdpFramed {
             transaction_id: 0,
             responses: vec![
-                UdpTrackerResponse {
+                Ok(UdpTrackerResponse {
                     transaction_id: 1,
                     data: UdpTrackerResponseData::Announce {
                         interval: 600,
@@ -309,11 +309,11 @@ mod tests {
                         )
                         .into()],
                     },
-                },
-                UdpTrackerResponse {
+                }),
+                Ok(UdpTrackerResponse {
                     transaction_id: 1,
                     data: UdpTrackerResponseData::Connect { connection_id: 0 },
-                },
+                }),
             ],
             addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080),
         }

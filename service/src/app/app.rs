@@ -316,7 +316,8 @@ impl App {
         debug!("piece length: {}", info.piece_length);
         debug!("total pieces: {}", info.pieces.len());
 
-        let mut handshake = vec![];
+        let mut handshake =
+            Vec::with_capacity(HANDSHAKE_PREFIX.len() + hash_id.len() + PEER_ID.len());
         handshake.extend_from_slice(&HANDSHAKE_PREFIX);
         handshake.extend_from_slice(&hash_id);
         handshake.extend_from_slice(&PEER_ID);
