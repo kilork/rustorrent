@@ -187,7 +187,6 @@ mod tests {
             info::TorrentInfo, udp_tracker::UdpTrackerRequest, PropertiesProvider,
             UdpTrackerCodecError, UdpTrackerResponse, UdpTrackerResponseData,
         },
-        RsbtError,
     };
     use futures::{Sink, Stream, StreamExt};
     use std::{

@@ -1,5 +1,5 @@
 use crate::{
-    announce::{http, udp, Announce, AnnounceTransport, Announcement},
+    announce::{http, udp, AnnounceTransport, Announcement},
     process::TorrentToken,
     types::Properties,
     RsbtError,

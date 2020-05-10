@@ -7,7 +7,6 @@ mod message;
 mod message_codec;
 mod message_codec_error;
 mod peer;
-mod peer_state;
 pub mod public;
 mod torrent;
 mod tracker_announce;

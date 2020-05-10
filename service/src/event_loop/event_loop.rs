@@ -1,9 +1,9 @@
 use crate::{
-    event_loop::{EventLoopCommand, EventLoopMessage, EventLoopRunner, EventLoopSender},
+    event_loop::{EventLoopMessage, EventLoopRunner, EventLoopSender},
     RsbtError, DEFAULT_CHANNEL_BUFFER,
 };
 use log::{debug, error};
-use std::{clone::Clone, future::Future};
+use std::clone::Clone;
 use tokio::{
     stream::StreamExt,
     sync::{mpsc, oneshot},
@@ -193,7 +193,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_loop_retransfer() {
-        let (feedback_sender, receiver) = mpsc::channel(1);
+        let (feedback_sender, _receiver) = mpsc::channel(1);
         let mut handler: EventLoop<TestMessage, TestLoop, TestFeedbackMessage> =
             EventLoop::spawn(Default::default(), feedback_sender).expect("cannot spawn test loop");
         handler

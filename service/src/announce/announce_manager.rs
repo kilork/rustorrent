@@ -275,7 +275,7 @@ mod tests {
 
     #[async_trait]
     impl AnnounceTransport for TestAnnounceTransport {
-        fn new(properties: Arc<Properties>, torrent_token: Arc<TorrentToken>) -> Self {
+        fn new(_properties: Arc<Properties>, _torrent_token: Arc<TorrentToken>) -> Self {
             todo!()
         }
         async fn request_announce(&self, url: String) -> Result<Announcement, RsbtError> {

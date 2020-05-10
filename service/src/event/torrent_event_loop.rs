@@ -12,7 +12,7 @@ use crate::{
     DEFAULT_CHANNEL_BUFFER,
 };
 use flat_storage::bit_by_index;
-use futures::{prelude::*, StreamExt};
+use futures::StreamExt;
 use log::{debug, error};
 use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
 use std::{collections::HashMap, sync::Arc};

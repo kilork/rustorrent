@@ -1,4 +1,3 @@
-mod announce;
 mod announce_manager;
 mod announce_manager_command;
 mod announce_manager_message;
@@ -10,7 +9,6 @@ mod http;
 mod udp;
 mod udp_tracker_client;
 
-pub(crate) use announce::Announce;
 pub(crate) use announce_manager::AnnounceManager;
 pub(crate) use announce_manager_command::AnnounceManagerCommand;
 pub(crate) use announce_manager_message::AnnounceManagerMessage;
