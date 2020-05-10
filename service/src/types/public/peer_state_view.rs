@@ -21,8 +21,8 @@ pub enum PeerStateView {
 impl From<&TorrentPeerState> for PeerStateView {
     fn from(value: &TorrentPeerState) -> Self {
         match value {
-            TorrentPeerState::Idle => Self::Idle {},
-            TorrentPeerState::Connecting(_) => Self::Connecting {},
+            TorrentPeerState::Idle => PeerStateView::Idle {},
+            TorrentPeerState::Connecting(_) => PeerStateView::Connecting {},
             TorrentPeerState::Connected {
                 chocked,
                 interested,
@@ -31,7 +31,7 @@ impl From<&TorrentPeerState> for PeerStateView {
                 downloaded,
                 uploaded,
                 ..
-            } => Self::Connected {
+            } => PeerStateView::Connected {
                 chocked: *chocked,
                 interested: *interested,
                 piece: downloading_piece.clone(),

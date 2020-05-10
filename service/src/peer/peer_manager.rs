@@ -21,7 +21,7 @@ use tokio::{
 use uuid::Uuid;
 
 pub(crate) struct PeerManager {
-    pub(crate) announce_manager: EventLoop<AnnounceManagerMessage, AnnounceManager, TorrentEvent>,
+    pub(crate) announce_manager: EventLoop<AnnounceManagerMessage, AnnounceManager>,
     pub(crate) torrent_storage: TorrentStorage,
     pub(crate) torrent_process: Arc<TorrentToken>,
     pub(crate) peer_states: HashMap<Uuid, PeerState>,

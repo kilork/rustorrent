@@ -10,19 +10,19 @@ use tokio::{
     task::JoinHandle,
 };
 
-pub(crate) struct EventLoop<M, T, F> {
+pub(crate) struct EventLoop<M, T> {
     join_handle: Option<JoinHandle<T>>,
     sender: mpsc::Sender<EventLoopMessage<M>>,
-    feedback: mpsc::Sender<F>,
 }
 
-impl<M: Send + 'static, T, F: Send + 'static> EventLoop<M, T, F> {
-    pub(crate) fn spawn(
+impl<M: Send + 'static, T> EventLoop<M, T> {
+    pub(crate) fn spawn<F>(
         mut runner: T,
         feedback: mpsc::Sender<F>,
-    ) -> Result<EventLoop<M, T, F>, RsbtError>
+    ) -> Result<EventLoop<M, T>, RsbtError>
     where
         T: Send + EventLoopRunner<M, F> + 'static,
+        F: Send + 'static,
     {
         let (sender, mut receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
@@ -71,7 +71,6 @@ impl<M: Send + 'static, T, F: Send + 'static> EventLoop<M, T, F> {
         Ok(EventLoop {
             join_handle,
             sender,
-            feedback,
         })
     }
 
@@ -177,7 +176,7 @@ mod tests {
     #[tokio::test]
     async fn test_loop_quit() {
         let (feedback_sender, _receiver) = mpsc::channel(1);
-        let mut handler: EventLoop<TestMessage, TestLoop, TestFeedbackMessage> =
+        let mut handler: EventLoop<TestMessage, TestLoop> =
             EventLoop::spawn(Default::default(), feedback_sender).expect("cannot spawn test loop");
         let test_loop = handler.quit().await.expect("cannot quit test loop");
         assert!(matches!(
@@ -194,7 +193,7 @@ mod tests {
     #[tokio::test]
     async fn test_loop_retransfer() {
         let (feedback_sender, _receiver) = mpsc::channel(1);
-        let mut handler: EventLoop<TestMessage, TestLoop, TestFeedbackMessage> =
+        let mut handler: EventLoop<TestMessage, TestLoop> =
             EventLoop::spawn(Default::default(), feedback_sender).expect("cannot spawn test loop");
         handler
             .send(TestMessage::TestData(vec![1, 2, 3, 4]))
@@ -214,7 +213,7 @@ mod tests {
     #[tokio::test]
     async fn test_loop_feedback() {
         let (feedback_sender, mut receiver) = mpsc::channel(1);
-        let mut handler: EventLoop<TestMessage, TestLoop, TestFeedbackMessage> =
+        let mut handler: EventLoop<TestMessage, TestLoop> =
             EventLoop::spawn(Default::default(), feedback_sender).expect("cannot spawn test loop");
         handler
             .send(TestMessage::TestFeedBack(100))
