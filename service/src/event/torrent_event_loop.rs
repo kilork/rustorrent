@@ -175,7 +175,7 @@ pub(crate) async fn torrent_event_loop(
             }
             TorrentEvent::Subscribe(request_response) => {
                 if let Err(err) = peer_manager
-                    .statistic_sender
+                    .statistics_manager
                     .send(TorrentStatisticMessage::Subscribe(request_response))
                     .await
                 {
@@ -286,14 +286,6 @@ pub(crate) async fn torrent_event_loop(
 
     if let Err(err) = peer_manager.quit().await {
         error!("error during peer manager quit: {}", err);
-    }
-
-    if let Err(err) = peer_manager
-        .statistic_sender
-        .send(TorrentStatisticMessage::Quit)
-        .await
-    {
-        error!("cannot send quit to statistic: {}", err);
     }
 
     debug!("download_torrent done");

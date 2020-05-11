@@ -1,5 +1,6 @@
 use crate::{
     event::{TorrentEvent, TorrentStatisticMessage},
+    event_loop::EventLoopSender,
     peer::request_message,
     process::TorrentToken,
     types::{info::PieceChecksum, Message, MessageCodec},
@@ -25,7 +26,7 @@ pub(crate) struct PeerLoopMessage {
     pub(crate) piece_length: usize,
     pub(crate) wtransport: SplitSink<Framed<TcpStream, MessageCodec>, Message>,
     pub(crate) request: Option<(u32, u32, u32)>,
-    pub(crate) statistic_sender: Sender<TorrentStatisticMessage>,
+    pub(crate) statistic_sender: EventLoopSender<TorrentStatisticMessage, TorrentEvent>,
 }
 
 impl PeerLoopMessage {

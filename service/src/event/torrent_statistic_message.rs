@@ -5,5 +5,4 @@ pub enum TorrentStatisticMessage {
     Subscribe(RequestResponse<(), watch::Receiver<TorrentDownloadState>>),
     Downloaded(u64),
     Uploaded(u64),
-    Quit,
 }

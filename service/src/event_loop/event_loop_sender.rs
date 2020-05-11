@@ -5,10 +5,18 @@ use crate::{
 use std::future::Future;
 use tokio::sync::mpsc::Sender;
 
-#[derive(Clone)]
 pub(crate) struct EventLoopSender<M, F> {
     sender: Sender<EventLoopMessage<M>>,
     feedback_sender: Sender<F>,
+}
+
+impl<M, F> Clone for EventLoopSender<M, F> {
+    fn clone(&self) -> Self {
+        Self {
+            sender: self.sender.clone(),
+            feedback_sender: self.feedback_sender.clone(),
+        }
+    }
 }
 
 impl<M: Send + 'static, F> EventLoopSender<M, F> {

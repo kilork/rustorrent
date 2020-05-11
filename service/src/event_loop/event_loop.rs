@@ -10,41 +10,39 @@ use tokio::{
     task::JoinHandle,
 };
 
-pub(crate) struct EventLoop<M, T> {
+pub(crate) struct EventLoop<M, T, F> {
     join_handle: Option<JoinHandle<T>>,
+    loop_sender: EventLoopSender<M, F>,
     sender: mpsc::Sender<EventLoopMessage<M>>,
 }
 
-impl<M: Send + 'static, T> EventLoop<M, T> {
-    pub(crate) fn spawn<F>(
+impl<M: Send + 'static, T, F: Send + 'static> EventLoop<M, T, F> {
+    pub(crate) fn spawn(
         mut runner: T,
         feedback: mpsc::Sender<F>,
-    ) -> Result<EventLoop<M, T>, RsbtError>
+    ) -> Result<EventLoop<M, T, F>, RsbtError>
     where
         T: Send + EventLoopRunner<M, F> + 'static,
-        F: Send + 'static,
     {
         let (sender, mut receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
 
-        runner.set_sender(EventLoopSender::new(sender.clone(), feedback.clone()));
+        let loop_sender = EventLoopSender::new(sender.clone(), feedback.clone());
+        runner.set_sender(loop_sender.clone());
 
         let join_handle = Some(tokio::spawn(async move {
             while let Some(event) = receiver.next().await {
                 match event {
                     EventLoopMessage::Start(sender) => {
-                        debug!("start");
                         if let Err(_) = sender.send(runner.start().await) {
                             error!("cannot respond after start runner");
                         }
                     }
                     EventLoopMessage::Stop(sender) => {
-                        debug!("stop");
                         if let Err(_) = sender.send(runner.stop().await) {
                             error!("cannot respond after stop runner");
                         }
                     }
                     EventLoopMessage::Quit(sender) => {
-                        debug!("quit");
                         let quit_result = runner.quit().await;
                         let we_done = quit_result.is_ok();
                         if let Some(sender) = sender {
@@ -57,7 +55,6 @@ impl<M: Send + 'static, T> EventLoop<M, T> {
                         }
                     }
                     EventLoopMessage::Loop(message) => {
-                        debug!("loop");
                         if let Err(err) = runner.handle(message).await {
                             error!("runner cannot handle message: {}", err);
                         }
@@ -70,8 +67,13 @@ impl<M: Send + 'static, T> EventLoop<M, T> {
 
         Ok(EventLoop {
             join_handle,
+            loop_sender,
             sender,
         })
+    }
+
+    pub(crate) fn loop_sender(&self) -> &EventLoopSender<M, F> {
+        &self.loop_sender
     }
 
     pub(crate) async fn send<E: Into<EventLoopMessage<M>>>(
@@ -176,7 +178,7 @@ mod tests {
     #[tokio::test]
     async fn test_loop_quit() {
         let (feedback_sender, _receiver) = mpsc::channel(1);
-        let mut handler: EventLoop<TestMessage, TestLoop> =
+        let mut handler: EventLoop<TestMessage, TestLoop, TestFeedbackMessage> =
             EventLoop::spawn(Default::default(), feedback_sender).expect("cannot spawn test loop");
         let test_loop = handler.quit().await.expect("cannot quit test loop");
         assert!(matches!(
@@ -193,7 +195,7 @@ mod tests {
     #[tokio::test]
     async fn test_loop_retransfer() {
         let (feedback_sender, _receiver) = mpsc::channel(1);
-        let mut handler: EventLoop<TestMessage, TestLoop> =
+        let mut handler: EventLoop<TestMessage, TestLoop, TestFeedbackMessage> =
             EventLoop::spawn(Default::default(), feedback_sender).expect("cannot spawn test loop");
         handler
             .send(TestMessage::TestData(vec![1, 2, 3, 4]))
@@ -213,7 +215,7 @@ mod tests {
     #[tokio::test]
     async fn test_loop_feedback() {
         let (feedback_sender, mut receiver) = mpsc::channel(1);
-        let mut handler: EventLoop<TestMessage, TestLoop> =
+        let mut handler: EventLoop<TestMessage, TestLoop, TestFeedbackMessage> =
             EventLoop::spawn(Default::default(), feedback_sender).expect("cannot spawn test loop");
         handler
             .send(TestMessage::TestFeedBack(100))

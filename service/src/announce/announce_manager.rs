@@ -352,6 +352,7 @@ mod tests {
         let mut announce_manager: EventLoop<
             AnnounceManagerMessage,
             AnnounceManager<TestAnnounceTransport>,
+            TorrentEvent,
         > = EventLoop::spawn(
             AnnounceManager {
                 announce_urls,

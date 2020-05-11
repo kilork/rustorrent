@@ -1,5 +1,6 @@
 use crate::{
     event::{TorrentEvent, TorrentStatisticMessage},
+    event_loop::EventLoopSender,
     peer::{request_message, PeerLoopMessage, PeerMessage},
     process::TorrentToken,
     types::{Message, MessageCodec},
@@ -21,7 +22,7 @@ pub(crate) async fn peer_loop(
     mut sender: Sender<PeerMessage>,
     mut receiver: Receiver<PeerMessage>,
     stream: TcpStream,
-    mut statistic_sender: Sender<TorrentStatisticMessage>,
+    mut statistic_sender: EventLoopSender<TorrentStatisticMessage, TorrentEvent>,
 ) -> Result<(), RsbtError> {
     let (wtransport, mut rtransport) = Framed::new(stream, MessageCodec).split();
 
@@ -42,7 +43,7 @@ pub(crate) async fn peer_loop(
             torrent_piece: None,
             wtransport,
             request: None,
-            statistic_sender: statistic_sender.clone(),
+            statistic_sender,
         };
 
         while let Some(message) = receiver.next().await {
@@ -76,7 +77,8 @@ pub(crate) async fn peer_loop(
                             block,
                         })
                         .await?;
-                    if let Err(err) = statistic_sender
+                    if let Err(err) = processor
+                        .statistic_sender
                         .send(TorrentStatisticMessage::Uploaded(block_len))
                         .await
                     {
