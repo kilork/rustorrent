@@ -212,6 +212,7 @@ impl PeerLoopMessage {
         Ok(false)
     }
 
+    /// Message from peer to us
     pub(crate) async fn peer_loop_message(&mut self, message: Message) -> Result<bool, RsbtError> {
         let peer_id = self.peer_id;
         self.message_count += 1;
@@ -245,7 +246,7 @@ impl PeerLoopMessage {
             Message::KeepAlive => {
                 return self.keep_alive().await;
             }
-            _ => debug!("[{}] unhandled message: {}", peer_id, message),
+            _ => debug!("[{}] unhandled message from peer: {}", peer_id, message),
         }
 
         Ok(false)

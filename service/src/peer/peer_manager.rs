@@ -8,15 +8,19 @@ use crate::{
     request_response::RequestResponse,
     spawn_and_log_error,
     storage::TorrentStorage,
-    types::Peer,
+    types::{public::TorrentDownloadState, Peer, Properties},
     RsbtError, DEFAULT_CHANNEL_BUFFER,
 };
 use flat_storage::{bit_by_index, index_in_bitarray};
+use futures::StreamExt;
 use log::{debug, error};
 use std::{collections::HashMap, sync::Arc, time::Instant};
 use tokio::{
     net::TcpStream,
-    sync::mpsc::{self, Sender},
+    sync::{
+        mpsc::{self, Sender},
+        watch,
+    },
 };
 use uuid::Uuid;
 
@@ -33,6 +37,69 @@ pub(crate) struct PeerManager {
 }
 
 impl PeerManager {
+    pub(crate) fn new(
+        properties: Arc<Properties>,
+        torrent_storage: TorrentStorage,
+        torrent_process: Arc<TorrentToken>,
+    ) -> Result<Self, RsbtError> {
+        let (statistic_sender, mut statistic_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
+
+        let mut torrent_download_state = {
+            let storage_state = torrent_storage.receiver.borrow();
+            TorrentDownloadState {
+                downloaded: storage_state.bytes_write,
+                uploaded: storage_state.bytes_read,
+            }
+        };
+
+        let announce_manager = EventLoop::spawn(
+            AnnounceManager::new(properties.clone(), torrent_process.clone()),
+            torrent_process.broker_sender.clone(),
+        )?;
+
+        let peer_manager = PeerManager {
+            announce_manager,
+            torrent_storage,
+            torrent_process,
+            peer_states: HashMap::new(),
+            mode: TorrentDownloadMode::Normal,
+            active: false,
+            awaiting_for_piece: HashMap::new(),
+            statistic_sender,
+        };
+
+        let statistic_task = async move {
+            let (watch_sender, watch_receiver) = watch::channel(torrent_download_state.clone());
+            while let Some(message) = statistic_receiver.next().await {
+                match message {
+                    TorrentStatisticMessage::Subscribe(request_response) => {
+                        if let Err(err) = request_response.response(watch_receiver.clone()) {
+                            error!(
+                                "cannot send subscription response to torrent statistics: {}",
+                                err
+                            );
+                        }
+                    }
+                    TorrentStatisticMessage::Uploaded(count) => {
+                        torrent_download_state.uploaded += count;
+                        if let Err(err) = watch_sender.broadcast(torrent_download_state) {
+                            error!("cannot broadcast uploaded torrent statistics: {}", err);
+                        }
+                    }
+                    TorrentStatisticMessage::Downloaded(count) => {
+                        torrent_download_state.downloaded += count;
+                        if let Err(err) = watch_sender.broadcast(torrent_download_state) {
+                            error!("cannot broadcast downloaded torrent statistics: {}", err);
+                        }
+                    }
+                    TorrentStatisticMessage::Quit => break,
+                }
+            }
+        };
+        tokio::spawn(statistic_task);
+        Ok(peer_manager)
+    }
+
     pub(crate) async fn peer_announced(&mut self, peer: Peer) -> Result<(), RsbtError> {
         let torrent_process = self.torrent_process.clone();
         let mut peer_states_iter = self.peer_states.iter_mut();

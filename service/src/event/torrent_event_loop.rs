@@ -1,25 +1,19 @@
 use crate::{
-    announce::AnnounceManager,
-    event::{TorrentDownloadMode, TorrentEvent, TorrentStatisticMessage},
-    event_loop::EventLoop,
+    event::{TorrentEvent, TorrentStatisticMessage},
     peer::{PeerManager, PeerMessage, TorrentPeerState},
     process::TorrentToken,
     storage::TorrentStorage,
     types::{
-        public::{AnnounceView, PeerView, TorrentDownloadState},
+        public::{AnnounceView, PeerView},
         Properties,
     },
-    DEFAULT_CHANNEL_BUFFER,
 };
 use flat_storage::bit_by_index;
 use futures::StreamExt;
 use log::{debug, error};
 use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
 use std::{collections::HashMap, sync::Arc};
-use tokio::sync::{
-    mpsc::{self, Receiver},
-    watch,
-};
+use tokio::sync::mpsc::Receiver;
 
 pub(crate) async fn torrent_event_loop(
     properties: Arc<Properties>,
@@ -27,63 +21,8 @@ pub(crate) async fn torrent_event_loop(
     torrent_process: Arc<TorrentToken>,
     mut broker_receiver: Receiver<TorrentEvent>,
 ) {
-    let (statistic_sender, mut statistic_receiver) = mpsc::channel(DEFAULT_CHANNEL_BUFFER);
-
-    let mut torrent_download_state = {
-        let storage_state = torrent_storage.receiver.borrow();
-        TorrentDownloadState {
-            downloaded: storage_state.bytes_write,
-            uploaded: storage_state.bytes_read,
-        }
-    };
-
-    let announce_manager = EventLoop::spawn(
-        AnnounceManager::new(properties.clone(), torrent_process.clone()),
-        torrent_process.broker_sender.clone(),
-    )
-    .expect("FIXME: need to turn this into non breaking failure");
-
-    let mut peer_manager = PeerManager {
-        announce_manager,
-        torrent_storage,
-        torrent_process,
-        peer_states: HashMap::new(),
-        mode: TorrentDownloadMode::Normal,
-        active: false,
-        awaiting_for_piece: HashMap::new(),
-        statistic_sender,
-    };
-
-    let statistic_task = async move {
-        let (watch_sender, watch_receiver) = watch::channel(torrent_download_state.clone());
-        while let Some(message) = statistic_receiver.next().await {
-            match message {
-                TorrentStatisticMessage::Subscribe(request_response) => {
-                    if let Err(err) = request_response.response(watch_receiver.clone()) {
-                        error!(
-                            "cannot send subscription response to torrent statistics: {}",
-                            err
-                        );
-                    }
-                }
-                TorrentStatisticMessage::Uploaded(count) => {
-                    torrent_download_state.uploaded += count;
-                    if let Err(err) = watch_sender.broadcast(torrent_download_state) {
-                        error!("cannot broadcast uploaded torrent statistics: {}", err);
-                    }
-                }
-                TorrentStatisticMessage::Downloaded(count) => {
-                    torrent_download_state.downloaded += count;
-                    if let Err(err) = watch_sender.broadcast(torrent_download_state) {
-                        error!("cannot broadcast downloaded torrent statistics: {}", err);
-                    }
-                }
-                TorrentStatisticMessage::Quit => break,
-            }
-        }
-    };
-    tokio::spawn(statistic_task);
-
+    let mut peer_manager = PeerManager::new(properties, torrent_storage, torrent_process)
+        .expect("FIXME: need to turn this into non breaking failure");
     while let Some(event) = broker_receiver.next().await {
         debug!("received event: {}", event);
         match event {
