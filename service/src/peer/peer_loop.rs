@@ -22,7 +22,7 @@ pub(crate) async fn peer_loop(
     mut sender: Sender<PeerMessage>,
     mut receiver: Receiver<PeerMessage>,
     stream: TcpStream,
-    mut statistic_sender: EventLoopSender<TorrentStatisticMessage, TorrentEvent>,
+    statistic_sender: EventLoopSender<TorrentStatisticMessage, TorrentEvent>,
 ) -> Result<(), RsbtError> {
     let (wtransport, mut rtransport) = Framed::new(stream, MessageCodec).split();
 
@@ -47,7 +47,7 @@ pub(crate) async fn peer_loop(
         };
 
         while let Some(message) = receiver.next().await {
-            debug!("[{}] peer loop received message: {}", peer_id, message);
+            debug!("[{}] sending to connected peer: {}", peer_id, message);
             match message {
                 PeerMessage::Bitfield(pieces) => {
                     processor.wtransport.send(Message::Bitfield(pieces)).await?;
