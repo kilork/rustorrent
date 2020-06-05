@@ -62,6 +62,15 @@ impl PeerManager {
         Ok(peer_manager)
     }
 
+    pub(crate) async fn peers_announced(&mut self, peers: Vec<Peer>) {
+        for peer in peers {
+            debug!("peer announced: {:?}", peer);
+            if let Err(err) = self.peer_announced(peer.clone()).await {
+                error!("cannot process peer announced {:?}: {}", peer, err);
+            }
+        }
+    }
+
     pub(crate) async fn peer_announced(&mut self, peer: Peer) -> RsbtResult<()> {
         let torrent_process = self.torrent_process.clone();
         let mut peer_states_iter = self.peer_states.iter_mut();
@@ -169,6 +178,7 @@ impl PeerManager {
         peer_id: Uuid,
         stream: TcpStream,
     ) -> RsbtResult<()> {
+        debug!("[{}] peer connected to {:?}", peer_id, stream.peer_addr());
         debug!("[{}] peer connection initiated", peer_id);
 
         if let Some(existing_peer) = self.peer_states.get_mut(&peer_id) {

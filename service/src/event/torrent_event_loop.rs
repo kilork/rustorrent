@@ -27,13 +27,7 @@ pub(crate) async fn torrent_event_loop(
         debug!("received event: {}", event);
         match event {
             TorrentEvent::Announce(peers) => {
-                debug!("we got announce, what now?");
-                for peer in peers {
-                    debug!("peer announced: {:?}", peer);
-                    if let Err(err) = peer_manager.peer_announced(peer.clone()).await {
-                        error!("cannot process peer announced {:?}: {}", peer, err);
-                    }
-                }
+                peer_manager.peers_announced(peers).await;
             }
             TorrentEvent::PeerDisconnect(peer_id) => {
                 if let Some(_peer_state) = peer_manager.peer_states.remove(&peer_id) {
@@ -46,13 +40,11 @@ pub(crate) async fn torrent_event_loop(
                 }
             }
             TorrentEvent::PeerForwarded(stream) => {
-                debug!("peer forwarded");
                 if let Err(err) = peer_manager.peer_forwarded(stream).await {
                     error!("cannot forward peer: {}", err);
                 }
             }
             TorrentEvent::PeerConnected(peer_id, stream) => {
-                debug!("[{}] peer connected to {:?}", peer_id, stream.peer_addr());
                 if let Err(err) = peer_manager.peer_connected(peer_id, stream).await {
                     error!("[{}] cannot process peer connected: {}", peer_id, err);
                 }
