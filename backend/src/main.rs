@@ -38,7 +38,7 @@ mod session;
 mod torrents;
 mod uploads;
 
-use event_stream::*;
+use event_stream::{stream, Broadcaster};
 use file_download::*;
 use login::*;
 #[cfg(feature = "sandbox")]

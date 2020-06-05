@@ -42,13 +42,7 @@ impl TorrentProcess {
     pub(crate) async fn enable(&mut self) -> Result<(), RsbtError> {
         debug!("enable {}", self.id);
 
-        let (enable_request, response) = RequestResponse::new(());
-        self.process
-            .broker_sender
-            .clone()
-            .send(TorrentEvent::Enable(enable_request))
-            .await?;
-        response.await??;
+        self.request((), TorrentEvent::Enable).await?;
 
         self.update_state(TorrentProcessStatus::Enabled).await
     }
@@ -56,13 +50,8 @@ impl TorrentProcess {
     pub(crate) async fn disable(&mut self) -> Result<(), RsbtError> {
         debug!("disable {}", self.id);
 
-        let (disable_request, response) = RequestResponse::new(());
-        self.process
-            .broker_sender
-            .clone()
-            .send(TorrentEvent::Disable(disable_request))
-            .await?;
-        response.await??;
+        self.request((), TorrentEvent::Disable).await?;
+
         self.update_state(TorrentProcessStatus::Disabled).await
     }
 
@@ -75,30 +64,24 @@ impl TorrentProcess {
     pub(crate) async fn delete(&mut self, files: bool) -> Result<(), RsbtError> {
         debug!("delete {}", self.id);
 
-        let (delete_request, response) = RequestResponse::new(files);
-        self.process
-            .broker_sender
-            .clone()
-            .send(TorrentEvent::Delete(delete_request))
-            .await?;
-
-        response.await??;
-
-        Ok(())
+        self.request(files, TorrentEvent::Delete).await
     }
 
     pub(crate) async fn peers(&self) -> Result<Vec<PeerView>, RsbtError> {
         debug!("peers for {}", self.id);
+
         self.request((), TorrentEvent::PeersView).await
     }
 
     pub(crate) async fn announces(&self) -> Result<Vec<AnnounceView>, RsbtError> {
         debug!("peers for {}", self.id);
+
         self.request((), TorrentEvent::AnnounceView).await
     }
 
     pub(crate) async fn files(&self) -> Result<Vec<FileView>, RsbtError> {
         debug!("files for {}", self.id);
+
         self.request((), TorrentEvent::FilesView).await
     }
 
