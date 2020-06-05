@@ -28,15 +28,14 @@ use tokio::{
 use uuid::Uuid;
 
 pub(crate) struct PeerManager {
-    pub(crate) announce_manager: EventLoop<AnnounceManagerMessage, AnnounceManager, TorrentEvent>,
-    pub(crate) statistics_manager:
-        EventLoop<TorrentStatisticMessage, StatisticsManager, TorrentEvent>,
-    pub(crate) torrent_storage: TorrentStorage,
-    pub(crate) torrent_process: Arc<TorrentToken>,
-    pub(crate) peer_states: HashMap<Uuid, PeerState>,
-    pub(crate) mode: TorrentDownloadMode,
-    pub(crate) active: bool,
-    pub(crate) awaiting_for_piece:
+    announce_manager: EventLoop<AnnounceManagerMessage, AnnounceManager, TorrentEvent>,
+    statistics_manager: EventLoop<TorrentStatisticMessage, StatisticsManager, TorrentEvent>,
+    torrent_storage: TorrentStorage,
+    torrent_process: Arc<TorrentToken>,
+    peer_states: HashMap<Uuid, PeerState>,
+    mode: TorrentDownloadMode,
+    active: bool,
+    awaiting_for_piece:
         HashMap<usize, Vec<RequestResponse<TorrentEventQueryPiece, RsbtResult<Vec<u8>>>>>,
 }
 
@@ -129,6 +128,10 @@ impl PeerManager {
         };
 
         Ok(())
+    }
+
+    pub(crate) fn peer_remove_by_id(&mut self, id: Uuid) -> Option<PeerState> {
+        self.peer_states.remove(&id)
     }
 
     pub(crate) async fn peer_forwarded(&mut self, stream: TcpStream) -> RsbtResult<()> {

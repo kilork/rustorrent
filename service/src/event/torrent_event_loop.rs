@@ -22,12 +22,12 @@ pub(crate) async fn torrent_event_loop(
                 peer_manager.peers_announced(peers).await;
             }
             TorrentEvent::PeerDisconnect(peer_id) => {
-                if let Some(_peer_state) = peer_manager.peer_states.remove(&peer_id) {
+                if let Some(_peer_state) = peer_manager.peer_remove_by_id(peer_id) {
                     debug!("[{}] removed peer due to disconnect", peer_id);
                 }
             }
             TorrentEvent::PeerConnectFailed(peer_id) => {
-                if let Some(_peer_state) = peer_manager.peer_states.remove(&peer_id) {
+                if let Some(_peer_state) = peer_manager.peer_remove_by_id(peer_id) {
                     debug!("[{}] removed peer due to connection failure", peer_id);
                 }
             }
