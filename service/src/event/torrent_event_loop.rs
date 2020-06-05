@@ -128,7 +128,7 @@ pub(crate) async fn torrent_event_loop(
             TorrentEvent::Enable(request_response) => {
                 if peer_manager.active {
                     if let Err(err) = request_response.response(Ok(())) {
-                        error!("cannot send response for disable torrent: {}", err);
+                        error!("cannot send response for enable torrent: {}", err);
                     }
                     continue;
                 }
