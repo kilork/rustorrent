@@ -47,13 +47,17 @@ use session::*;
 use torrents::*;
 use uploads::*;
 
+fn default_env(var: &str, default: &str) -> String {
+    std::env::var(var).unwrap_or_else(|_| default.to_string())
+}
+
 lazy_static::lazy_static! {
-static ref RSBT_UI_HOST: String = std::env::var("RSBT_UI_HOST").unwrap_or_else(|_| "http://localhost:8080".to_string());
-static ref RSBT_BIND: String = std::env::var("RSBT_BIND").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
-static ref RSBT_OPENID_CLIENT_ID: String = std::env::var("RSBT_OPENID_CLIENT_ID").unwrap_or_else(|_| "web_app".to_string());
-static ref RSBT_OPENID_CLIENT_SECRET: String = std::env::var("RSBT_OPENID_CLIENT_SECRET").unwrap_or_else(|_| "web_app".to_string());
-static ref RSBT_OPENID_ISSUER: String = std::env::var("RSBT_OPENID_ISSUER").unwrap_or_else(|_| "http://keycloak:9080/auth/realms/jhipster".to_string());
-pub(crate) static ref RSBT_ALLOW: String = std::env::var("RSBT_ALLOW").unwrap_or_else(|_| "user@localhost".to_string());
+static ref RSBT_UI_HOST: String = default_env("RSBT_UI_HOST", "http://localhost:8080");
+static ref RSBT_BIND: String = default_env("RSBT_BIND", "0.0.0.0:8080");
+static ref RSBT_OPENID_CLIENT_ID: String = default_env("RSBT_OPENID_CLIENT_ID", "web_app");
+static ref RSBT_OPENID_CLIENT_SECRET: String = default_env("RSBT_OPENID_CLIENT_SECRET", "web_app");
+static ref RSBT_OPENID_ISSUER: String = default_env("RSBT_OPENID_ISSUER", "http://keycloak:9080/auth/realms/jhipster");
+pub(crate) static ref RSBT_ALLOW: String = default_env("RSBT_ALLOW", "user@localhost");
 }
 
 #[derive(Serialize, Deserialize, Debug)]
