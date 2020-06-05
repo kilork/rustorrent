@@ -141,7 +141,9 @@ async fn main() -> Result<(), ExitFailure> {
                 .send(BroadcasterMessage::Subscribe(torrent_download))
                 .await
             {
-                error!("cannot send subscribe message: {}", err);
+                let error_msg = format!("cannot send broadcast subscribe message: {}", err);
+                error!("{}", error_msg);
+                Err(RsbtError::FailureReason(error_msg))?;
             }
         }
     }
@@ -238,7 +240,7 @@ enum BroadcasterMessage {
 
 fn init_broadcaster() -> (web::Data<Broadcaster>, Sender<BroadcasterMessage>) {
     let broadcaster = web::Data::new(Broadcaster::new());
-    let broadcaster_timer = broadcaster.clone();
+    let task_broadcaster = broadcaster.clone();
 
     let (broadcaster_sender, mut broadcaster_receiver) =
         mpsc::channel(rsbt_service::DEFAULT_CHANNEL_BUFFER);
@@ -251,9 +253,9 @@ fn init_broadcaster() -> (web::Data<Broadcaster>, Sender<BroadcasterMessage>) {
                 BroadcasterMessage::Send(torrent_event) => {
                     let json_message = serde_json::to_string(&torrent_event).unwrap();
                     debug!("sending broadcast: {}", json_message);
-                    if let Err(ok_clients) = broadcaster_timer.message(&json_message).await {
+                    if let Err(ok_clients) = task_broadcaster.message(&json_message).await {
                         debug!("refresh client list");
-                        *broadcaster_timer.clients.write().await = ok_clients;
+                        *task_broadcaster.clients.write().await = ok_clients;
                     }
                 }
                 BroadcasterMessage::Subscribe(torrent_download) => {
