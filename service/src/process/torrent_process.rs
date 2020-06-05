@@ -3,12 +3,12 @@ use crate::{
     file_download::FileDownloadStream,
     process::{TorrentProcessHeader, TorrentProcessStatus, TorrentToken},
     request_response::RequestResponse,
+    result::RsbtResult,
     storage::TorrentStorageState,
     types::{
         public::{AnnounceView, FileView, PeerView, TorrentDownloadState},
         Properties,
     },
-    RsbtError,
 };
 use log::debug;
 use std::{ops::Range, sync::Arc};
@@ -26,9 +26,9 @@ pub struct TorrentProcess {
 }
 
 impl TorrentProcess {
-    pub(crate) async fn request<T, F, R>(&self, data: T, cmd: F) -> Result<R, RsbtError>
+    pub(crate) async fn request<T, F, R>(&self, data: T, cmd: F) -> RsbtResult<R>
     where
-        F: FnOnce(RequestResponse<T, Result<R, RsbtError>>) -> TorrentEvent,
+        F: FnOnce(RequestResponse<T, RsbtResult<R>>) -> TorrentEvent,
     {
         let (request_response, response) = RequestResponse::new(data);
         self.process
@@ -39,7 +39,7 @@ impl TorrentProcess {
         response.await?
     }
 
-    pub(crate) async fn enable(&mut self) -> Result<(), RsbtError> {
+    pub(crate) async fn enable(&mut self) -> RsbtResult<()> {
         debug!("enable {}", self.id);
 
         self.request((), TorrentEvent::Enable).await?;
@@ -47,7 +47,7 @@ impl TorrentProcess {
         self.update_state(TorrentProcessStatus::Enabled).await
     }
 
-    pub(crate) async fn disable(&mut self) -> Result<(), RsbtError> {
+    pub(crate) async fn disable(&mut self) -> RsbtResult<()> {
         debug!("disable {}", self.id);
 
         self.request((), TorrentEvent::Disable).await?;
@@ -55,31 +55,31 @@ impl TorrentProcess {
         self.update_state(TorrentProcessStatus::Disabled).await
     }
 
-    async fn update_state(&mut self, state: TorrentProcessStatus) -> Result<(), RsbtError> {
+    async fn update_state(&mut self, state: TorrentProcessStatus) -> RsbtResult<()> {
         self.header.state = state;
 
         Ok(())
     }
 
-    pub(crate) async fn delete(&mut self, files: bool) -> Result<(), RsbtError> {
+    pub(crate) async fn delete(&mut self, files: bool) -> RsbtResult<()> {
         debug!("delete {}", self.id);
 
         self.request(files, TorrentEvent::Delete).await
     }
 
-    pub(crate) async fn peers(&self) -> Result<Vec<PeerView>, RsbtError> {
+    pub(crate) async fn peers(&self) -> RsbtResult<Vec<PeerView>> {
         debug!("peers for {}", self.id);
 
         self.request((), TorrentEvent::PeersView).await
     }
 
-    pub(crate) async fn announces(&self) -> Result<Vec<AnnounceView>, RsbtError> {
+    pub(crate) async fn announces(&self) -> RsbtResult<Vec<AnnounceView>> {
         debug!("peers for {}", self.id);
 
         self.request((), TorrentEvent::AnnounceView).await
     }
 
-    pub(crate) async fn files(&self) -> Result<Vec<FileView>, RsbtError> {
+    pub(crate) async fn files(&self) -> RsbtResult<Vec<FileView>> {
         debug!("files for {}", self.id);
 
         self.request((), TorrentEvent::FilesView).await
@@ -89,7 +89,7 @@ impl TorrentProcess {
         &self,
         file_id: usize,
         range: Option<Range<usize>>,
-    ) -> Result<FileDownloadStream, RsbtError> {
+    ) -> RsbtResult<FileDownloadStream> {
         debug!("download file {}", self.id);
         self.request((file_id, range), TorrentEvent::FileDownload)
             .await
