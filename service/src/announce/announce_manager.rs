@@ -14,7 +14,6 @@ use log::{debug, error, warn};
 use rand::{seq::SliceRandom, thread_rng};
 use std::sync::Arc;
 use tokio::time::{delay_for, Duration};
-use Clone;
 
 pub(crate) struct AnnounceManager<T: AnnounceTransport = DefaultAnnounceTransport> {
     announce_urls: Vec<Vec<String>>,

@@ -38,7 +38,7 @@ mod session;
 mod torrents;
 mod uploads;
 
-use event_stream::*;
+use event_stream::{stream, Broadcaster};
 use file_download::*;
 use login::*;
 #[cfg(feature = "sandbox")]
@@ -47,13 +47,17 @@ use session::*;
 use torrents::*;
 use uploads::*;
 
+fn default_env(var: &str, default: &str) -> String {
+    std::env::var(var).unwrap_or_else(|_| default.to_string())
+}
+
 lazy_static::lazy_static! {
-static ref RSBT_UI_HOST: String = std::env::var("RSBT_UI_HOST").unwrap_or_else(|_| "http://localhost:8080".to_string());
-static ref RSBT_BIND: String = std::env::var("RSBT_BIND").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
-static ref RSBT_OPENID_CLIENT_ID: String = std::env::var("RSBT_OPENID_CLIENT_ID").unwrap_or_else(|_| "web_app".to_string());
-static ref RSBT_OPENID_CLIENT_SECRET: String = std::env::var("RSBT_OPENID_CLIENT_SECRET").unwrap_or_else(|_| "web_app".to_string());
-static ref RSBT_OPENID_ISSUER: String = std::env::var("RSBT_OPENID_ISSUER").unwrap_or_else(|_| "http://keycloak:9080/auth/realms/jhipster".to_string());
-pub(crate) static ref RSBT_ALLOW: String = std::env::var("RSBT_ALLOW").unwrap_or_else(|_| "user@localhost".to_string());
+static ref RSBT_UI_HOST: String = default_env("RSBT_UI_HOST", "http://localhost:8080");
+static ref RSBT_BIND: String = default_env("RSBT_BIND", "0.0.0.0:8080");
+static ref RSBT_OPENID_CLIENT_ID: String = default_env("RSBT_OPENID_CLIENT_ID", "web_app");
+static ref RSBT_OPENID_CLIENT_SECRET: String = default_env("RSBT_OPENID_CLIENT_SECRET", "web_app");
+static ref RSBT_OPENID_ISSUER: String = default_env("RSBT_OPENID_ISSUER", "http://keycloak:9080/auth/realms/jhipster");
+pub(crate) static ref RSBT_ALLOW: String = default_env("RSBT_ALLOW", "user@localhost");
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -137,7 +141,9 @@ async fn main() -> Result<(), ExitFailure> {
                 .send(BroadcasterMessage::Subscribe(torrent_download))
                 .await
             {
-                error!("cannot send subscribe message: {}", err);
+                let error_msg = format!("cannot send broadcast subscribe message: {}", err);
+                error!("{}", error_msg);
+                Err(RsbtError::FailureReason(error_msg))?;
             }
         }
     }
@@ -234,7 +240,7 @@ enum BroadcasterMessage {
 
 fn init_broadcaster() -> (web::Data<Broadcaster>, Sender<BroadcasterMessage>) {
     let broadcaster = web::Data::new(Broadcaster::new());
-    let broadcaster_timer = broadcaster.clone();
+    let task_broadcaster = broadcaster.clone();
 
     let (broadcaster_sender, mut broadcaster_receiver) =
         mpsc::channel(rsbt_service::DEFAULT_CHANNEL_BUFFER);
@@ -247,9 +253,9 @@ fn init_broadcaster() -> (web::Data<Broadcaster>, Sender<BroadcasterMessage>) {
                 BroadcasterMessage::Send(torrent_event) => {
                     let json_message = serde_json::to_string(&torrent_event).unwrap();
                     debug!("sending broadcast: {}", json_message);
-                    if let Err(ok_clients) = broadcaster_timer.message(&json_message).await {
+                    if let Err(ok_clients) = task_broadcaster.message(&json_message).await {
                         debug!("refresh client list");
-                        *broadcaster_timer.clients.write().await = ok_clients;
+                        *task_broadcaster.clients.write().await = ok_clients;
                     }
                 }
                 BroadcasterMessage::Subscribe(torrent_download) => {

@@ -2,11 +2,11 @@ use crate::{
     event::TorrentEventQueryPiece,
     file_download::FileDownloadStream,
     request_response::RequestResponse,
+    result::RsbtResult,
     types::{
         public::{AnnounceView, FileView, PeerView, TorrentDownloadState},
         Peer,
     },
-    RsbtError,
 };
 use std::{
     fmt::{Display, Formatter},
@@ -34,17 +34,15 @@ pub(crate) enum TorrentEvent {
         begin: u32,
         length: u32,
     },
-    Enable(RequestResponse<(), Result<(), RsbtError>>),
-    Disable(RequestResponse<(), Result<(), RsbtError>>),
+    Enable(RequestResponse<(), RsbtResult<()>>),
+    Disable(RequestResponse<(), RsbtResult<()>>),
     Subscribe(RequestResponse<(), watch::Receiver<TorrentDownloadState>>),
-    Delete(RequestResponse<bool, Result<(), RsbtError>>),
-    PeersView(RequestResponse<(), Result<Vec<PeerView>, RsbtError>>),
-    AnnounceView(RequestResponse<(), Result<Vec<AnnounceView>, RsbtError>>),
-    FilesView(RequestResponse<(), Result<Vec<FileView>, RsbtError>>),
-    FileDownload(
-        RequestResponse<(usize, Option<Range<usize>>), Result<FileDownloadStream, RsbtError>>,
-    ),
-    QueryPiece(RequestResponse<TorrentEventQueryPiece, Result<Vec<u8>, RsbtError>>),
+    Delete(RequestResponse<bool, RsbtResult<()>>),
+    PeersView(RequestResponse<(), RsbtResult<Vec<PeerView>>>),
+    AnnounceView(RequestResponse<(), RsbtResult<Vec<AnnounceView>>>),
+    FilesView(RequestResponse<(), RsbtResult<Vec<FileView>>>),
+    FileDownload(RequestResponse<(usize, Option<Range<usize>>), RsbtResult<FileDownloadStream>>),
+    QueryPiece(RequestResponse<TorrentEventQueryPiece, RsbtResult<Vec<u8>>>),
 }
 
 impl Display for TorrentEvent {

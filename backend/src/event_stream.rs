@@ -1,5 +1,5 @@
 use crate::login::User;
-use actix::prelude::*;
+use actix::prelude::Stream;
 use actix_web::{web, Error, HttpResponse, Responder};
 use bytes::Bytes;
 use log::trace;

@@ -2,33 +2,41 @@ use crate::{
     announce::{AnnounceManager, AnnounceManagerMessage},
     event::{TorrentDownloadMode, TorrentEvent, TorrentEventQueryPiece, TorrentStatisticMessage},
     event_loop::EventLoop,
+    file_download::FileDownloadStream,
     peer::{connect_to_peer, peer_loop, PeerMessage, PeerState, TorrentPeerState},
     piece::{collect_pieces_and_update, match_pieces},
     process::TorrentToken,
     request_response::RequestResponse,
+    result::RsbtResult,
     spawn_and_log_error,
     statistics::StatisticsManager,
     storage::TorrentStorage,
-    types::{Peer, Properties},
-    RsbtError, DEFAULT_CHANNEL_BUFFER,
+    types::{
+        public::{AnnounceView, FileView, PeerView, TorrentDownloadState},
+        Peer, Properties,
+    },
+    DEFAULT_CHANNEL_BUFFER,
 };
 use flat_storage::{bit_by_index, index_in_bitarray};
 use log::{debug, error};
-use std::{collections::HashMap, sync::Arc, time::Instant};
-use tokio::{net::TcpStream, sync::mpsc};
+use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
+use std::{collections::HashMap, ops::Range, sync::Arc, time::Instant};
+use tokio::{
+    net::TcpStream,
+    sync::{mpsc, watch},
+};
 use uuid::Uuid;
 
 pub(crate) struct PeerManager {
-    pub(crate) announce_manager: EventLoop<AnnounceManagerMessage, AnnounceManager, TorrentEvent>,
-    pub(crate) statistics_manager:
-        EventLoop<TorrentStatisticMessage, StatisticsManager, TorrentEvent>,
-    pub(crate) torrent_storage: TorrentStorage,
-    pub(crate) torrent_process: Arc<TorrentToken>,
-    pub(crate) peer_states: HashMap<Uuid, PeerState>,
-    pub(crate) mode: TorrentDownloadMode,
-    pub(crate) active: bool,
-    pub(crate) awaiting_for_piece:
-        HashMap<usize, Vec<RequestResponse<TorrentEventQueryPiece, Result<Vec<u8>, RsbtError>>>>,
+    announce_manager: EventLoop<AnnounceManagerMessage, AnnounceManager, TorrentEvent>,
+    statistics_manager: EventLoop<TorrentStatisticMessage, StatisticsManager, TorrentEvent>,
+    torrent_storage: TorrentStorage,
+    torrent_process: Arc<TorrentToken>,
+    peer_states: HashMap<Uuid, PeerState>,
+    mode: TorrentDownloadMode,
+    active: bool,
+    awaiting_for_piece:
+        HashMap<usize, Vec<RequestResponse<TorrentEventQueryPiece, RsbtResult<Vec<u8>>>>>,
 }
 
 impl PeerManager {
@@ -36,7 +44,7 @@ impl PeerManager {
         properties: Arc<Properties>,
         torrent_storage: TorrentStorage,
         torrent_process: Arc<TorrentToken>,
-    ) -> Result<Self, RsbtError> {
+    ) -> RsbtResult<Self> {
         let announce_manager = EventLoop::spawn(
             AnnounceManager::new(properties.clone(), torrent_process.clone()),
             torrent_process.broker_sender.clone(),
@@ -61,7 +69,16 @@ impl PeerManager {
         Ok(peer_manager)
     }
 
-    pub(crate) async fn peer_announced(&mut self, peer: Peer) -> Result<(), RsbtError> {
+    pub(crate) async fn peers_announced(&mut self, peers: Vec<Peer>) {
+        for peer in peers {
+            debug!("peer announced: {:?}", peer);
+            if let Err(err) = self.peer_announced(peer.clone()).await {
+                error!("cannot process peer announced {:?}: {}", peer, err);
+            }
+        }
+    }
+
+    pub(crate) async fn peer_announced(&mut self, peer: Peer) -> RsbtResult<()> {
         let torrent_process = self.torrent_process.clone();
         let mut peer_states_iter = self.peer_states.iter_mut();
         let peer_err = peer.clone();
@@ -113,7 +130,11 @@ impl PeerManager {
         Ok(())
     }
 
-    pub(crate) async fn peer_forwarded(&mut self, stream: TcpStream) -> Result<(), RsbtError> {
+    pub(crate) fn peer_remove_by_id(&mut self, id: Uuid) -> Option<PeerState> {
+        self.peer_states.remove(&id)
+    }
+
+    pub(crate) async fn peer_forwarded(&mut self, stream: TcpStream) -> RsbtResult<()> {
         let peer_id = Uuid::new_v4();
         debug!("[{}] peer connection forwarded", peer_id);
 
@@ -167,7 +188,8 @@ impl PeerManager {
         &mut self,
         peer_id: Uuid,
         stream: TcpStream,
-    ) -> Result<(), RsbtError> {
+    ) -> RsbtResult<()> {
+        debug!("[{}] peer connected to {:?}", peer_id, stream.peer_addr());
         debug!("[{}] peer connection initiated", peer_id);
 
         if let Some(existing_peer) = self.peer_states.get_mut(&peer_id) {
@@ -204,7 +226,7 @@ impl PeerManager {
         &mut self,
         new_pieces: &[usize],
         peer_id: Uuid,
-    ) -> Result<(), RsbtError> {
+    ) -> RsbtResult<()> {
         for &new_piece in new_pieces {
             if let TorrentDownloadMode::Normal = self.mode {
                 let any_peer_downloading = self.peer_states.values().any(|x| match x.state {
@@ -239,12 +261,8 @@ impl PeerManager {
     }
 
     /// Peer reveived message Have.
-    pub(crate) async fn peer_piece(
-        &mut self,
-        peer_id: Uuid,
-        peer_piece: usize,
-    ) -> Result<(), RsbtError> {
-        debug!("[{}] peer piece", peer_id);
+    pub(crate) async fn peer_piece(&mut self, peer_id: Uuid, peer_piece: usize) -> RsbtResult<()> {
+        debug!("[{}] peer piece: {}", peer_id, peer_piece);
 
         let new_pieces = if let Some(existing_peer) = self.peer_states.get_mut(&peer_id) {
             match existing_peer.state {
@@ -280,8 +298,8 @@ impl PeerManager {
         &mut self,
         peer_id: Uuid,
         peer_pieces: Vec<u8>,
-    ) -> Result<(), RsbtError> {
-        debug!("[{}] process peer pieces", peer_id);
+    ) -> RsbtResult<()> {
+        debug!("[{}] peer pieces", peer_id);
 
         let new_pieces = if let Some(existing_peer) = self.peer_states.get_mut(&peer_id) {
             match &mut existing_peer.state {
@@ -307,8 +325,8 @@ impl PeerManager {
         Ok(())
     }
 
-    pub(crate) async fn peer_unchoke(&mut self, peer_id: Uuid) -> Result<(), RsbtError> {
-        debug!("[{}] process peer unchoke", peer_id);
+    pub(crate) async fn peer_unchoke(&mut self, peer_id: Uuid) -> RsbtResult<()> {
+        debug!("[{}] peer unchoke", peer_id);
 
         if let Some(TorrentPeerState::Connected {
             ref mut chocked, ..
@@ -320,8 +338,8 @@ impl PeerManager {
         Ok(())
     }
 
-    pub(crate) async fn peer_interested(&mut self, peer_id: Uuid) -> Result<(), RsbtError> {
-        debug!("[{}] process peer interested", peer_id);
+    pub(crate) async fn peer_interested(&mut self, peer_id: Uuid) -> RsbtResult<()> {
+        debug!("[{}] peer interested", peer_id);
 
         if let Some(TorrentPeerState::Connected {
             ref mut interested, ..
@@ -333,8 +351,8 @@ impl PeerManager {
         Ok(())
     }
 
-    pub(crate) async fn peer_piece_canceled(&mut self, peer_id: Uuid) -> Result<(), RsbtError> {
-        debug!("[{}] peer piece downloaded", peer_id);
+    pub(crate) async fn peer_piece_canceled(&mut self, peer_id: Uuid) -> RsbtResult<()> {
+        debug!("[{}] canceled piece for peer", peer_id);
 
         let new_pieces = if let Some(existing_peer) = self.peer_states.get_mut(&peer_id) {
             if let TorrentPeerState::Connected {
@@ -368,11 +386,33 @@ impl PeerManager {
         Ok(())
     }
 
-    pub(crate) async fn peer_piece_downloaded(
+    pub(crate) async fn peer_piece_downloaded(&mut self, peer_id: Uuid, piece: Vec<u8>) {
+        debug!("[{}] downloaded piece for peer", peer_id);
+        if let Err(err) = self.process_peer_piece_downloaded(peer_id, piece).await {
+            error!(
+                "[{}] cannot process peer piece downloaded: {}",
+                peer_id, err
+            );
+        }
+
+        self.update_download_mode(peer_id);
+
+        let pieces_left = self.torrent_storage.receiver.borrow().pieces_left;
+        if pieces_left == 0 {
+            debug!(
+                "torrent downloaded, hash: {}",
+                percent_encode(&self.torrent_process.hash_id, NON_ALPHANUMERIC)
+            );
+        } else {
+            debug!("pieces left: {}", pieces_left);
+        }
+    }
+
+    async fn process_peer_piece_downloaded(
         &mut self,
         peer_id: Uuid,
         piece: Vec<u8>,
-    ) -> Result<(), RsbtError> {
+    ) -> RsbtResult<()> {
         debug!("[{}] peer piece downloaded", peer_id);
 
         let (index, new_pieces) = if let Some(existing_peer) = self.peer_states.get_mut(&peer_id) {
@@ -469,7 +509,9 @@ impl PeerManager {
         index: u32,
         begin: u32,
         length: u32,
-    ) -> Result<(), RsbtError> {
+    ) -> RsbtResult<()> {
+        debug!("[{}] request piece to peer", peer_id);
+
         if let Some(TorrentPeerState::Connected {
             ref mut sender,
             ref mut uploaded,
@@ -515,19 +557,19 @@ impl PeerManager {
         };
     }
 
-    pub(crate) async fn start(&mut self) -> Result<(), RsbtError> {
+    pub(crate) async fn start(&mut self) -> RsbtResult<()> {
         self.announce_manager.start().await?;
 
         Ok(())
     }
 
-    pub(crate) async fn stop(&mut self) -> Result<(), RsbtError> {
+    pub(crate) async fn stop(&mut self) -> RsbtResult<()> {
         self.announce_manager.stop().await?;
 
         Ok(())
     }
 
-    pub(crate) async fn quit(&mut self) -> Result<(), RsbtError> {
+    pub(crate) async fn quit(&mut self) -> RsbtResult<()> {
         if let Some(_announce_manager) = self.announce_manager.quit().await? {
             debug!("successfully exited announce manager");
         }
@@ -537,5 +579,181 @@ impl PeerManager {
         }
 
         Ok(())
+    }
+
+    pub(crate) async fn enable(&mut self, request_response: RequestResponse<(), RsbtResult<()>>) {
+        if self.active {
+            if let Err(err) = request_response.response(Ok(())) {
+                error!("cannot send response for enable torrent: {}", err);
+            }
+            return;
+        }
+
+        let result = self.start().await;
+
+        if let Err(err) = request_response.response(result) {
+            error!("cannot send response for enable torrent: {}", err);
+        }
+        self.active = true;
+    }
+
+    pub(crate) async fn disable(&mut self, request_response: RequestResponse<(), RsbtResult<()>>) {
+        if !self.active {
+            if let Err(err) = request_response.response(Ok(())) {
+                error!("cannot send response for disable torrent: {}", err);
+            }
+            return;
+        }
+
+        for (peer_id, ref mut peer_state) in &mut self.peer_states {
+            match peer_state.state {
+                TorrentPeerState::Connected { ref mut sender, .. } => {
+                    if let Err(err) = sender.send(PeerMessage::Disconnect).await {
+                        error!(
+                            "[{}] disable torrent: cannot send disconnect message to peer: {}",
+                            peer_id, err
+                        );
+                    }
+                }
+                TorrentPeerState::Connecting(_) => {
+                    error!("FIXME: need to stop cennecting too");
+                }
+                _ => (),
+            }
+        }
+        self.peer_states = HashMap::new();
+
+        let result = self.stop().await;
+
+        if let Err(err) = request_response.response(result) {
+            error!("cannot send response for disable torrent: {}", err);
+        }
+        self.active = false;
+    }
+
+    pub(crate) async fn subscribe(
+        &mut self,
+        request_response: RequestResponse<(), watch::Receiver<TorrentDownloadState>>,
+    ) {
+        if let Err(err) = self
+            .statistics_manager
+            .send(TorrentStatisticMessage::Subscribe(request_response))
+            .await
+        {
+            error!("cannot subscribe: {}", err);
+        }
+    }
+
+    pub(crate) async fn delete(&mut self, request_response: RequestResponse<bool, RsbtResult<()>>) {
+        let delete_result = self
+            .torrent_storage
+            .delete(*request_response.request())
+            .await;
+
+        if let Err(err) = request_response.response(delete_result) {
+            error!("cannot send response for delete torrent: {}", err);
+        }
+    }
+
+    pub(crate) async fn peers_view(
+        &mut self,
+        request_response: RequestResponse<(), RsbtResult<Vec<PeerView>>>,
+    ) {
+        let peers_view = self.peer_states.values().map(PeerView::from).collect();
+
+        if let Err(err) = request_response.response(Ok(peers_view)) {
+            error!("cannot send response for delete torrent: {}", err);
+        }
+    }
+
+    pub(crate) async fn announce_view(
+        &mut self,
+        request_response: RequestResponse<(), RsbtResult<Vec<AnnounceView>>>,
+    ) {
+        if let Err(err) = request_response.response(Ok(vec![AnnounceView {
+            url: self.torrent_process.torrent.announce_url.clone(),
+        }])) {
+            error!("cannot send response for delete torrent: {}", err);
+        }
+    }
+
+    pub(crate) async fn files_view(
+        &mut self,
+        request_response: RequestResponse<(), RsbtResult<Vec<FileView>>>,
+    ) {
+        let files_result = self.torrent_storage.files().await;
+
+        if let Err(err) = request_response.response(files_result) {
+            error!("cannot send response for delete torrent: {}", err);
+        }
+    }
+
+    pub(crate) async fn file_download(
+        &mut self,
+        request_response: RequestResponse<
+            (usize, Option<Range<usize>>),
+            RsbtResult<FileDownloadStream>,
+        >,
+    ) {
+        debug!("processing file download");
+        let (file_id, range) = request_response.request();
+        let files_download = self.torrent_storage.download(*file_id, range.clone()).await;
+
+        if let Err(err) = request_response.response(files_download) {
+            error!("cannot send response for download torrent: {}", err);
+        }
+    }
+
+    pub(crate) async fn query_piece(
+        &mut self,
+        request_response: RequestResponse<TorrentEventQueryPiece, RsbtResult<Vec<u8>>>,
+    ) {
+        debug!("query piece event: processing query piece");
+        let request = request_response.request();
+        let piece_index = request.piece;
+        debug!("query piece event: search for piece index {}", piece_index);
+        let piece_bit = {
+            let state = self.torrent_storage.receiver.borrow();
+            let downloaded = state.downloaded.as_slice();
+            bit_by_index(piece_index, downloaded)
+        };
+        if piece_bit.is_some() {
+            debug!("query piece event: found, loading from storage");
+            match self.torrent_storage.load(piece_index).await {
+                Ok(Some(piece)) => {
+                    debug!("query piece event: loaded piece {}", piece.as_ref().len());
+                    let waker = request.waker.lock().unwrap().take();
+                    {
+                        debug!("query piece event: sending piece to download stream");
+                        if let Err(err) = request_response.response(Ok(piece.as_ref().into())) {
+                            error!("cannot send response for query piece: {}", err);
+                            return;
+                        }
+                    }
+
+                    if let Some(waker) = waker {
+                        debug!("query piece event: wake up waker");
+                        waker.wake();
+                    }
+                    return;
+                }
+                Ok(None) => {
+                    error!("query piece event: no piece loaded");
+                }
+                Err(err) => {
+                    error!("cannot load piece from storage: {}", err);
+                    if let Err(err) = request_response.response(Err(err)) {
+                        error!("cannot send response for query piece: {}", err);
+                    }
+                    return;
+                }
+            }
+        }
+        debug!("query piece event: register awaiter");
+        let awaiters = self
+            .awaiting_for_piece
+            .entry(piece_index)
+            .or_insert_with(|| vec![]);
+        awaiters.push(request_response);
     }
 }

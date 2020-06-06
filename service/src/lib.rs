@@ -12,6 +12,7 @@ mod peer;
 mod piece;
 mod process;
 mod request_response;
+mod result;
 mod spawn_and_log_error;
 mod statistics;
 mod storage;
