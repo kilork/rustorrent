@@ -46,7 +46,7 @@ impl PeerManager {
         torrent_process: Arc<TorrentToken>,
     ) -> RsbtResult<Self> {
         let announce_manager = EventLoop::spawn(
-            AnnounceManager::new(properties.clone(), torrent_process.clone()),
+            AnnounceManager::new(properties, torrent_process.clone()),
             torrent_process.broker_sender.clone(),
         )?;
 

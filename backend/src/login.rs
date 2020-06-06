@@ -12,7 +12,6 @@ use actix_web::{
 use exitfailure::ExitFailure;
 use log::{debug, error};
 use openid::{DiscoveredClient, Options, Token, Userinfo};
-use reqwest;
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use url::Url;

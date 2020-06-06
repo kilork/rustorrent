@@ -25,7 +25,7 @@ impl StatisticsManager {
                 uploaded: storage_state.bytes_read,
             }
         };
-        let (watch_sender, watch_receiver) = watch::channel(torrent_download_state.clone());
+        let (watch_sender, watch_receiver) = watch::channel(torrent_download_state);
         Self {
             sender: None,
             watch_sender,
