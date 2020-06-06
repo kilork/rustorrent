@@ -142,10 +142,11 @@ impl<T: AnnounceTransport> AnnounceManager<T> {
             tier.insert(0, tracker);
         }
 
-        self.feedback(TorrentEvent::Announce(announce.peers))
-            .await?;
+        let requery_interval = announce.requery_interval;
 
-        self.delayed_query_announce(announce.requery_interval).await
+        self.feedback(TorrentEvent::Announce(announce)).await?;
+
+        self.delayed_query_announce(requery_interval).await
     }
 
     async fn default_query_announce(&mut self) -> Result<(), RsbtError> {
@@ -280,6 +281,7 @@ mod tests {
         async fn request_announce(&self, url: String) -> Result<Announcement, RsbtError> {
             match url.as_str() {
                 "ok" => Ok(Announcement {
+                    announce_url: url,
                     requery_interval: Duration::from_secs(5),
                     peers: vec![Peer {
                         ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
@@ -296,7 +298,7 @@ mod tests {
     async fn announce_manager_success_path() {
         let (feedback_message, announce) = test_announces(vec![vec!["ok".into()]]).await;
         assert!(
-            matches!(feedback_message, Ok(Some(TorrentEvent::Announce(arr))) if arr.len() == 1)
+            matches!(feedback_message, Ok(Some(TorrentEvent::Announce(announcement))) if announcement.peers.len() == 1)
         );
         assert!(matches!(
             announce,
@@ -328,7 +330,7 @@ mod tests {
         ])
         .await;
         assert!(
-            matches!(feedback_message, Ok(Some(TorrentEvent::Announce(arr))) if arr.len() == 1)
+            matches!(feedback_message, Ok(Some(TorrentEvent::Announce(announcement))) if announcement.peers.len() == 1)
         );
         assert!(matches!(
             announce,

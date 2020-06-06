@@ -1,12 +1,10 @@
 use crate::{
+    announce::Announcement,
     event::TorrentEventQueryPiece,
     file_download::FileDownloadStream,
     request_response::RequestResponse,
     result::RsbtResult,
-    types::{
-        public::{AnnounceView, FileView, PeerView, TorrentDownloadState},
-        Peer,
-    },
+    types::public::{AnnounceView, FileView, PeerView, TorrentDownloadState},
 };
 use std::{
     fmt::{Display, Formatter},
@@ -17,7 +15,7 @@ use uuid::Uuid;
 
 #[derive(Debug)]
 pub(crate) enum TorrentEvent {
-    Announce(Vec<Peer>),
+    Announce(Announcement),
     PeerConnected(Uuid, TcpStream),
     PeerForwarded(TcpStream),
     PeerConnectFailed(Uuid),

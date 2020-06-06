@@ -27,11 +27,11 @@ impl AnnounceTransport for DefaultAnnounceTransport {
         if let Some(proto) = url.split("://").next().map(|x| x.to_lowercase()) {
             match proto.as_str() {
                 "http" | "https" => {
-                    http::http_announce(self.properties.clone(), self.torrent_token.clone(), &url)
+                    http::http_announce(self.properties.clone(), self.torrent_token.clone(), url)
                         .await
                 }
                 "udp" => {
-                    udp::udp_announce(self.properties.clone(), self.torrent_token.clone(), &url)
+                    udp::udp_announce(self.properties.clone(), self.torrent_token.clone(), url)
                         .await
                 }
                 "wss" | _ => Err(RsbtError::AnnounceProtocolUnknown(proto)),

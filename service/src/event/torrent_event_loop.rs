@@ -18,8 +18,8 @@ pub(crate) async fn torrent_event_loop(
     while let Some(event) = broker_receiver.next().await {
         debug!("received event: {}", event);
         match event {
-            TorrentEvent::Announce(peers) => {
-                peer_manager.peers_announced(peers).await;
+            TorrentEvent::Announce(announcement) => {
+                peer_manager.peers_announced(announcement).await;
             }
             TorrentEvent::PeerDisconnect(peer_id) => {
                 if let Some(_peer_state) = peer_manager.peer_remove_by_id(peer_id) {

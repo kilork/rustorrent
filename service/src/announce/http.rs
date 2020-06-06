@@ -2,6 +2,7 @@ use crate::{
     announce::Announcement,
     errors::RsbtError,
     process::TorrentToken,
+    result::RsbtResult,
     types::{Properties, TrackerAnnounce},
     PEER_ID,
 };
@@ -20,8 +21,8 @@ fn url_encode(data: &[u8]) -> String {
 pub(crate) async fn http_announce(
     properties: Arc<Properties>,
     torrent_process: Arc<TorrentToken>,
-    announce_url: &str,
-) -> Result<Announcement, RsbtError> {
+    announce_url: String,
+) -> RsbtResult<Announcement> {
     let client: Client<_> = Client::new();
 
     let left = torrent_process.info.len();
@@ -77,6 +78,7 @@ pub(crate) async fn http_announce(
     debug!("Tracker announce: {:?}", tracker_announce);
 
     Ok(Announcement {
+        announce_url,
         requery_interval,
         peers: tracker_announce.peers,
     })

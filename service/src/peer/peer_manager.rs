@@ -1,5 +1,5 @@
 use crate::{
-    announce::{AnnounceManager, AnnounceManagerMessage},
+    announce::{AnnounceManager, AnnounceManagerMessage, Announcement},
     event::{TorrentDownloadMode, TorrentEvent, TorrentEventQueryPiece, TorrentStatisticMessage},
     event_loop::EventLoop,
     file_download::FileDownloadStream,
@@ -69,8 +69,8 @@ impl PeerManager {
         Ok(peer_manager)
     }
 
-    pub(crate) async fn peers_announced(&mut self, peers: Vec<Peer>) {
-        for peer in peers {
+    pub(crate) async fn peers_announced(&mut self, announcement: Announcement) {
+        for peer in announcement.peers {
             debug!("peer announced: {:?}", peer);
             if let Err(err) = self.peer_announced(peer.clone()).await {
                 error!("cannot process peer announced {:?}: {}", peer, err);

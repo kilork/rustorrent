@@ -21,14 +21,16 @@ use tokio::{net::UdpSocket, time::timeout};
 use tokio_util::udp::UdpFramed;
 
 pub(crate) struct UdpTrackerClient<T = UdpFramed<UdpTrackerCodec>> {
+    announce_url: String,
     connection_id: Option<(Instant, i64)>,
     framed: T,
     addr: SocketAddr,
 }
 
 impl UdpTrackerClient {
-    pub(crate) fn new(udp_socket: UdpSocket, addr: SocketAddr) -> Self {
+    pub(crate) fn new(udp_socket: UdpSocket, announce_url: String, addr: SocketAddr) -> Self {
         Self {
+            announce_url,
             connection_id: None,
             framed: UdpFramed::new(udp_socket, UdpTrackerCodec),
             addr,
@@ -93,6 +95,7 @@ where
         } = self.send(properties, torrent_token, true).await?
         {
             Ok(Announcement {
+                announce_url: self.announce_url.clone(),
                 peers,
                 requery_interval: Duration::from_secs(interval as u64),
             })
@@ -269,6 +272,7 @@ mod tests {
     async fn udp_tracker_client_announce() {
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
         let mut udp_tracker_client = UdpTrackerClient {
+            announce_url: "udp://localhost:8080".into(),
             connection_id: None,
             framed: test_udp_frame(),
             addr,
