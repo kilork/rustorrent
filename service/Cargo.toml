@@ -21,7 +21,7 @@ rand = "0.7"
 http = "0.2"
 http-body = "0.3"
 bytes = "0.5"
-hyper = "0.13"
+hyper = "0.14"
 tokio = { version = "0.2", features = ["full"] }
 tokio-util = { version = "0.3", features = ["full"] }
 futures = "0.3"
